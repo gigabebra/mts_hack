@@ -55,3 +55,21 @@ Root подтвердил эту реализацию. Operator-created headless
 переменные сохраняются. Fixture с унаследованным IPv4 proxy проверяет env
 всех трех вызовов kubectl; 14 Gateway tests — pass. Metrics/logs checkers
 не запускают kubectl/subprocess и уже используют ProxyHandler({}).
+
+Дополнение по outbound-аудиту: Traefik chart 37.4.0 включает проверку
+обновлений по умолчанию. Явно заданы `global.checkNewVersion: false` и
+`global.sendAnonymousUsage: false`. Semantic render test вычисляет оба
+эффективных флага с учетом pinned runtime defaults и ловит включение
+каждого из них отдельным отрицательным render — pass, 2 tests.
+Команда: `.venv/bin/python deploy/gateway/tests/test_render.py` (закрепленные
+Helm и chart берутся из `.cache`; отдельный worktree может указать
+`MTS_TEST_HELM` и `MTS_TEST_TRAEFIK_CHART`).
+
+Источники: [runtime defaults Traefik 3.6.2](https://github.com/traefik/traefik/blob/v3.6.2/cmd/configuration.go#L17),
+[периодический запуск после 10 минут и каждые 24 часа](https://github.com/traefik/traefik/blob/v3.6.2/cmd/traefik/traefik.go#L617),
+[внешний update endpoint](https://github.com/traefik/traefik/blob/v3.6.2/pkg/version/version.go#L59).
+Loki reporting уже отключен: [reporter не создается при false](https://github.com/grafana/loki/blob/v3.6.2/pkg/analytics/reporter.go#L81).
+В проверенных startup/config путях Prometheus/Fluentd других автоматических
+version/usage reporters не найдено; Loki plugin использует заданный
+внутренний URL, а не [внешний default](https://github.com/grafana/loki/blob/v3.6.2/clients/cmd/fluentd/lib/fluent/plugin/out_loki.rb#L99).
+Source-аудит не заменяет live-проверку пакетов интегратором.

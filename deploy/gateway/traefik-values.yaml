@@ -1,6 +1,9 @@
 # Apply to the verified upstream Traefik 37.4.0 chart, release traefik in edge.
 # The integrator sets statusAddress.ip and ports.web.nodePort from environment.
 fullnameOverride: traefik
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
 image:
   registry: docker.io
   repository: library/traefik
