@@ -53,6 +53,12 @@ class Fixture(http.server.BaseHTTPRequestHandler):
                 targets.append({"labels": target_labels(target), "health": "down" if mode == "down" else "up",
                                 "lastScrape": dt.datetime.fromtimestamp(stamp, dt.timezone.utc).isoformat(),
                                 "lastError": "", "scrapeUrl": "http://" + instance + "/metrics"})
+            if mode == "target_ref_only":
+                pod = targets[0]["labels"].pop("pod")
+                targets[0]["discoveredLabels"] = {
+                    "__meta_kubernetes_namespace": "edge",
+                    "__meta_kubernetes_endpointslice_address_target_name": pod,
+                }
             if mode == "ipv4_target":
                 targets[0]["scrapeUrl"] = "http://192.0.2.10:9100/metrics"
             if mode == 'extra_ipv4_target':
@@ -69,6 +75,13 @@ class Fixture(http.server.BaseHTTPRequestHandler):
                 optional = dict(targets[0], labels={"namespace": "optional", "service": "extra",
                                 "endpoint": "metrics", "pod": "optional-fixture", "job": "extra-monitor",
                                 "instance": "192.0.2.12:19100"}, scrapeUrl="http://192.0.2.12:19100/metrics")
+                # Exercise EndpointSlice targetRef metadata even when relabeling
+                # does not retain a public pod label.
+                pod = optional["labels"].pop("pod")
+                optional["discoveredLabels"] = {
+                    "__meta_kubernetes_namespace": "optional",
+                    "__meta_kubernetes_endpointslice_address_target_name": pod,
+                }
                 alternate = dict(optional, labels=dict(optional["labels"], job="alternate-monitor", service="alias"))
                 if mode == "duplicate_optional_family":
                     alternate["labels"]["instance"] = "[2001:db8::12]:19100"
@@ -207,6 +220,11 @@ class MetricsFixtures(unittest.TestCase):
             result = self.invoke("snapshot")
             self.assertEqual(result["status"], "fail")
             self.assertIn("target_traefik_unique", [item["name"] for item in result["checks"] if item["status"] == "fail"])
+
+    def test_endpointslice_target_ref_name_identifies_pod(self):
+        self.server.state["failure"] = "target_ref_only"
+        result = self.invoke("snapshot")
+        self.assertEqual(result["status"], "pass", result)
 
     def test_duplicate_optional_endpoints_fail_global_gate(self):
         for mode in ("duplicate_optional_family", "duplicate_optional_monitor"):

@@ -65,3 +65,9 @@ endpoints, не относящихся к REQUIRED. Отрицательный f
 optional duplicate по разным IP-семьям и через другой ServiceMonitor;
 required checks при этом остаются pass, а глобальная проверка дает fail.
 `python3 deploy/monitoring/tests/test_check_metrics.py` — pass, 7 tests.
+
+Уточнен fallback metadata: используется реальное поле Prometheus
+`__meta_kubernetes_endpointslice_address_target_name`. Fixture проверяет
+успешную идентификацию required Pod без публичного pod label и отклонение
+optional duplicates по этому же targetRef metadata. Metrics fixtures:
+pass, 8 tests.

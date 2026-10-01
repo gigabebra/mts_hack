@@ -150,7 +150,7 @@ def target_endpoint_identity(target):
     discovered = target.get("discoveredLabels", {})
     namespace = discovered.get("__meta_kubernetes_namespace") or labels.get("namespace")
     pod = (discovered.get("__meta_kubernetes_pod_name")
-           or discovered.get("__meta_kubernetes_endpointslice_endpoint_target_name") or labels.get("pod"))
+           or discovered.get("__meta_kubernetes_endpointslice_address_target_name") or labels.get("pod"))
     try:
         scrape = urllib.parse.urlsplit(target.get("scrapeUrl", ""))
         if namespace and pod and scrape.port is not None:
