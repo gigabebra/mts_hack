@@ -57,8 +57,10 @@ def deploy(env):
             overrides={'providers': {'kubernetesGateway': {'statusAddress': {'ip': env['node_ip']}}},
                        'ports': {'web': {'nodePort': env['node_port']}}})
     install(env, 'monitoring-extras', 'monitoring', ROOT / 'deploy/monitoring/extras')
-    install(env, 'logging', 'logging', ROOT / 'deploy/logging', overrides={'dataRoot': env['data_root']})
-    install(env, 'app', 'demo', ROOT / 'deploy/app')
+    install(env, 'logging', 'logging', ROOT / 'deploy/logging',
+            overrides={'dataRoot': env['data_root'],
+                       'images': {'loki': VERSIONS['images']['loki'], 'fluentd': VERSIONS['images']['fluentd']}})
+    install(env, 'app', 'demo', ROOT / 'deploy/app', overrides={'image': VERSIONS['images']['nginx']})
     install(env, 'gateway', 'demo', ROOT / 'deploy/gateway')
     for namespace in ('edge', 'demo', 'monitoring', 'logging'):
         kubectl(env, '-n', namespace, 'wait', '--for=condition=Ready', 'pods', '--all', '--timeout=300s', timeout=330)

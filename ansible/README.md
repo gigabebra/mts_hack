@@ -51,7 +51,7 @@ Bootstrap готовит directories, но PV принадлежат Helm releas
 
 ```sh
 helm upgrade --install storage deploy/storage --namespace default \
-  --kubeconfig .state/ubuntu/admin.conf \
+  --kubeconfig .state/ubuntu/admin.kubeconfig \
   --set nodeName=mts-mvp --set dataRoot=/var/lib/mts-stack
 ```
 

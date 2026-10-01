@@ -50,4 +50,6 @@ command([ROOT / '.venv/bin/ansible-playbook', '-i', 'localhost,', 'ansible/boots
 command([ROOT / '.venv/bin/ansible-playbook', '-i', 'localhost,', 'ansible/health.yaml', '--syntax-check'])
 for test in sorted((ROOT / 'deploy').glob('*/tests/test_*.py')):
     command([sys.executable, test], timeout=180)
+command([sys.executable, '-m', 'unittest', 'discover', '-s', 'ansible/tests', '-v'])
+command([sys.executable, 'scripts/check-gateway.test.py'], timeout=180)
 print('PASS: Python/Ansible syntax, Helm lint/render, locked images, component negative checks')

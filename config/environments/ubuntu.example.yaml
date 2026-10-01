@@ -9,5 +9,5 @@ ssh_port: 22
 pod_cidr: 10.244.0.0/16
 service_cidr: 10.96.0.0/12
 node_port: 30080
-kubeconfig: .state/ubuntu/admin.conf
+kubeconfig: .state/ubuntu/admin.kubeconfig
 data_root: /var/lib/mts-stack
