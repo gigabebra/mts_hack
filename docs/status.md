@@ -3,9 +3,9 @@
 | ID | Статус | Владелец | Результат |
 | --- | --- | --- | --- |
 | MVP-00 | done | интегратор | Контракт, 20 image digests, checksum downloads, доступ к отдельным VM определен |
-| MVP-01 | todo | инфраструктура | — |
-| MVP-02 | todo | Gateway | — |
-| MVP-03 | todo | метрики | — |
+| MVP-01 | in_progress | инфраструктура | — |
+| MVP-02 | in_progress | Gateway | — |
+| MVP-03 | in_progress | метрики | — |
 | MVP-04 | todo | логирование | — |
 | MVP-05 | todo | интегратор | — |
 | MVP-06 | todo | независимая приемка | — |
