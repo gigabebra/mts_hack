@@ -1,0 +1,2109 @@
+{
+  "schema_version": 1,
+  "audit": "DUAL-REVIEW",
+  "date": "2026-10-01",
+  "status": "pass",
+  "reason": "All 14 criteria passed after independent review of final-code pristine installation, repeat operations, recovery and primary reboot evidence.",
+  "contract_version": 3,
+  "contract_revision": "f2eabb753c22da19532dbe68a29e0a9354d42779",
+  "accepted_revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+  "tested_code_revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+  "independence": {
+    "vm_operator": "integrator",
+    "reviewer_uses_ssh_or_kubectl": false,
+    "old_evidence_reused_as_dual_stack_acceptance": false
+  },
+  "network_contract": {
+    "mode": "full dual-stack Kubernetes",
+    "primary_family": "IPv6",
+    "secondary_family": "IPv4",
+    "ipv4_runtime_connections_allowed": true,
+    "absolute_ipv4_socket_ban": false,
+    "automatic_family_failover_claimed": false,
+    "own_service_ip_families": [
+      "IPv6",
+      "IPv4"
+    ],
+    "own_service_policy": "RequireDualStack",
+    "scrape_family_selection": "Explicit IPv6 EndpointSlice selection without automatic IPv4 fallback",
+    "single_stack_exception_policy": "Exact system/operator service allowlist, not namespace-wide or all-headless",
+    "observed_single_stack_ipv6_services": [
+      "default/kubernetes",
+      "kube-system/kube-dns",
+      "monitoring/prometheus-operated"
+    ],
+    "observed_running_non_host_network_pods": 11,
+    "observed_pod_primary_family": "IPv6"
+  },
+  "static_checks": [
+    {
+      "name": "contract_review",
+      "status": "pass",
+      "kind": "documentation and upstream semantics review",
+      "revision": "f2eabb753c22da19532dbe68a29e0a9354d42779"
+    },
+    {
+      "name": "document_structure",
+      "status": "pass",
+      "kind": "local documentation check",
+      "command": "python3: parse JSON, compare DS-01..DS-14 matrix, check local Markdown links and sensitive-data markers; git diff --check"
+    },
+    {
+      "name": "final_code_lint_render_fixtures",
+      "status": "pass",
+      "kind": "operator-executed full lint independently reviewed from preserved log",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "command": "make lint",
+      "working_directory": "fresh Ubuntu checkout",
+      "tests": 62,
+      "test_group_counts": [
+        2,
+        7,
+        8,
+        22,
+        15,
+        8
+      ],
+      "source": ".state/dual/clean135/checkout-evidence/.state/dual-clean/lint.log"
+    },
+    {
+      "name": "preliminary_common_code_review",
+      "status": "pass",
+      "kind": "read-only source review and local synthetic probes",
+      "review_base": "2123c57",
+      "findings": [
+        "EndpointSlice accepted another namespace/selector Pod",
+        "Optional duplicate scrape endpoints accepted"
+      ],
+      "final_fix_recheck": "pass at 09d34108b470a94598be8f9cab75f45ddd5c32f1"
+    },
+    {
+      "name": "independent_metrics_fixtures",
+      "status": "pass",
+      "kind": "local synthetic protocol and negative fixtures",
+      "revision": "09d34108b470a94598be8f9cab75f45ddd5c32f1",
+      "tests": 8,
+      "exit_code": 0,
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/monitoring/tests -p 'test_check_metrics.py' -v",
+      "working_directory": "repository root at the stated revision",
+      "log": ".worktrees/dual-review/.state/dual-review/metrics-09d3410.log",
+      "sha256": "1ff04965ba0c9a5c6a17351e1ca7b981c3430af52c9bb59d21cd5b1f04d152a3",
+      "final_revision_relation": "These checker/test files are unchanged between 09d3410 and cc3afc6; full fresh-Ubuntu lint also passed on cc3afc6."
+    },
+    {
+      "name": "independent_network_fixtures",
+      "status": "pass",
+      "kind": "local synthetic protocol and negative fixtures",
+      "revision": "09d34108b470a94598be8f9cab75f45ddd5c32f1",
+      "tests": 7,
+      "exit_code": 0,
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/unit -p 'test_network.py' -v",
+      "working_directory": "repository root at the stated revision",
+      "log": ".worktrees/dual-review/.state/dual-review/network-09d3410.log",
+      "sha256": "07144ab37f1bbe2053f160ea113b192d0e54674ad17574ddb556241ce0f64363",
+      "final_revision_relation": "These checker/test files are unchanged between 09d3410 and cc3afc6; full fresh-Ubuntu lint also passed on cc3afc6."
+    },
+    {
+      "name": "independent_exact_boundary_recovery_fixture",
+      "status": "pass",
+      "kind": "local synthetic regression fixture",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "tests": 1,
+      "exit_code": 0,
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/unit -p 'test_recovery.py' -v",
+      "log": ".worktrees/dual-review/.state/dual-review/recovery-cc3afc6.log",
+      "sha256": "75a5956d2f86cc15af1e9f5d73cb58c1c08bab86bdd53800198d5c5677fcc96f"
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "DS-01",
+      "name": "Чистая установка",
+      "pass_criterion": "Ubuntu 24.04, завершенный cloud-init, Kubernetes/containerd и `/etc/kubernetes` отсутствуют до начала; clean checkout окончательного SHA, штатные tools/lint/bootstrap/health/deploy/verify с exit 0",
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "actual": "Fresh Ubuntu 24.04.5 amd64; no kubeadm/kubelet/kubectl/containerd or /etc/kubernetes; cloud-init done; all 11 stages exit 0, final SHA and clean checkout at start/end."
+    },
+    {
+      "id": "DS-02",
+      "name": "Две сети и основной IPv6",
+      "pass_criterion": "Runtime kubeadm/kubelet config, Node InternalIP обеих семей, Pod CIDR обеих семей; два активных Calico VXLAN/NAT pools с IPAM обеих семей; нет скрытого IPv4 primary в CIDR/Service defaults",
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "actual": "Runtime kubeadm CIDRs and kubelet node-ip ordered IPv6,IPv4; Node has both InternalIPs and PodCIDRs; two Calico VXLAN/NAT pools, both IPAM families enabled."
+    },
+    {
+      "id": "DS-03",
+      "name": "Pod адреса",
+      "pass_criterion": "Каждый Running non-hostNetwork Pod имеет native IPv6 и IPv4 в соответствующих Pod CIDR; mapped IPv4 не считается IPv6; podIP согласован с podIPs, фактическая primary family записана",
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "actual": "All 11 Running non-hostNetwork Pods have native IPv6 and IPv4; observed podIP primary is IPv6. Raw graph has 17 total Pods."
+    },
+    {
+      "id": "DS-04",
+      "name": "Services",
+      "pass_criterion": "Все собственные Services имеют RequireDualStack, семьи и clusterIPs в порядке IPv6,IPv4; clusterIP=clusterIPs[0], адреса принадлежат нужным Service CIDR",
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "actual": "Eight own Services RequireDualStack with IPv6 primary; exact three SingleStack IPv6 exceptions recorded separately."
+    },
+    {
+      "id": "DS-05",
+      "name": "EndpointSlices",
+      "pass_criterion": "Для каждого собственного Service есть Ready endpoints обеих семей, связанные с адресами/UID его backend Pods; глобального наличия двух addressType недостаточно",
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "actual": "19 EndpointSlices and 20 endpoints checked per Service against backend Pod address, namespace, selector and targetRef/UID; both families present for each own Service."
+    },
+    {
+      "id": "DS-06",
+      "name": "DNS и внутренний HTTP",
+      "pass_criterion": "У собственных Services A/AAAA соответствуют clusterIPs; test Pod получает точный HTTP-ответ по Service IPv6/IPv4 и напрямую по Pod IPv6/IPv4, без зависимости от выбора семьи DNS клиентом",
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "actual": "Exact DNS A/AAAA Answer sets for eight own Services; four literal Service/Pod HTTP paths and 16 HTTP probes covering all eight own Services over both families."
+    },
+    {
+      "id": "DS-07",
+      "name": "SSH и API",
+      "pass_criterion": "Реальные SSH -6/-4 обращения к той же VM; основной kubeconfig IPv6; authenticated API запросы по обеим семьям с обычной CA/SAN проверкой, без insecure TLS",
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "actual": "SSH -6/-4 reaches same host key and machine ID; primary API transport IPv6; authenticated API succeeds on both families with CA/SAN verification."
+    },
+    {
+      "id": "DS-08",
+      "name": "Gateway/HTTP",
+      "pass_criterion": "Актуальные Gateway conditions/status; внешние IPv6 и IPv4 запросы дают HTTP 200 и ровно 12 bytes `Hello World!`, сохраняют Request-ID; route/error cases проходят по обеим семьям",
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "actual": "Gateway conditions and generation valid; both external HTTP families return 200 and exact 12-byte Hello World!, preserve Request-ID, pass missing-file and unmatched-route cases."
+    },
+    {
+      "id": "DS-09",
+      "name": "Метрики",
+      "pass_criterion": "Required targets up, scrape/samples свежие, семейство выбора подтверждено; нет повторного scrape одного endpoint через другую семью или другой monitor; counter delta учитывает нагрузку обеих семей и не скрывает наблюдаемый reset",
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "actual": "Five identifiable unique IPv6 scrape endpoints, all fresh/up, zero duplicates; scoped counter increases at least 48 for 24 requests per family (first clean verify 1 to 49)."
+    },
+    {
+      "id": "DS-10",
+      "name": "Логи",
+      "pass_criterion": "Для каждого HTTP-пути exact access Request-ID и отдельный stderr missing-file marker найдены через Loki API; подтверждены source/stream; IPv4 и IPv6 пробы имеют разные маркеры",
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "actual": "Distinct per-family Request-ID/error markers matched exactly in Loki; stdout access source verified and missing-file error found on stderr."
+    },
+    {
+      "id": "DS-11",
+      "name": "Runtime и прямые диагностики",
+      "pass_criterion": "Nginx UID не 0, CapEff=0, root ro, service-account token отсутствует; явный kubeconfig и proxy guard сохраняются; необязательная telemetry/version checking отключена в эффективной конфигурации",
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "actual": "Non-root Nginx, zero effective capabilities, read-only root, absent API token; full verify passes with six unreachable proxy variables and empty NO_PROXY; optional Calico/Loki telemetry and Traefik usage/version checks disabled."
+    },
+    {
+      "id": "DS-12",
+      "name": "Повтор bootstrap/deploy",
+      "pass_criterion": "Node/PV/PVC UID, creation time и bindings сохранены после bootstrap; повторные deploy сохраняют предусмотренные identities/Secrets, каждый вложенный verify проходит",
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "actual": "Five Node/PV/PVC identities, creation times and bindings preserved by repeat bootstrap; 25 resource identities, PVC bindings and Secret contents preserved over two deploys, with full verify after each."
+    },
+    {
+      "id": "DS-13",
+      "name": "Recovery и reboot",
+      "pass_criterion": "На окончательном SHA сохраняются истории Prometheus/Loki, Fluentd offsets/buffer; после изменения boot ID и готовности API проходят health/verify и внешние IPv6/IPv4 проверки",
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "actual": "Both final-SHA recovery runs preserve Prometheus/Loki history, consume all five exact source byte boundaries before Fluentd restart, replay zero records and deliver five buffered markers; primary boot ID changes, API ready then health/verify/external supplement pass."
+    },
+    {
+      "id": "DS-14",
+      "name": "Evidence и измерения",
+      "pass_criterion": "Отчеты связаны с правильным SHA и сохраненным состоянием checkout; nested checks сверены; архив сопоставлен с исходниками; длительности/RAM/disk/CPU относятся к этому dual-stack прогону, без выдачи снимка за пик или минимум",
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "actual": "Six final-SHA full verify reports independently checked; clean archive contains six reports and index, primary archive 27 historical/current reports and index, all byte-equal to sources. Timing and 30-second resource snapshot recorded."
+    }
+  ],
+  "negative_cases": [
+    {
+      "name": "ipv4_primary_instead_of_ipv6",
+      "status": "pass",
+      "kind": "fixture",
+      "revision": "09d34108b470a94598be8f9cab75f45ddd5c32f1"
+    },
+    {
+      "name": "pod_missing_one_family",
+      "status": "pass",
+      "kind": "fixture",
+      "revision": "09d34108b470a94598be8f9cab75f45ddd5c32f1"
+    },
+    {
+      "name": "service_missing_one_family",
+      "status": "pass",
+      "kind": "fixture",
+      "revision": "09d34108b470a94598be8f9cab75f45ddd5c32f1"
+    },
+    {
+      "name": "service_endpointslice_missing_one_family",
+      "status": "pass",
+      "kind": "fixture",
+      "revision": "09d34108b470a94598be8f9cab75f45ddd5c32f1"
+    },
+    {
+      "name": "mapped_ipv4_as_ipv6",
+      "status": "pass",
+      "kind": "fixture",
+      "revision": "09d34108b470a94598be8f9cab75f45ddd5c32f1"
+    },
+    {
+      "name": "single_stack_service_outside_allowlist",
+      "status": "pass",
+      "kind": "fixture",
+      "revision": "09d34108b470a94598be8f9cab75f45ddd5c32f1"
+    },
+    {
+      "name": "endpoint_not_matching_backend_pod",
+      "status": "pass",
+      "kind": "fixture",
+      "revision": "09d34108b470a94598be8f9cab75f45ddd5c32f1"
+    },
+    {
+      "name": "duplicate_endpoint_across_address_families",
+      "status": "pass",
+      "kind": "fixture",
+      "revision": "09d34108b470a94598be8f9cab75f45ddd5c32f1"
+    },
+    {
+      "name": "duplicate_endpoint_across_monitors",
+      "status": "pass",
+      "kind": "fixture",
+      "revision": "09d34108b470a94598be8f9cab75f45ddd5c32f1"
+    },
+    {
+      "name": "inherited_proxy_environment",
+      "status": "pass",
+      "kind": "fixture and live full verify",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "run_id": "20261001T142659Z-28071d54",
+      "source": ".state/dual/main-return/run.json"
+    },
+    {
+      "name": "insecure_tls_or_kubeconfig_proxy_url",
+      "status": "pass",
+      "kind": "fixture",
+      "revision": "09d34108b470a94598be8f9cab75f45ddd5c32f1"
+    },
+    {
+      "name": "stale_partial_or_wrong_inode_collector_position",
+      "status": "pass",
+      "kind": "fixture",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f"
+    }
+  ],
+  "clean_install": {
+    "status": "pass",
+    "git_status_start": "",
+    "git_status_end": "",
+    "started_at": "2026-10-01T14:11:20.839233+00:00",
+    "finished_at": "2026-10-01T14:23:29.427563+00:00",
+    "first_verify_seconds": 427.9,
+    "full_cycle_seconds": 728.58833,
+    "stages": [
+      {
+        "name": "tools",
+        "exit_code": 0,
+        "elapsed_seconds": 24.59
+      },
+      {
+        "name": "lint",
+        "exit_code": 0,
+        "elapsed_seconds": 12.98
+      },
+      {
+        "name": "bootstrap",
+        "exit_code": 0,
+        "elapsed_seconds": 208.74
+      },
+      {
+        "name": "health",
+        "exit_code": 0,
+        "elapsed_seconds": 43.43
+      },
+      {
+        "name": "deploy",
+        "exit_code": 0,
+        "elapsed_seconds": 98.09
+      },
+      {
+        "name": "verify",
+        "exit_code": 0,
+        "elapsed_seconds": 40.07
+      },
+      {
+        "name": "bootstrap-repeat",
+        "exit_code": 0,
+        "elapsed_seconds": 104.2
+      },
+      {
+        "name": "health-repeat",
+        "exit_code": 0,
+        "elapsed_seconds": 43.99
+      },
+      {
+        "name": "idempotency",
+        "exit_code": 0,
+        "elapsed_seconds": 47.71
+      },
+      {
+        "name": "recovery",
+        "exit_code": 0,
+        "elapsed_seconds": 104.58
+      },
+      {
+        "name": "evidence",
+        "exit_code": 0,
+        "elapsed_seconds": 0.09
+      }
+    ],
+    "lint_test_counts": [
+      2,
+      7,
+      8,
+      22,
+      15,
+      8
+    ],
+    "bootstrap_identity_objects_preserved": 5
+  },
+  "live_runs": [
+    {
+      "run_id": "20261001T141748Z-5c04e477",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "status": "pass",
+      "working_tree_dirty": false,
+      "started_at": "2026-10-01T14:17:48.769443+00:00",
+      "finished_at": "2026-10-01T14:18:28.731055+00:00",
+      "mandatory_checks": 11,
+      "nested_checks_passed": 105,
+      "network": {
+        "families": [
+          "IPv6",
+          "IPv4"
+        ],
+        "primary": "IPv6",
+        "api_transport": "HTTPS over IPv6",
+        "node_internal_ip_count": 2,
+        "calico_pool_count": 2,
+        "calico_vxlan_mode": "Always",
+        "system_single_stack_services": [
+          "default/kubernetes",
+          "kube-system/kube-dns",
+          "monitoring/prometheus-operated"
+        ],
+        "pods": 17,
+        "services": 11,
+        "endpoint_slices": 19,
+        "endpoints": 20
+      },
+      "http": {
+        "families": [
+          "IPv6",
+          "IPv4"
+        ],
+        "exact_body": "Hello World!",
+        "body_bytes": 12,
+        "distinct_request_ids_and_error_markers": true,
+        "both_logs_correlated": true,
+        "load_requests_per_family": [
+          24,
+          24
+        ]
+      },
+      "metrics": {
+        "before": 1.0,
+        "after": 49.0,
+        "increase": 48.0,
+        "min_increase": 48.0,
+        "unique_endpoints": 5,
+        "duplicate_endpoints": 0,
+        "unidentified_targets": 0,
+        "selected_target_families": [
+          "IPv6"
+        ]
+      },
+      "runtime_security": "pass",
+      "role": "fresh acceptance",
+      "report": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T141748Z-5c04e477/report.json",
+      "network_snapshot": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T141748Z-5c04e477/network-snapshot.json",
+      "report_sha256": "ed9e85facdb280a6e0f717a08ced39af8cd22ec55c2c0a3baddaa36fbe816ec2"
+    },
+    {
+      "run_id": "20261001T142057Z-24e43244-1",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "status": "pass",
+      "working_tree_dirty": false,
+      "started_at": "2026-10-01T14:21:10.080747+00:00",
+      "finished_at": "2026-10-01T14:21:15.907926+00:00",
+      "mandatory_checks": 11,
+      "nested_checks_passed": 105,
+      "network": {
+        "families": [
+          "IPv6",
+          "IPv4"
+        ],
+        "primary": "IPv6",
+        "api_transport": "HTTPS over IPv6",
+        "node_internal_ip_count": 2,
+        "calico_pool_count": 2,
+        "calico_vxlan_mode": "Always",
+        "system_single_stack_services": [
+          "default/kubernetes",
+          "kube-system/kube-dns",
+          "monitoring/prometheus-operated"
+        ],
+        "pods": 17,
+        "services": 11,
+        "endpoint_slices": 19,
+        "endpoints": 20
+      },
+      "http": {
+        "families": [
+          "IPv6",
+          "IPv4"
+        ],
+        "exact_body": "Hello World!",
+        "body_bytes": 12,
+        "distinct_request_ids_and_error_markers": true,
+        "both_logs_correlated": true,
+        "load_requests_per_family": [
+          24,
+          24
+        ]
+      },
+      "metrics": {
+        "before": 49.0,
+        "after": 98.0,
+        "increase": 49.0,
+        "min_increase": 48.0,
+        "unique_endpoints": 5,
+        "duplicate_endpoints": 0,
+        "unidentified_targets": 0,
+        "selected_target_families": [
+          "IPv6"
+        ]
+      },
+      "runtime_security": "pass",
+      "role": "fresh acceptance",
+      "report": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-1/report.json",
+      "network_snapshot": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-1/network-snapshot.json",
+      "report_sha256": "46ea8c38cb846a55b5242d0306915d5423661f98630666b9e6cfaeae9ca66ebe"
+    },
+    {
+      "run_id": "20261001T142057Z-24e43244-2",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "status": "pass",
+      "working_tree_dirty": false,
+      "started_at": "2026-10-01T14:21:27.912696+00:00",
+      "finished_at": "2026-10-01T14:21:44.702292+00:00",
+      "mandatory_checks": 11,
+      "nested_checks_passed": 105,
+      "network": {
+        "families": [
+          "IPv6",
+          "IPv4"
+        ],
+        "primary": "IPv6",
+        "api_transport": "HTTPS over IPv6",
+        "node_internal_ip_count": 2,
+        "calico_pool_count": 2,
+        "calico_vxlan_mode": "Always",
+        "system_single_stack_services": [
+          "default/kubernetes",
+          "kube-system/kube-dns",
+          "monitoring/prometheus-operated"
+        ],
+        "pods": 17,
+        "services": 11,
+        "endpoint_slices": 19,
+        "endpoints": 20
+      },
+      "http": {
+        "families": [
+          "IPv6",
+          "IPv4"
+        ],
+        "exact_body": "Hello World!",
+        "body_bytes": 12,
+        "distinct_request_ids_and_error_markers": true,
+        "both_logs_correlated": true,
+        "load_requests_per_family": [
+          24,
+          24
+        ]
+      },
+      "metrics": {
+        "before": 98.0,
+        "after": 147.0,
+        "increase": 49.0,
+        "min_increase": 48.0,
+        "unique_endpoints": 5,
+        "duplicate_endpoints": 0,
+        "unidentified_targets": 0,
+        "selected_target_families": [
+          "IPv6"
+        ]
+      },
+      "runtime_security": "pass",
+      "role": "fresh acceptance",
+      "report": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-2/report.json",
+      "network_snapshot": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-2/network-snapshot.json",
+      "report_sha256": "1987c391b149307bee659e9a1f0877a45f9619600bb1dbd09cb19fff31fa0aa1"
+    },
+    {
+      "run_id": "recovery-012a6562931a-after",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "status": "pass",
+      "working_tree_dirty": false,
+      "started_at": "2026-10-01T14:23:11.805360+00:00",
+      "finished_at": "2026-10-01T14:23:29.308435+00:00",
+      "mandatory_checks": 11,
+      "nested_checks_passed": 105,
+      "network": {
+        "families": [
+          "IPv6",
+          "IPv4"
+        ],
+        "primary": "IPv6",
+        "api_transport": "HTTPS over IPv6",
+        "node_internal_ip_count": 2,
+        "calico_pool_count": 2,
+        "calico_vxlan_mode": "Always",
+        "system_single_stack_services": [
+          "default/kubernetes",
+          "kube-system/kube-dns",
+          "monitoring/prometheus-operated"
+        ],
+        "pods": 17,
+        "services": 11,
+        "endpoint_slices": 19,
+        "endpoints": 20
+      },
+      "http": {
+        "families": [
+          "IPv6",
+          "IPv4"
+        ],
+        "exact_body": "Hello World!",
+        "body_bytes": 12,
+        "distinct_request_ids_and_error_markers": true,
+        "both_logs_correlated": true,
+        "load_requests_per_family": [
+          24,
+          24
+        ]
+      },
+      "metrics": {
+        "before": 153.0,
+        "after": 202.0,
+        "increase": 49.0,
+        "min_increase": 48.0,
+        "unique_endpoints": 5,
+        "duplicate_endpoints": 0,
+        "unidentified_targets": 0,
+        "selected_target_families": [
+          "IPv6"
+        ]
+      },
+      "runtime_security": "pass",
+      "role": "fresh acceptance",
+      "report": ".state/dual/clean135/checkout-evidence/artifacts/verify/recovery-012a6562931a-after/report.json",
+      "network_snapshot": ".state/dual/clean135/checkout-evidence/artifacts/verify/recovery-012a6562931a-after/network-snapshot.json",
+      "report_sha256": "757db91e45acc72470d6d08fb904725b7c1bee1d9650261b16056de73e034ddf"
+    },
+    {
+      "run_id": "recovery-fdf767e5834f-after",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "status": "pass",
+      "working_tree_dirty": false,
+      "started_at": "2026-10-01T14:07:11.525252+00:00",
+      "finished_at": "2026-10-01T14:07:25.151718+00:00",
+      "mandatory_checks": 11,
+      "nested_checks_passed": 105,
+      "network": {
+        "families": [
+          "IPv6",
+          "IPv4"
+        ],
+        "primary": "IPv6",
+        "api_transport": "HTTPS over IPv6",
+        "node_internal_ip_count": 2,
+        "calico_pool_count": 2,
+        "calico_vxlan_mode": "Always",
+        "system_single_stack_services": [
+          "default/kubernetes",
+          "kube-system/kube-dns",
+          "monitoring/prometheus-operated"
+        ],
+        "pods": 17,
+        "services": 11,
+        "endpoint_slices": 19,
+        "endpoints": 20
+      },
+      "http": {
+        "families": [
+          "IPv6",
+          "IPv4"
+        ],
+        "exact_body": "Hello World!",
+        "body_bytes": 12,
+        "distinct_request_ids_and_error_markers": true,
+        "both_logs_correlated": true,
+        "load_requests_per_family": [
+          24,
+          24
+        ]
+      },
+      "metrics": {
+        "before": 219.0,
+        "after": 268.0,
+        "increase": 49.0,
+        "min_increase": 48.0,
+        "unique_endpoints": 5,
+        "duplicate_endpoints": 0,
+        "unidentified_targets": 0,
+        "selected_target_families": [
+          "IPv6"
+        ]
+      },
+      "runtime_security": "pass",
+      "role": "primary after recovery",
+      "report": ".state/dual/main-final/artifacts/verify/recovery-fdf767e5834f-after/report.json",
+      "network_snapshot": ".state/dual/main-final/artifacts/verify/recovery-fdf767e5834f-after/network-snapshot.json",
+      "report_sha256": "5d46a5237e08b2dcafe10e7b060e639c6cecbaa538bf35c6c8400537603c3458"
+    },
+    {
+      "run_id": "20261001T142659Z-28071d54",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "status": "pass",
+      "working_tree_dirty": false,
+      "started_at": "2026-10-01T14:26:59.487281+00:00",
+      "finished_at": "2026-10-01T14:27:29.103286+00:00",
+      "mandatory_checks": 11,
+      "nested_checks_passed": 105,
+      "network": {
+        "families": [
+          "IPv6",
+          "IPv4"
+        ],
+        "primary": "IPv6",
+        "api_transport": "HTTPS over IPv6",
+        "node_internal_ip_count": 2,
+        "calico_pool_count": 2,
+        "calico_vxlan_mode": "Always",
+        "system_single_stack_services": [
+          "default/kubernetes",
+          "kube-system/kube-dns",
+          "monitoring/prometheus-operated"
+        ],
+        "pods": 17,
+        "services": 11,
+        "endpoint_slices": 19,
+        "endpoints": 20
+      },
+      "http": {
+        "families": [
+          "IPv6",
+          "IPv4"
+        ],
+        "exact_body": "Hello World!",
+        "body_bytes": 12,
+        "distinct_request_ids_and_error_markers": true,
+        "both_logs_correlated": true,
+        "load_requests_per_family": [
+          24,
+          24
+        ]
+      },
+      "metrics": {
+        "before": 1.0,
+        "after": 49.0,
+        "increase": 48.0,
+        "min_increase": 48.0,
+        "unique_endpoints": 5,
+        "duplicate_endpoints": 0,
+        "unidentified_targets": 0,
+        "selected_target_families": [
+          "IPv6"
+        ]
+      },
+      "runtime_security": "pass",
+      "role": "primary after new boot with poisoned proxy environment",
+      "report": "artifacts/verify/20261001T142659Z-28071d54/report.json",
+      "network_snapshot": "artifacts/verify/20261001T142659Z-28071d54/network-snapshot.json",
+      "report_sha256": "37023bc0a7839ccb566ff98514fcb7cef573c2c5a38be88b8e3154619ab0054c"
+    }
+  ],
+  "recovery_runs": [
+    {
+      "run_id": "recovery-fdf767e5834f",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "status": "pass",
+      "prometheus_history_series": 1,
+      "loki_history_preserved": true,
+      "source_markers_consumed": 5,
+      "source_boundary_files": 1,
+      "records_replayed_after_restart": 0,
+      "buffer_marker_matches": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "bounded_outage_seconds": 48.05,
+      "after_recovery_verify": "recovery-fdf767e5834f-after"
+    },
+    {
+      "run_id": "recovery-012a6562931a",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "status": "pass",
+      "prometheus_history_series": 1,
+      "loki_history_preserved": true,
+      "source_markers_consumed": 5,
+      "source_boundary_files": 1,
+      "records_replayed_after_restart": 0,
+      "buffer_marker_matches": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "bounded_outage_seconds": 44.17,
+      "after_recovery_verify": "recovery-012a6562931a-after"
+    }
+  ],
+  "supplements": [
+    {
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "started_at": "2026-10-01T14:08:38.816619+00:00",
+      "finished_at": "2026-10-01T14:08:43.152119+00:00",
+      "ssh_api_http_families": [
+        "IPv6",
+        "IPv4"
+      ],
+      "authenticated_api_ca_san_verified": true,
+      "same_ssh_identity": true,
+      "own_services_exact_dns_A_AAAA": 8,
+      "literal_application_service_pod_http_paths": 4,
+      "active_targets": 5,
+      "target_families": [
+        "IPv6"
+      ],
+      "duplicate_or_unidentified_targets": 0,
+      "optional_calico_traefik_loki_telemetry_disabled": true,
+      "role": "primary before fresh acceptance"
+    },
+    {
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "started_at": "2026-10-01T14:24:09.776664+00:00",
+      "finished_at": "2026-10-01T14:24:13.535761+00:00",
+      "ssh_api_http_families": [
+        "IPv6",
+        "IPv4"
+      ],
+      "authenticated_api_ca_san_verified": true,
+      "same_ssh_identity": true,
+      "own_services_exact_dns_A_AAAA": 8,
+      "literal_application_service_pod_http_paths": 4,
+      "active_targets": 5,
+      "target_families": [
+        "IPv6"
+      ],
+      "duplicate_or_unidentified_targets": 0,
+      "optional_calico_traefik_loki_telemetry_disabled": true,
+      "role": "fresh acceptance"
+    },
+    {
+      "status": "pass",
+      "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+      "started_at": "2026-10-01T14:27:29.175743+00:00",
+      "finished_at": "2026-10-01T14:27:33.350892+00:00",
+      "ssh_api_http_families": [
+        "IPv6",
+        "IPv4"
+      ],
+      "authenticated_api_ca_san_verified": true,
+      "same_ssh_identity": true,
+      "own_services_exact_dns_A_AAAA": 8,
+      "literal_application_service_pod_http_paths": 4,
+      "active_targets": 5,
+      "target_families": [
+        "IPv6"
+      ],
+      "duplicate_or_unidentified_targets": 0,
+      "optional_calico_traefik_loki_telemetry_disabled": true,
+      "role": "primary after new boot"
+    }
+  ],
+  "all_own_service_family_http": {
+    "status": "pass",
+    "services": 8,
+    "families": [
+      "IPv6",
+      "IPv4"
+    ],
+    "http_probes_passed": 16
+  },
+  "bootstrap_identity_comparison": {
+    "primary": {
+      "status": "pass",
+      "objects": 5,
+      "uid_creation_timestamp_and_bindings_equal": true
+    },
+    "fresh": {
+      "status": "pass",
+      "objects": 5,
+      "uid_creation_timestamp_and_bindings_equal": true
+    }
+  },
+  "idempotency": {
+    "status": "pass",
+    "iterations": 2,
+    "resource_identities_preserved": 25,
+    "pvc_bindings_and_secret_contents_preserved": true,
+    "full_verify_after_each": true
+  },
+  "primary_reboot": {
+    "status": "pass",
+    "revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f",
+    "started_at": "2026-10-01T14:25:39.484407+00:00",
+    "finished_at": "2026-10-01T14:27:33.505958+00:00",
+    "git_status_start": "",
+    "git_status_end": "",
+    "boot_id_changed": true,
+    "api_ready_before_health": true,
+    "stages": [
+      {
+        "name": "health",
+        "exit_code": 0,
+        "elapsed_seconds": 53.75
+      },
+      {
+        "name": "verify-poisoned-proxy",
+        "exit_code": 0,
+        "elapsed_seconds": 29.73
+      },
+      {
+        "name": "supplement",
+        "exit_code": 0,
+        "elapsed_seconds": 4.24
+      },
+      {
+        "name": "evidence",
+        "exit_code": 0,
+        "elapsed_seconds": 0.14
+      }
+    ],
+    "poisoned_proxy_verify": {
+      "proxy_environment_variables": 6,
+      "proxy": "unreachable IPv4 loopback port 9",
+      "NO_PROXY_empty": true,
+      "no_proxy_empty": true,
+      "status": "pass"
+    }
+  },
+  "archives": [
+    {
+      "status": "pass",
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/evidence/20261001T142329Z.tar.gz",
+      "sha256": "c3948ef495fae348b5fe54c0021067182d0e6f74ae36858585d4c8a9d2884b2f",
+      "report_count": 6,
+      "members_byte_equal_to_sources": true,
+      "contents": "index plus report.json only; raw snapshots remain separately hashed"
+    },
+    {
+      "status": "pass",
+      "path": "artifacts/evidence/20261001T142733Z.tar.gz",
+      "sha256": "3a1cfa0bc0792faae83c7448e0ecb544af2187f289e96f84c86f4085b01ddc2a",
+      "report_count": 27,
+      "members_byte_equal_to_sources": true,
+      "contents": "index plus report.json only; raw snapshots remain separately hashed"
+    }
+  ],
+  "archive_revision_note": "Primary archive includes earlier IPv4/IPv6 and failed reports; its index revision is packaging revision, not the revision of every archived report. Only listed final-SHA live_runs support this acceptance.",
+  "measurements": {
+    "captured_at": "2026-10-01T14:24:43.755702+00:00",
+    "cpu_count": 4,
+    "memory_bytes": {
+      "MemTotal": 8326914048,
+      "MemFree": 1198919680,
+      "MemAvailable": 6288429056
+    },
+    "disk_root": {
+      "total": 61285326848,
+      "used": 6576820224,
+      "free": 54691729408
+    },
+    "load_average": [
+      0.50244140625,
+      0.75146484375,
+      0.48779296875
+    ],
+    "cpu_sample": {
+      "seconds": 30.0,
+      "busy_percent": 3.59,
+      "iowait_percent": 0.06,
+      "note": "30-second snapshot after verification; not a benchmark or minimum sizing claim"
+    },
+    "role": "fresh final-SHA acceptance after full cycle",
+    "configured_vm": {
+      "vcpus": 4,
+      "ram_gib": 8,
+      "disk_gib": 60
+    },
+    "first_verify_seconds": 427.9,
+    "full_cycle_seconds": 728.58833,
+    "timing_excludes": "VM creation, cloud-init and preinstalled OS prerequisites; starts at make tools",
+    "interpretation": "Single post-check snapshot, not peak usage, benchmark, minimum sizing or reserved-capacity guarantee."
+  },
+  "intermediate_findings": [
+    {
+      "name": "collector_position_observation_race",
+      "status": "resolved",
+      "revision": "09d34108b470a94598be8f9cab75f45ddd5c32f1",
+      "run_id": "recovery-b4e4e87e0b92",
+      "source": ".state/dual/checkout-evidence/artifacts/recovery/recovery-b4e4e87e0b92/report.json",
+      "reason": "Tail positions did not advance during Loki outage; counter advanced before earlier file observation refreshed",
+      "prometheus_history": "pass",
+      "loki_history": "pass",
+      "diagnostic_sequence": [
+        {
+          "stage": "before",
+          "offset": 34200,
+          "emit_records": 165
+        },
+        {
+          "stage": "after-1",
+          "offset": 34200,
+          "emit_records": 170
+        },
+        {
+          "stage": "after-2",
+          "offset": 35170,
+          "emit_records": 170
+        }
+      ],
+      "regression_fixture": "pass",
+      "residual_review_note": "Closed by exact CRI request_id byte boundaries and canonical inode comparison; regression rejects partial offsets and wrong inode",
+      "final_live_recheck": "pass: recovery-fdf767e5834f on primary and recovery-012a6562931a on a fresh final-SHA installation",
+      "source_boundary_diagnostic": "pass: 5 unique markers, one source file, persisted offset covers boundary",
+      "observed_status": "fail",
+      "fixed_revision": "cc3afc6cab06a4cb441c3f0c705e79cc04910a0f"
+    }
+  ],
+  "historical_attempts": [
+    {
+      "mode": "IPv4-only",
+      "accepted_revision": "337d0c671617929ebf162e1216099524fe8d611d",
+      "current_dual_stack_evidence": false,
+      "protocol": "docs/acceptance/mvp-acceptance.md"
+    },
+    {
+      "mode": "strict IPv6-only",
+      "status": "superseded",
+      "accepted_revision": null,
+      "current_dual_stack_evidence": false,
+      "finding": {
+        "name": "Calico IPv4 HTTPS wrongly exempted as an OS download",
+        "status_under_previous_requirement": "fail",
+        "process": "calico-node",
+        "socket_state": "ESTAB",
+        "incorrect_rule": "Any public host IPv4 peer on port 80 or 443",
+        "source": ".state/ipv6/clean/checkout-evidence/artifacts/verify/20261001T130238Z-49beb44e-1/ipv6-runtime.json",
+        "source_sha256": "14457dce67d7738f77dabfb56ed59fb486a277504483d94473bb746a74596cba"
+      },
+      "reason_superseded": "User selected dual-stack before strict IPv6 live acceptance completed"
+    }
+  ],
+  "historical_dual_first_verify": {
+    "revision": "09d34108b470a94598be8f9cab75f45ddd5c32f1",
+    "run_id": "20261001T135210Z-b718b746",
+    "status": "pass",
+    "used_in_place_of_final_acceptance": false
+  },
+  "not_claimed": [
+    "automatic control-plane or whole-stack family failover",
+    "automatic IPv4 scrape fallback after IPv6 failure",
+    "absence of IPv4 runtime connections",
+    "packet capture",
+    "high availability or backup",
+    "minimum resources or peak consumption",
+    "public anonymous clone when installation uses a Git bundle",
+    "FINAL publishing PDF or delivery archive"
+  ],
+  "sources": [
+    {
+      "path": ".cache/charts/traefik/templates/_podtemplate.tpl",
+      "sha256": "98cde99e749c24444e4fca73213ff590954c65eab517cb4b248eec7ff1a94e09",
+      "bytes": 47819
+    },
+    {
+      "path": ".state/dual/checkout-evidence/artifacts/recovery/recovery-b4e4e87e0b92/report.json",
+      "sha256": "1dec5c1194074892c46b1871ef5cdf8ee7d885250292ff80d69d5994b0c212d9",
+      "bytes": 677
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/.state/dual-clean/bootstrap-repeat.log",
+      "sha256": "aef5b50f4e4e9e142325ed6939863227e99fc38179c648ad2dd6030215629ab0",
+      "bytes": 18117
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/.state/dual-clean/bootstrap.log",
+      "sha256": "9db145f8996d74034d757757b2883fdf0ef727e62e82e0a91a0a49b4605d8536",
+      "bytes": 18364
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/.state/dual-clean/deploy.log",
+      "sha256": "d8811dcdf912c9722ceb7d31c4b423176dc8ff9c252c5f0011171f85cd35c3d9",
+      "bytes": 4445
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/.state/dual-clean/evidence.log",
+      "sha256": "abcf0d130f0d7a8fe929514711e6efe9750d6566d3473d8355a6fbfc9ce825bd",
+      "bytes": 139
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/.state/dual-clean/health-repeat.log",
+      "sha256": "f0af6d7c1a55fe496c4c7e456c56d48cd2f5003568d8b593bb0ab518b88dba6c",
+      "bytes": 3218
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/.state/dual-clean/health.log",
+      "sha256": "f0af6d7c1a55fe496c4c7e456c56d48cd2f5003568d8b593bb0ab518b88dba6c",
+      "bytes": 3218
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/.state/dual-clean/idempotency.log",
+      "sha256": "4e61825f433109425b62769deac02c546def6e087a9303a567a231d6f7917f0c",
+      "bytes": 9485
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/.state/dual-clean/identities-after-bootstrap-repeat.json",
+      "sha256": "683eb4e14c82a214cd13366312d39876a5cf656c9bc9fea685ecbde41021c757",
+      "bytes": 1014
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/.state/dual-clean/identities-before-bootstrap-repeat.json",
+      "sha256": "683eb4e14c82a214cd13366312d39876a5cf656c9bc9fea685ecbde41021c757",
+      "bytes": 1014
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/.state/dual-clean/lint.log",
+      "sha256": "bb98bb48d9c014c99423cea71b03faf72827d4d939fd83693fb1a4f278824ba9",
+      "bytes": 8288
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/.state/dual-clean/recovery.log",
+      "sha256": "31f1ae79a5971492717fd86829c00a3d530ebf74a5407d124aa1d14059e73ee6",
+      "bytes": 1217
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/.state/dual-clean/run.json",
+      "sha256": "f55368976ec44a41cdcbdb531f9328c62574b88bf7954b24e9cb16271df50f29",
+      "bytes": 4059
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/.state/dual-clean/tools.log",
+      "sha256": "ce4b5b0108519a763eac39f045514317781d5f0f3330cf4dd69b00ddee261cb3",
+      "bytes": 4794
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/.state/dual-clean/verify.log",
+      "sha256": "4fef3e9ac9cf7010e7bfaee0b0b72fbbe9a5ba8519cefff71e341367997d1c04",
+      "bytes": 365
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/evidence/20261001T142329Z-index.json",
+      "sha256": "9ede4348c9835f04c287f597aa8609adece02747a4f96ff7faecd90858e9a691",
+      "bytes": 526
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/evidence/20261001T142329Z.tar.gz",
+      "sha256": "c3948ef495fae348b5fe54c0021067182d0e6f74ae36858585d4c8a9d2884b2f",
+      "bytes": 36969
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/idempotency/20261001T142057Z-24e43244/report.json",
+      "sha256": "eef93e70c4bf6d56ec5f4a201f622286571517645a65c2e0c049de0d8418540b",
+      "bytes": 3404
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/recovery/recovery-012a6562931a/collector-boundaries.json",
+      "sha256": "8eb51efca46b03f50fcf3b5a5c3894cf7c61a33be0b1d48beadcbe67e64d7fac",
+      "bytes": 433
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/recovery/recovery-012a6562931a/report.json",
+      "sha256": "6f13676fca80d36f91c73056c23b6be0b8605b57d076c91c273b38097f163883",
+      "bytes": 1478
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T141748Z-5c04e477/gateway-traffic-ipv4.json",
+      "sha256": "97ebe855e4a725472a39e2239e6be9a0c76d7e873d009f9411de5f712c577513",
+      "bytes": 13763
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T141748Z-5c04e477/gateway-traffic.json",
+      "sha256": "fecaf5c907d4be50228091ead181df89ec01c0633926216fb7140ce1aa1f5464",
+      "bytes": 13742
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T141748Z-5c04e477/logs-ipv4.json",
+      "sha256": "d160d3b29c776a0799f1748c061d96ea65b13dc9c19661300524379622f45090",
+      "bytes": 3067
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T141748Z-5c04e477/logs.json",
+      "sha256": "29efa99c1d704d79878a481224562f506eb45115d9bc475f4158917a40b3e671",
+      "bytes": 3037
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T141748Z-5c04e477/metrics-baseline.json",
+      "sha256": "7db0c12d247b76ed08bd61931c0575410a611946e317efa8b10c4f0c6867bf7f",
+      "bytes": 15703
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T141748Z-5c04e477/metrics-verify.json",
+      "sha256": "9ac74b12a3e732f7838bd3ab7e37503c9278810ff442a10598a81b5f1f0c6ddf",
+      "bytes": 16728
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T141748Z-5c04e477/network-snapshot.json",
+      "sha256": "9544fed50d33ddbaed131a5942d97ea947aabd5bbc27243862037f54f05489c5",
+      "bytes": 263990
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T141748Z-5c04e477/report.json",
+      "sha256": "ed9e85facdb280a6e0f717a08ced39af8cd22ec55c2c0a3baddaa36fbe816ec2",
+      "bytes": 92529
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-1/gateway-traffic-ipv4.json",
+      "sha256": "05d1324925c2b403478c0777cae733a9d97686857f42e1deed120222133fe981",
+      "bytes": 13779
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-1/gateway-traffic.json",
+      "sha256": "f580dc9b27599bd1d337d8053c21cb31a798e6cdf690764f70596650772b7b95",
+      "bytes": 13758
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-1/logs-ipv4.json",
+      "sha256": "1e3bed2ce5d8d82262861813d695354d813e468e1f8f09610c899cb0ec038586",
+      "bytes": 3089
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-1/logs.json",
+      "sha256": "91955754239b150b427ba2961704d06478ed38c4ca0bbfadeadfed04bc8a453f",
+      "bytes": 3061
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-1/metrics-baseline.json",
+      "sha256": "0dcafd1f3d317e8ff578cee920199781bf484855d890a49f3aea1a406c4d0d39",
+      "bytes": 15706
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-1/metrics-verify.json",
+      "sha256": "473b75a9f68bf00628adcf859a55e4d16609f7b06cdefa32b7cdee382dca1a6d",
+      "bytes": 16731
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-1/network-snapshot.json",
+      "sha256": "ce137db90d384293487fc4d0b4a3b1de9b40e0e6ceefb405dd0e33a3e716f999",
+      "bytes": 264213
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-1/report.json",
+      "sha256": "46ea8c38cb846a55b5242d0306915d5423661f98630666b9e6cfaeae9ca66ebe",
+      "bytes": 92619
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-2/gateway-traffic-ipv4.json",
+      "sha256": "819cc3e03d2aedfc30ed97eddf3c16639ce129b16c7c6614ba9180803e1fa4a4",
+      "bytes": 13779
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-2/gateway-traffic.json",
+      "sha256": "7ff84f7ea859c609de5485f17225f9f13bce71fa5e981ff65ab6044de85914d9",
+      "bytes": 13758
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-2/logs-ipv4.json",
+      "sha256": "4c2d1dedbd31fc780be2496c824deed5e432778613105b78ddee48f075de11a0",
+      "bytes": 3091
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-2/logs.json",
+      "sha256": "fc52f07bca9999492f1783c1235243ed0490a177e9f4c8124a693edebfc87b3e",
+      "bytes": 3061
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-2/metrics-baseline.json",
+      "sha256": "48749409579a14f5f9eb6381a3b5ca6b2b48dc8eebd89ecb3dfbb29b2ea86aad",
+      "bytes": 15705
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-2/metrics-verify.json",
+      "sha256": "d1da92ac2195def0e7e8ecfc33b48ad6b70d8d389fb8a037c3c5983b351aca58",
+      "bytes": 16734
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-2/network-snapshot.json",
+      "sha256": "ce137db90d384293487fc4d0b4a3b1de9b40e0e6ceefb405dd0e33a3e716f999",
+      "bytes": 264213
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/20261001T142057Z-24e43244-2/report.json",
+      "sha256": "1987c391b149307bee659e9a1f0877a45f9619600bb1dbd09cb19fff31fa0aa1",
+      "bytes": 92623
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/recovery-012a6562931a-after/gateway-traffic-ipv4.json",
+      "sha256": "ba22ed983ad0d9b1e4a426164606152941951488dfb6a2bdf15d2f42a9741a1b",
+      "bytes": 13779
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/recovery-012a6562931a-after/gateway-traffic.json",
+      "sha256": "b6b07895d664573eb2153c6095d71b5e9cbb48baf59a705f6dcdfd2ea73ce38a",
+      "bytes": 13758
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/recovery-012a6562931a-after/logs-ipv4.json",
+      "sha256": "ab45a237fabf4f77cbab4238ad1958b0ff1473ad8278f1b6ada827f01a029bc4",
+      "bytes": 3092
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/recovery-012a6562931a-after/logs.json",
+      "sha256": "17cc5eb989cbac7e517923b81af36ce1b576e62fe03acfad2fda859da49b7575",
+      "bytes": 3062
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/recovery-012a6562931a-after/metrics-baseline.json",
+      "sha256": "1e7e7864ee457acf5cfb7024f9d408cc6280c4c7cdd65b76f8b8eceead5f32c2",
+      "bytes": 15703
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/recovery-012a6562931a-after/metrics-verify.json",
+      "sha256": "6f2ad44f11e4c9dcec4f55d397127b213725b72696bc8c7331e0fa13868983b8",
+      "bytes": 16731
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/recovery-012a6562931a-after/network-snapshot.json",
+      "sha256": "312b9d3af3f023f9992d56d6fa56f82a4bc9f4470061e07dc19ec39dbee7d7a4",
+      "bytes": 264215
+    },
+    {
+      "path": ".state/dual/clean135/checkout-evidence/artifacts/verify/recovery-012a6562931a-after/report.json",
+      "sha256": "757db91e45acc72470d6d08fb904725b7c1bee1d9650261b16056de73e034ddf",
+      "bytes": 92620
+    },
+    {
+      "path": ".state/dual/clean135/first-verify/20261001T141748Z-5c04e477/gateway-traffic-ipv4.json",
+      "sha256": "97ebe855e4a725472a39e2239e6be9a0c76d7e873d009f9411de5f712c577513",
+      "bytes": 13763
+    },
+    {
+      "path": ".state/dual/clean135/first-verify/20261001T141748Z-5c04e477/gateway-traffic.json",
+      "sha256": "fecaf5c907d4be50228091ead181df89ec01c0633926216fb7140ce1aa1f5464",
+      "bytes": 13742
+    },
+    {
+      "path": ".state/dual/clean135/first-verify/20261001T141748Z-5c04e477/logs-ipv4.json",
+      "sha256": "d160d3b29c776a0799f1748c061d96ea65b13dc9c19661300524379622f45090",
+      "bytes": 3067
+    },
+    {
+      "path": ".state/dual/clean135/first-verify/20261001T141748Z-5c04e477/logs.json",
+      "sha256": "29efa99c1d704d79878a481224562f506eb45115d9bc475f4158917a40b3e671",
+      "bytes": 3037
+    },
+    {
+      "path": ".state/dual/clean135/first-verify/20261001T141748Z-5c04e477/metrics-baseline.json",
+      "sha256": "7db0c12d247b76ed08bd61931c0575410a611946e317efa8b10c4f0c6867bf7f",
+      "bytes": 15703
+    },
+    {
+      "path": ".state/dual/clean135/first-verify/20261001T141748Z-5c04e477/metrics-verify.json",
+      "sha256": "9ac74b12a3e732f7838bd3ab7e37503c9278810ff442a10598a81b5f1f0c6ddf",
+      "bytes": 16728
+    },
+    {
+      "path": ".state/dual/clean135/first-verify/20261001T141748Z-5c04e477/network-snapshot.json",
+      "sha256": "9544fed50d33ddbaed131a5942d97ea947aabd5bbc27243862037f54f05489c5",
+      "bytes": 263990
+    },
+    {
+      "path": ".state/dual/clean135/first-verify/20261001T141748Z-5c04e477/report.json",
+      "sha256": "ed9e85facdb280a6e0f717a08ced39af8cd22ec55c2c0a3baddaa36fbe816ec2",
+      "bytes": 92529
+    },
+    {
+      "path": ".state/dual/clean135/measurements.json",
+      "sha256": "a8a1645398396e6700d4665dc819c572f79c1472fd99fcfec9dc2529f313d352",
+      "bytes": 553
+    },
+    {
+      "path": ".state/dual/clean135/pristine.json",
+      "sha256": "4496adf7d8a4210928069453232dbc30a552dd2f13bb81254a73dab39cbdf5c9",
+      "bytes": 942
+    },
+    {
+      "path": ".state/dual/clean135/runtime/calico-node.json",
+      "sha256": "519cd7d7d8a0138a7fad9aab4db5fb32c24334fb15e3fa48bc1eaf34e195a4ba",
+      "bytes": 14516
+    },
+    {
+      "path": ".state/dual/clean135/runtime/kubeadm-config.json",
+      "sha256": "79066e074b7de839df8cf5158a41be3d904c6d9b7b34a84d64a07e5958250326",
+      "bytes": 1160
+    },
+    {
+      "path": ".state/dual/clean135/runtime/kubelet-cni.txt",
+      "sha256": "67fe7a0da978f5211b547ea76036aacfe7f927c9e37d667af0760bd086dc55a9",
+      "bytes": 827
+    },
+    {
+      "path": ".state/dual/component-family-probes.json",
+      "sha256": "863817c10f78a2486ed2b8755b464e5b050ca12a70d609a71f7d3e829c5a271e",
+      "bytes": 3175
+    },
+    {
+      "path": ".state/dual/component-family-probes.py",
+      "sha256": "1c1cc62fbca66f42c0aa999933261366204ad9ed60205a4879c5628a2b893d6b",
+      "bytes": 1486
+    },
+    {
+      "path": ".state/dual/first-verify/20261001T135210Z-b718b746/gateway-traffic-ipv4.json",
+      "sha256": "7a14057be7ee7abdbf3caebd1797c84e33c4ccf61c7473a215ebca88d4f4e206",
+      "bytes": 13763
+    },
+    {
+      "path": ".state/dual/first-verify/20261001T135210Z-b718b746/gateway-traffic.json",
+      "sha256": "2c5e9cca021c37dc06a8db687e4196630245ae54a2255fa5cfab86a915c885bb",
+      "bytes": 13742
+    },
+    {
+      "path": ".state/dual/first-verify/20261001T135210Z-b718b746/logs-ipv4.json",
+      "sha256": "ef11f52ef24cb365dd4ac5af88b4598b4ea7d7f2f9eba051fe5657d4f8794ac7",
+      "bytes": 3070
+    },
+    {
+      "path": ".state/dual/first-verify/20261001T135210Z-b718b746/logs.json",
+      "sha256": "745481080cae52c24601630b79a240516cf62958a36f0727989054d6122eff4e",
+      "bytes": 3040
+    },
+    {
+      "path": ".state/dual/first-verify/20261001T135210Z-b718b746/metrics-baseline.json",
+      "sha256": "d59fb19f0055846086baa597145d9f2173b724f2f701e6a86d84eb3081fe509e",
+      "bytes": 15670
+    },
+    {
+      "path": ".state/dual/first-verify/20261001T135210Z-b718b746/metrics-verify.json",
+      "sha256": "b1274c9f9aa6fc1bc0839babce214e468d280451d8b187640807ad97202313a8",
+      "bytes": 16696
+    },
+    {
+      "path": ".state/dual/first-verify/20261001T135210Z-b718b746/network-snapshot.json",
+      "sha256": "a1bf48c9c37833a4da5e20639a9ecafd362987a8aad5799c657ce47f2f7e9cba",
+      "bytes": 263549
+    },
+    {
+      "path": ".state/dual/first-verify/20261001T135210Z-b718b746/report.json",
+      "sha256": "8bacb20b6e2e41181b95686e75853e6ce477a7bc70b5947a8203a5dd71e61f24",
+      "bytes": 92463
+    },
+    {
+      "path": ".state/dual/main-boot-before-clean.txt",
+      "sha256": "9ec7852de79877db2522282ab2f2adfb605462d53db939e1b128546e72fd62c0",
+      "bytes": 37
+    },
+    {
+      "path": ".state/dual/main-final/artifacts/recovery/recovery-fdf767e5834f/collector-boundaries.json",
+      "sha256": "1d6a1ea85896ba2791046cec3ae60ca1ca41932cfd174a5dde5227469ff63e4f",
+      "bytes": 432
+    },
+    {
+      "path": ".state/dual/main-final/artifacts/recovery/recovery-fdf767e5834f/report.json",
+      "sha256": "45c69dbe1390f58813ea3613138d3f0020a6c56d477646fcf1490e4521e7b8ac",
+      "bytes": 1476
+    },
+    {
+      "path": ".state/dual/main-final/artifacts/verify/recovery-fdf767e5834f-after/gateway-traffic-ipv4.json",
+      "sha256": "3f38c5baddaaa3cb7d68b7cd8bbbc83529fa28f971a5ea899be102dd258d808d",
+      "bytes": 13779
+    },
+    {
+      "path": ".state/dual/main-final/artifacts/verify/recovery-fdf767e5834f-after/gateway-traffic.json",
+      "sha256": "f43a6a930634e3709c82d4604bd1efd35feb153a3f91308c3aa58aac81f48f36",
+      "bytes": 13758
+    },
+    {
+      "path": ".state/dual/main-final/artifacts/verify/recovery-fdf767e5834f-after/logs-ipv4.json",
+      "sha256": "88c28c022850dc38ef8383540a419af29a654972c6cbd77ed14f6dd75c74d111",
+      "bytes": 3090
+    },
+    {
+      "path": ".state/dual/main-final/artifacts/verify/recovery-fdf767e5834f-after/logs.json",
+      "sha256": "f25880f2f25316ee0b18913e093a217d128a045c9ab43fc53135668f3ccf8c30",
+      "bytes": 3062
+    },
+    {
+      "path": ".state/dual/main-final/artifacts/verify/recovery-fdf767e5834f-after/metrics-baseline.json",
+      "sha256": "94a23345fa3afc59a2fd2ef322d35d0df6362536e7a5e7eef61d23e5a319e4b3",
+      "bytes": 15675
+    },
+    {
+      "path": ".state/dual/main-final/artifacts/verify/recovery-fdf767e5834f-after/metrics-verify.json",
+      "sha256": "b99d99919dfe2ff1fafdc7d2d0105914f1f4861075ddb3c4a0be7ccd1027f346",
+      "bytes": 16703
+    },
+    {
+      "path": ".state/dual/main-final/artifacts/verify/recovery-fdf767e5834f-after/network-snapshot.json",
+      "sha256": "1613fabff5d36bd79d92524f9649d9de83d26d3c0b5406f1843fe3bba91c6003",
+      "bytes": 263777
+    },
+    {
+      "path": ".state/dual/main-final/artifacts/verify/recovery-fdf767e5834f-after/report.json",
+      "sha256": "5d46a5237e08b2dcafe10e7b060e639c6cecbaa538bf35c6c8400537603c3458",
+      "bytes": 92555
+    },
+    {
+      "path": ".state/dual/main-return.py",
+      "sha256": "5481558a730644f795cb2e1617fd126e3547f6c5af0ec18cbacf7697b72bddf5",
+      "bytes": 2870
+    },
+    {
+      "path": ".state/dual/main-return/evidence.log",
+      "sha256": "a15d3b79883257619b950bf004d5da11acd98b8172b9acb3addb87b0d91ae188",
+      "bytes": 139
+    },
+    {
+      "path": ".state/dual/main-return/health.log",
+      "sha256": "9d72143c4fda63e1108ceaf2fe30a109487ef4394bf5153df60c617f3a32767c",
+      "bytes": 3043
+    },
+    {
+      "path": ".state/dual/main-return/run.json",
+      "sha256": "c1ecb6a10f06905a489d6c701094d4290a0ef4db651357551a67b21112e88867",
+      "bytes": 977
+    },
+    {
+      "path": ".state/dual/main-return/supplement.log",
+      "sha256": "df9cde68baf14510d5bbf15aacab90e1d845a1172dcd733982250bdb2b2c3ada",
+      "bytes": 117
+    },
+    {
+      "path": ".state/dual/main-return/verify-poisoned-proxy.log",
+      "sha256": "4531a2b7eaa76077c6ebe8664f04d00eabc9e61132f5df9e77fe4833b7fcb32d",
+      "bytes": 365
+    },
+    {
+      "path": ".state/dual/main-return/wait-api.log",
+      "sha256": "fb9ef80ae7ebae26a527c54af0632bb53adf33756668962a8fc78252b477fc1e",
+      "bytes": 1802
+    },
+    {
+      "path": ".state/dual/position-diagnostic.json",
+      "sha256": "f6822a195430edbf479214e29942548e8ef80c96a4e48e13eb0a4f97125048be",
+      "bytes": 1830
+    },
+    {
+      "path": ".state/dual/pristine.json",
+      "sha256": "2d1b35207e45e3d303c6bbb7f6ced460c481cdab94dfbda926c4bf89bd23d35a",
+      "bytes": 935
+    },
+    {
+      "path": ".state/dual/runtime/calico-node.json",
+      "sha256": "4839244a33e2826ea492a5dd448f74a2c7d93a45cb16b18a3055f4b0d3e63fd5",
+      "bytes": 14516
+    },
+    {
+      "path": ".state/dual/runtime/identities-after-repeat-full.json",
+      "sha256": "57614befc302fb48f4e278f808c0bbf9f14ab14c226a57a622441e5ee7866be0",
+      "bytes": 16759
+    },
+    {
+      "path": ".state/dual/runtime/identities-before-repeat-full.json",
+      "sha256": "6278bc46e60bb27cd0b9ef3d87e6496a58391becde8249e76a3b86f7bf068b4e",
+      "bytes": 16536
+    },
+    {
+      "path": ".state/dual/runtime/kubeadm-config.json",
+      "sha256": "e7dca23e2e54d78c5601edb37ea79dd648dd76556e9d46dfa19273184646ae5f",
+      "bytes": 1153
+    },
+    {
+      "path": ".state/dual/runtime/kubelet-cni.txt",
+      "sha256": "689f87df9c13f5cd7760f1489147661893176de0277d23dfb6441ca29c3ace22",
+      "bytes": 820
+    },
+    {
+      "path": ".state/dual/source-boundary-diagnostic.json",
+      "sha256": "b41a0357e7ac40a0e80d7232d4802c5b8c1de85c69a5f88f6539ffc3c7c6214f",
+      "bytes": 681
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-demo-hello-A.txt",
+      "sha256": "9799762f648313497affd7e080757590a6ab5155cdcb8fb10debcbd0852a69bd",
+      "bytes": 125
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-demo-hello-AAAA.txt",
+      "sha256": "7c5b7b64abc96fd307d56a7218284eb14e2fb28079abd5f5c3e50cf78fd79ee6",
+      "bytes": 138
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-edge-traefik-A.txt",
+      "sha256": "ce463d6ad10fcd7dd4deb7169ee34f4412472e1a7e03234bd72c1bde1fcda1aa",
+      "bytes": 127
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-edge-traefik-AAAA.txt",
+      "sha256": "aedfc98b9fdb118787bd93c69d427638b9d2d62c176a95276dd3e4a71f06c48a",
+      "bytes": 140
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-edge-traefik-metrics-A.txt",
+      "sha256": "4f1aa2d0351394c744bc68d7076c8e58de9ea37a17e47f930c7cd2188ddc7023",
+      "bytes": 136
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-edge-traefik-metrics-AAAA.txt",
+      "sha256": "024e397552a33a5e8db1ab5241f71d06c742afb3d4dffa654b74ece2ec1c6ab3",
+      "bytes": 148
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-logging-loki-A.txt",
+      "sha256": "08ec1a97de00d7e515798fe725c1d073b5f864509acef9c6c7fe10ce9b544578",
+      "bytes": 128
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-logging-loki-AAAA.txt",
+      "sha256": "c1f88b305fe8ac3fd1c5336f1bbcd0cbe9b31bbd496547d1959467194abe9b3f",
+      "bytes": 140
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-monitoring-monitoring-kube-state-metrics-A.txt",
+      "sha256": "d66d2ff0e71db8cde96e2b83af62a6aeecdd7bcf2685a17438b8963e42e80007",
+      "bytes": 154
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-monitoring-monitoring-kube-state-metrics-AAAA.txt",
+      "sha256": "23d05fbe29dc5b8499dc16cb9dba56bf6fa3f93c21b55af1f7eb0013c1dc2574",
+      "bytes": 168
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-monitoring-monitoring-operator-A.txt",
+      "sha256": "54960e32fd5eefb2c20aca83f6b98039a510682bcd647d98913d337415e1c03f",
+      "bytes": 147
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-monitoring-monitoring-operator-AAAA.txt",
+      "sha256": "3c06f92a77770c8a9efe8a998d6f0ec27048e32c73d288cf4981d23f623c9b3d",
+      "bytes": 158
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-monitoring-monitoring-prometheus-A.txt",
+      "sha256": "b3614796d4b0853f5bae7457e065ab60158e430d0bd6a658e2bbc5dd5bc8acaa",
+      "bytes": 149
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-monitoring-monitoring-prometheus-AAAA.txt",
+      "sha256": "84b6d588b6c6ccb31bd8621cb8d08567fa29edb4f7b6eb44ab08cb6e412f21e2",
+      "bytes": 160
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-monitoring-monitoring-prometheus-node-exporter-A.txt",
+      "sha256": "fc103e1311721c58dcca0cca3792d2eb18f60cd59ef1d08156a998df406962b4",
+      "bytes": 163
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/dns-monitoring-monitoring-prometheus-node-exporter-AAAA.txt",
+      "sha256": "520960b2cd6c4badec0d032279167e85f40d566b2871cc5c54d6b719f7bd8c2f",
+      "bytes": 174
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/report.json",
+      "sha256": "fe4a621d8e6f916a399caea4d8f619a9c1f514f29d5c234410ab2df43d4d92e2",
+      "bytes": 1484
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/ssh-4.txt",
+      "sha256": "ca8d3af505aea59b007421562ba885001461baf9d00dc736eb30da22374a78aa",
+      "bytes": 46
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/ssh-6.txt",
+      "sha256": "ca8d3af505aea59b007421562ba885001461baf9d00dc736eb30da22374a78aa",
+      "bytes": 46
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/targets.json",
+      "sha256": "25c499052871dac4bed78d6e6417da8f2f685062f9871f3af5455b6707328d21",
+      "bytes": 46949
+    },
+    {
+      "path": ".state/dual/supplement-before-clean/telemetry.json",
+      "sha256": "13cee8f0d86c343226a992bda7bdab87650ac0c71ad5df3436acc12fccfd5c2d",
+      "bytes": 1082
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-demo-hello-A.txt",
+      "sha256": "4a553b3023730fa844e561b0ebd685596c0f0b022bc8bc45dea29f25c1e46ed9",
+      "bytes": 127
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-demo-hello-AAAA.txt",
+      "sha256": "80e6c05a8ad86fed15099bc94af52a1f6e08300470ec5721ee773f87f374e35d",
+      "bytes": 138
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-edge-traefik-A.txt",
+      "sha256": "079cb7778dbc39850b2fea9626f5bc477be4c25de01c453e21d67355e954ac75",
+      "bytes": 129
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-edge-traefik-AAAA.txt",
+      "sha256": "af1a708778b815cc3a7a4ca6a1d3a5e161cfc772540eb1c90c03de0e53986189",
+      "bytes": 140
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-edge-traefik-metrics-A.txt",
+      "sha256": "2249fc4b7017b29323aceb73ddfa97ae28d057f593719bddff84efd6f7d55a7b",
+      "bytes": 136
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-edge-traefik-metrics-AAAA.txt",
+      "sha256": "37ce67b99550986f510fe730248114bd2f223caae4243e5f92e4b800d607b03a",
+      "bytes": 148
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-logging-loki-A.txt",
+      "sha256": "e60152f23a017ee66ff9058ca24b4d72259e853b063ad5239f0c40e5dc4bdcc5",
+      "bytes": 128
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-logging-loki-AAAA.txt",
+      "sha256": "bdd90f0962abbfcef1b18f067e2e66d6bc0fa233f16c91392fe235844f68ea6b",
+      "bytes": 140
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-monitoring-monitoring-kube-state-metrics-A.txt",
+      "sha256": "805a123f7fb13b5fae4257d87b09c68778a1b49f3ad8929e9e5de39abf5673f7",
+      "bytes": 156
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-monitoring-monitoring-kube-state-metrics-AAAA.txt",
+      "sha256": "baad76a9a87efb9e7e3b5ffe11401a8854c80843712d7b059133423a1ab5f25b",
+      "bytes": 168
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-monitoring-monitoring-operator-A.txt",
+      "sha256": "64bf87bc5313138f8904ebe96c8a9224a60e58f26be5b99b4a070f570f0311b9",
+      "bytes": 145
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-monitoring-monitoring-operator-AAAA.txt",
+      "sha256": "064c0cda40edfc1c8927fa5d7037c176b4c1cd7bc0e720126bd5ecc39b6863ba",
+      "bytes": 157
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-monitoring-monitoring-prometheus-A.txt",
+      "sha256": "424b590a38851c55bbfc982b9c88d597ae4839a3e4c6bb8763ad70fd25f268e8",
+      "bytes": 148
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-monitoring-monitoring-prometheus-AAAA.txt",
+      "sha256": "496bf6607e3ac868cb84d675de8314904597c6499f02b895b99c5abbe8fcd845",
+      "bytes": 160
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-monitoring-monitoring-prometheus-node-exporter-A.txt",
+      "sha256": "1b4e20832a01f915eafb893332c749f0f0e0ba07f7d9a11d8cc936d712e565a5",
+      "bytes": 163
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/dns-monitoring-monitoring-prometheus-node-exporter-AAAA.txt",
+      "sha256": "88fa731f72cedf40c5bbe64bcb06ad3a98c0830cc26ca72048b040eb229f3480",
+      "bytes": 174
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/report.json",
+      "sha256": "3e201e07607e5a33e98a0fa8ad2bf8415db08eba58cf7fe5274e335b10fcb47e",
+      "bytes": 1484
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/ssh-4.txt",
+      "sha256": "9195ce8c1a0c3f3812568000c6ecb40ef239709af500f40f344513afcd5eaa10",
+      "bytes": 53
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/ssh-6.txt",
+      "sha256": "9195ce8c1a0c3f3812568000c6ecb40ef239709af500f40f344513afcd5eaa10",
+      "bytes": 53
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/targets.json",
+      "sha256": "2c4f5a8266170d6e3955753e618a98638e7d0b87cbf44d9a43194a6dff9562fc",
+      "bytes": 47053
+    },
+    {
+      "path": ".state/dual/supplement-dual-acceptance/telemetry.json",
+      "sha256": "35cb19b382a1bf6b6e8ad4aa71e49bc9e3fc35409dd6fe9a011155d77ceff96e",
+      "bytes": 1082
+    },
+    {
+      "path": ".state/dual/supplement/dns-demo-hello-A.txt",
+      "sha256": "9799762f648313497affd7e080757590a6ab5155cdcb8fb10debcbd0852a69bd",
+      "bytes": 125
+    },
+    {
+      "path": ".state/dual/supplement/dns-demo-hello-AAAA.txt",
+      "sha256": "7c5b7b64abc96fd307d56a7218284eb14e2fb28079abd5f5c3e50cf78fd79ee6",
+      "bytes": 138
+    },
+    {
+      "path": ".state/dual/supplement/dns-edge-traefik-A.txt",
+      "sha256": "ce463d6ad10fcd7dd4deb7169ee34f4412472e1a7e03234bd72c1bde1fcda1aa",
+      "bytes": 127
+    },
+    {
+      "path": ".state/dual/supplement/dns-edge-traefik-AAAA.txt",
+      "sha256": "aedfc98b9fdb118787bd93c69d427638b9d2d62c176a95276dd3e4a71f06c48a",
+      "bytes": 140
+    },
+    {
+      "path": ".state/dual/supplement/dns-edge-traefik-metrics-A.txt",
+      "sha256": "4f1aa2d0351394c744bc68d7076c8e58de9ea37a17e47f930c7cd2188ddc7023",
+      "bytes": 136
+    },
+    {
+      "path": ".state/dual/supplement/dns-edge-traefik-metrics-AAAA.txt",
+      "sha256": "024e397552a33a5e8db1ab5241f71d06c742afb3d4dffa654b74ece2ec1c6ab3",
+      "bytes": 148
+    },
+    {
+      "path": ".state/dual/supplement/dns-logging-loki-A.txt",
+      "sha256": "08ec1a97de00d7e515798fe725c1d073b5f864509acef9c6c7fe10ce9b544578",
+      "bytes": 128
+    },
+    {
+      "path": ".state/dual/supplement/dns-logging-loki-AAAA.txt",
+      "sha256": "c1f88b305fe8ac3fd1c5336f1bbcd0cbe9b31bbd496547d1959467194abe9b3f",
+      "bytes": 140
+    },
+    {
+      "path": ".state/dual/supplement/dns-monitoring-monitoring-kube-state-metrics-A.txt",
+      "sha256": "d66d2ff0e71db8cde96e2b83af62a6aeecdd7bcf2685a17438b8963e42e80007",
+      "bytes": 154
+    },
+    {
+      "path": ".state/dual/supplement/dns-monitoring-monitoring-kube-state-metrics-AAAA.txt",
+      "sha256": "23d05fbe29dc5b8499dc16cb9dba56bf6fa3f93c21b55af1f7eb0013c1dc2574",
+      "bytes": 168
+    },
+    {
+      "path": ".state/dual/supplement/dns-monitoring-monitoring-operator-A.txt",
+      "sha256": "54960e32fd5eefb2c20aca83f6b98039a510682bcd647d98913d337415e1c03f",
+      "bytes": 147
+    },
+    {
+      "path": ".state/dual/supplement/dns-monitoring-monitoring-operator-AAAA.txt",
+      "sha256": "3c06f92a77770c8a9efe8a998d6f0ec27048e32c73d288cf4981d23f623c9b3d",
+      "bytes": 158
+    },
+    {
+      "path": ".state/dual/supplement/dns-monitoring-monitoring-prometheus-A.txt",
+      "sha256": "b3614796d4b0853f5bae7457e065ab60158e430d0bd6a658e2bbc5dd5bc8acaa",
+      "bytes": 149
+    },
+    {
+      "path": ".state/dual/supplement/dns-monitoring-monitoring-prometheus-AAAA.txt",
+      "sha256": "84b6d588b6c6ccb31bd8621cb8d08567fa29edb4f7b6eb44ab08cb6e412f21e2",
+      "bytes": 160
+    },
+    {
+      "path": ".state/dual/supplement/dns-monitoring-monitoring-prometheus-node-exporter-A.txt",
+      "sha256": "fc103e1311721c58dcca0cca3792d2eb18f60cd59ef1d08156a998df406962b4",
+      "bytes": 163
+    },
+    {
+      "path": ".state/dual/supplement/dns-monitoring-monitoring-prometheus-node-exporter-AAAA.txt",
+      "sha256": "520960b2cd6c4badec0d032279167e85f40d566b2871cc5c54d6b719f7bd8c2f",
+      "bytes": 174
+    },
+    {
+      "path": ".state/dual/supplement/report.json",
+      "sha256": "00855becbf65e8da3b6bea1f27cd547e816e30dbb8add8099bf4ba7e03c2104b",
+      "bytes": 1484
+    },
+    {
+      "path": ".state/dual/supplement/ssh-4.txt",
+      "sha256": "ca8d3af505aea59b007421562ba885001461baf9d00dc736eb30da22374a78aa",
+      "bytes": 46
+    },
+    {
+      "path": ".state/dual/supplement/ssh-6.txt",
+      "sha256": "ca8d3af505aea59b007421562ba885001461baf9d00dc736eb30da22374a78aa",
+      "bytes": 46
+    },
+    {
+      "path": ".state/dual/supplement/targets.json",
+      "sha256": "c18399392575cbe58d06b3c728aecb2b25a06a8914737b1451a1cc618d6a0f88",
+      "bytes": 46957
+    },
+    {
+      "path": ".state/dual/supplement/telemetry.json",
+      "sha256": "13cee8f0d86c343226a992bda7bdab87650ac0c71ad5df3436acc12fccfd5c2d",
+      "bytes": 1082
+    },
+    {
+      "path": "artifacts/evidence/20261001T142733Z-index.json",
+      "sha256": "279eb0ece3a869473415f0009b3b2c1f471ddfb6acf4846e4a4723d505499fdb",
+      "bytes": 1845
+    },
+    {
+      "path": "artifacts/evidence/20261001T142733Z.tar.gz",
+      "sha256": "3a1cfa0bc0792faae83c7448e0ecb544af2187f289e96f84c86f4085b01ddc2a",
+      "bytes": 128192
+    },
+    {
+      "path": "artifacts/idempotency/20261001T112340Z-bd51041c/report.json",
+      "sha256": "72a528c4750ae06df968707c2a6983fde04f1adbd04397776046ca1d3f037de3",
+      "bytes": 3404
+    },
+    {
+      "path": "artifacts/idempotency/20261001T122755Z-04c409cf/report.json",
+      "sha256": "8db8cba65f5edcc04b475bb329e12f05d8c9deecaec531cc4538dcc69c4e2f4b",
+      "bytes": 3404
+    },
+    {
+      "path": "artifacts/idempotency/20261001T124211Z-56017626/report.json",
+      "sha256": "98f2927dfe787cee7f58d238e78f8319949b107415dff44dc7b468b00d739bad",
+      "bytes": 3404
+    },
+    {
+      "path": "artifacts/recovery/recovery-162280d8e552/report.json",
+      "sha256": "b7d9dda13e549a8684654da84eae6e84c9dc1efe28a7e8a592c952542b85d1d5",
+      "bytes": 1441
+    },
+    {
+      "path": "artifacts/recovery/recovery-3296a8ff25ad/report.json",
+      "sha256": "5ceacc057616799c8e4cd6b7d48707a5e6a7a9f9f838edfef5785f6b46132c69",
+      "bytes": 1640
+    },
+    {
+      "path": "artifacts/recovery/recovery-f6d251466ad7/report.json",
+      "sha256": "daf7cf3ff7a4b289530bb5c61c3c78ba0870f76eda62b1acbf9202bc0c2314dc",
+      "bytes": 1441
+    },
+    {
+      "path": "artifacts/recovery/recovery-f73abc3c989b/report.json",
+      "sha256": "f6e43f9586617a090d5f350f5f0589fd9f66d1b040d8509aae75136b9d581972",
+      "bytes": 1297
+    },
+    {
+      "path": "artifacts/verify/20261001T112242Z-c174a32b/report.json",
+      "sha256": "55e8a2f9ac4e28c32a8d1f0a69b688d15964df62e913103d600baadcef595015",
+      "bytes": 64526
+    },
+    {
+      "path": "artifacts/verify/20261001T112340Z-bd51041c-1/report.json",
+      "sha256": "cf5f35dcdf983663a2feebd9ce1457566ab2a773376bb14a087ad10f8b5e0448",
+      "bytes": 64575
+    },
+    {
+      "path": "artifacts/verify/20261001T112340Z-bd51041c-2/report.json",
+      "sha256": "a15227b42b986db3cf93b8be9d48150125ca528feb1b4cdd98dc34f45b7a8362",
+      "bytes": 64577
+    },
+    {
+      "path": "artifacts/verify/20261001T115337Z-ec095221/report.json",
+      "sha256": "caa733af19a0dd5d808cfab581c08a0f699f265959fc1766ed6cc165a065ef89",
+      "bytes": 64799
+    },
+    {
+      "path": "artifacts/verify/20261001T122423Z-de753762/report.json",
+      "sha256": "e80f75aeb818bc9e5e7a2e63796921d571b789012bbd833178499e19b41e8800",
+      "bytes": 67831
+    },
+    {
+      "path": "artifacts/verify/20261001T122742Z-edef1a5b/report.json",
+      "sha256": "cdac73dcee8cceb6deecf2bd6a76424026f3c6506d143519844c50980b9e5073",
+      "bytes": 67834
+    },
+    {
+      "path": "artifacts/verify/20261001T122755Z-04c409cf-1/report.json",
+      "sha256": "fdae8beeb5dc2bc00978b76fdbdcf11b6a2dcfe45aeca44a18b4ced4aab1c83e",
+      "bytes": 67881
+    },
+    {
+      "path": "artifacts/verify/20261001T122755Z-04c409cf-2/report.json",
+      "sha256": "d46759ce26c56f5613bdec7db797e8025d9371a86552ca76ad899350d7b9c1d3",
+      "bytes": 67887
+    },
+    {
+      "path": "artifacts/verify/20261001T123906Z-f5ef326e/report.json",
+      "sha256": "25e6671a213a866e83761f0be661eed5fb002c3bd972afebaca9bdd808174a75",
+      "bytes": 68353
+    },
+    {
+      "path": "artifacts/verify/20261001T124203Z-a71653c3/report.json",
+      "sha256": "807300ec9e3114e6288f13710d1d77df612224229e70903f444e843980d90435",
+      "bytes": 68352
+    },
+    {
+      "path": "artifacts/verify/20261001T124211Z-56017626-1/report.json",
+      "sha256": "a95f821fa51d1c1d26d26ab5971b7a9208a340ce08a1872ee491400d21990d0c",
+      "bytes": 68401
+    },
+    {
+      "path": "artifacts/verify/20261001T124211Z-56017626-2/report.json",
+      "sha256": "78bff938310941048d846b617953d2a4e18d575763b095bc9f916804a69a9554",
+      "bytes": 68402
+    },
+    {
+      "path": "artifacts/verify/20261001T124803Z-71362685/report.json",
+      "sha256": "b7963a42f3b8736cb5af9d53649096ecc364000b5e18a8dc81b449c45b9d955e",
+      "bytes": 68340
+    },
+    {
+      "path": "artifacts/verify/20261001T131132Z-7554b9be/report.json",
+      "sha256": "d991978c3a7bf6ca06eff0c22030e08cee14d2821fc9946a911ac1e020467aa8",
+      "bytes": 69389
+    },
+    {
+      "path": "artifacts/verify/20261001T142659Z-28071d54/gateway-traffic-ipv4.json",
+      "sha256": "636a2603091f1c17edef2306cf1614be6d24053063776b2aa7a771faa3aab707",
+      "bytes": 13763
+    },
+    {
+      "path": "artifacts/verify/20261001T142659Z-28071d54/gateway-traffic.json",
+      "sha256": "70908100ba33159f1fc6bf7d5dbd2355c884869d30f9a90b20890c91eb54a58d",
+      "bytes": 13742
+    },
+    {
+      "path": "artifacts/verify/20261001T142659Z-28071d54/logs-ipv4.json",
+      "sha256": "9352aa138d1356c6a18e97ea1edcc2ba2fe1523986a0320a985520e8350ee69e",
+      "bytes": 3070
+    },
+    {
+      "path": "artifacts/verify/20261001T142659Z-28071d54/logs.json",
+      "sha256": "d9ed0c2ec6285627720165aa18acc00fa69c40f9e128388a665f3b9530e2e237",
+      "bytes": 3040
+    },
+    {
+      "path": "artifacts/verify/20261001T142659Z-28071d54/metrics-baseline.json",
+      "sha256": "aaa0b3d47628e0e54b46e51cd06f06e1d4421f98beba8e49ca18021bb7a65aff",
+      "bytes": 15662
+    },
+    {
+      "path": "artifacts/verify/20261001T142659Z-28071d54/metrics-verify.json",
+      "sha256": "a518420cb162213afe0ba8e5903d35c56bc8447615fea068455ac4d269ee28da",
+      "bytes": 16686
+    },
+    {
+      "path": "artifacts/verify/20261001T142659Z-28071d54/network-snapshot.json",
+      "sha256": "dd3cd13aa32bc1e154631e542952707717deb3eba0fc9ba9492de54ec9b7afc8",
+      "bytes": 274294
+    },
+    {
+      "path": "artifacts/verify/20261001T142659Z-28071d54/report.json",
+      "sha256": "37023bc0a7839ccb566ff98514fcb7cef573c2c5a38be88b8e3154619ab0054c",
+      "bytes": 92445
+    },
+    {
+      "path": "artifacts/verify/recovery-162280d8e552-after/report.json",
+      "sha256": "2523f5f281efc889b9948e64cde8f3ca1e5ab6765cf0153ed783ff4b53bf3ded",
+      "bytes": 64593
+    },
+    {
+      "path": "artifacts/verify/recovery-3296a8ff25ad-after/report.json",
+      "sha256": "511797c9b50e9356bc94d50fd7873b27db30da9ef83f568f4d1268303221ce86",
+      "bytes": 68122
+    },
+    {
+      "path": "artifacts/verify/recovery-f6d251466ad7-after/report.json",
+      "sha256": "ef7c4c452fd4006ca23f377c45e4d43daa203a63a968dcc794aee4601513a154",
+      "bytes": 68399
+    },
+    {
+      "path": "artifacts/verify/recovery-f73abc3c989b-after/report.json",
+      "sha256": "274c02c401487d6949acd5509fd35931c5f49e725d1ea3dccd0a6b660e7becc3",
+      "bytes": 64575
+    },
+    {
+      "path": "artifacts/verify/unsupported-profile-test/report.json",
+      "sha256": "e52956d4ece5a933c172e0b160f77063811d202fc89877c5790b1bfa744342e8",
+      "bytes": 4605
+    },
+    {
+      "path": "deploy/gateway/traefik-values.yaml",
+      "sha256": "ca1260142887031d385af2c808b5fdc06f27abd120c16854cbe4643e973fbaeb",
+      "bytes": 1747
+    },
+    {
+      "path": "deploy/monitoring/tests/test_check_metrics.py",
+      "sha256": "f4f87e44f300e291444738a21a64b60e27b99da22cf8fd60c82c743fb33cb205",
+      "bytes": 14105
+    },
+    {
+      "path": "scripts/check-metrics.py",
+      "sha256": "077fa392e4e1cb7efec42a1bdccbd1163a9bea01e8f8046555d641f336696376",
+      "bytes": 18779
+    },
+    {
+      "path": "scripts/network_checks.py",
+      "sha256": "4212ed42dcc4fe17d11e9d8de8e24ede906e83800d5177bb9dd79c71b6417c40",
+      "bytes": 8692
+    },
+    {
+      "path": "scripts/stacklib.py",
+      "sha256": "39c24e13586e5bcb562870927c45f54d36297959b73b7d2b57302e4d015e35c1",
+      "bytes": 8492
+    },
+    {
+      "path": "scripts/verify-idempotency.py",
+      "sha256": "260a924ebbb01ff5108015fa0777527260fffabd2c53485860fbb1963dcfe198",
+      "bytes": 3432
+    },
+    {
+      "path": "scripts/verify.py",
+      "sha256": "39e344e9b580b9692281b9688ceace7d61c857b642e713a69f062f9fe9fd1dba",
+      "bytes": 12241
+    },
+    {
+      "path": "tests/e2e/mvp-recovery.py",
+      "sha256": "f19eaba06285073e84a95258c67b66df87ab185266ccddaf174e598fc8fb88d3",
+      "bytes": 11954
+    },
+    {
+      "path": "tests/unit/test_network.py",
+      "sha256": "c0f7295510e8be295c5f5d9e5a8616250bde2588c5fc9cd9a291afdd08c88521",
+      "bytes": 7267
+    },
+    {
+      "path": "tests/unit/test_recovery.py",
+      "sha256": "6f92d1e2391176f694710add248eb747c3b627cc2df11d47db52338ac1d1b39e",
+      "bytes": 1428
+    }
+  ]
+}
