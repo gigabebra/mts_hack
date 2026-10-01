@@ -1,4 +1,4 @@
-# Контракт MVP, версия 2 — IPv6
+# Контракт MVP, версия 3 — dual-stack с основным IPv6
 
 Владельцы и границы — `AGENTS.md`. Версии и проверенные SHA256 публичных
 артефактов — `config/versions.yaml`; OCI index/manifest digests —
@@ -32,27 +32,50 @@ checkout; ресурсоемкие прогоны по очереди. Спос�
 чистой ОС — официальный Ubuntu 24.04 cloud image с проверкой SHA256 и
 cloud-init; обычная установка Ubuntu Server ISO также допустима.
 
-Сетевой контракт после назначения IPv6: single-stack IPv6 для SSH, Kubernetes
-API, node InternalIP, Pod, Service, EndpointSlice, Gateway/NodePort и всех
-соединений наблюдаемости. Пример Pod CIDR `fd4d:5453:1000:100::/56`, service
-CIDR `fd4d:5453:1000:200::/112`; это отдельный ULA-префикс, не LAN узла.
-Calico VXLAN IPv6, BGP выключен. Bootstrap проверяет IPv6-маршруты,
-пересечения и прежнюю identity; смена IPv4 identity не разрешает reset.
-Для перехода создается отдельный кластер, прежняя VM и ее история сохраняются.
-IPv4 у ОС разрешен пользователем только для внешних загрузок пакетов/образов;
-для работы Kubernetes и приложения IPv4-подсети и fallback не используются.
+Пользователь выбрал полноценный dual-stack Kubernetes: IPv6 основной,
+IPv4 доступен приложению и компонентам. Прежний запрет любого IPv4-соединения
+отменен. SSH и kubeconfig по умолчанию используют IPv6; SSH/API/HTTP также
+проверяются по IPv4. Это не обещание автоматического переключения всего
+control plane при отказе одной семьи и не отказоустойчивый multi-node кластер.
 
-Environment — `config/environments/<ENV>.local.yaml`, пример
-`config/environments/ubuntu.example.yaml`. Верхние ключи: `node_name`,
-`node_ip`, `ssh_host`, `ssh_user`, `ssh_private_key_file`, `ssh_port`,
-`pod_cidr`, `service_cidr`, `node_port`, `kubeconfig`, `data_root`,
-`dns_servers`, `ntp_servers` (списки IPv6-адресов). `node_ip` и `ssh_host` —
-IPv6 literals без скобок; в HTTP(S) URL литерал обязательно в `[скобках]`.
-Kubernetes DNS upstream и NTP используют IPv6. Loopback port-forward — `::1`.
-Пути относительно корня проекта. Общие команды берут kubeconfig только из
-environment; унаследованный KUBECONFIG не меняет выбранный стенд. Компонентные
-checks принимают явный `--kubeconfig`.
-Имя узла по умолчанию `mts-mvp`; IP не берется из домашнего current-context.
+Environment: `node_ip` — основной IPv6, `node_ipv4` — адрес той же VM;
+`ssh_host` — явный IP (основной путь IPv6), `ssh_user`, `ssh_private_key_file`,
+`ssh_port`, `node_name`, `node_port`, `kubeconfig`, `data_root` сохраняются.
+IPv6 сети: `pod_cidr` = `fd4d:5453:1000:100::/56`, `service_cidr` =
+`fd4d:5453:1000:200::/112`. IPv4 сети: `pod_cidr_ipv4` = `10.244.0.0/16`,
+`service_cidr_ipv4` = `10.96.0.0/16`. Все четыре CIDR проверяются на
+пересечения с маршрутами своей семьи. Реальные адреса только в игнорируемом
+`config/environments/<ENV>.local.yaml` и `.state/`.
+
+Kubeadm получает IPv6,IPv4 CIDR в этом порядке; kubelet объявляет оба адреса.
+Calico имеет два явных VXLAN/NAT pools, IPv4 и IPv6 IPAM включены, BGP выключен.
+Обычные Pod получают оба адреса. Наши Helm Services задают
+`ipFamilies: [IPv6, IPv4]`, `ipFamilyPolicy: RequireDualStack`. Автоматически
+созданные системные Services могут оставаться SingleStack IPv6; это явно
+учитывается проверкой, не означает отсутствие dual-stack у Pod и приложения.
+Gateway status объявляет основной IPv6; HTTP NodePort 30080 проверяется по
+обоим адресам VM. Для каждого IPv6:port в URL нужны квадратные скобки.
+
+`dns_servers` и `ntp_servers` могут содержать адреса обеих семей, IPv6 первым
+при наличии рабочего маршрута. IPv4 loopback, штатные health checks, DNS/NTP
+и внешние загрузки разрешены. Убираются специальные ограничения SSH/NTP,
+CoreDNS self-health и CRI forwarding, служившие только абсолютному запрету
+IPv4. Прямое обращение диагностик к указанному кластеру без HTTP proxy
+сохраняется. Необязательная телеметрия Calico/Loki и Traefik version/usage
+checks выключены. Это отдельное решение, не запрет полезного IPv4 трафика.
+
+Метрики собираются один раз с каждого endpoint; dual-stack не должен
+удваивать scrape/counters. Для EndpointSlice discovery предпочтение IPv6
+задается явным выбором семейства. IPv4 там, где нужен штатной конфигурации,
+не является ошибкой. Проверки подтверждают обе сети, DNS AAAA/A, HTTP по
+IPv6/IPv4, корректность метрик/логов, runtime права и восстановление; полного
+запрета IPv4 sockets в обязательном gate больше нет.
+
+Bootstrap не меняет семейство уже созданного кластера и не выполняет reset.
+Для перехода используется новая чистая VM; прежние диски и история остаются.
+Пути environment относительно корня проекта. Общие команды используют только
+его kubeconfig, унаследованный KUBECONFIG/current-context не выбирает стенд.
+Подробности реализации и приемки дополняются в [сетевой инструкции](networking.md).
 
 StorageClass `local-retain`: no-provisioner, WaitForFirstConsumer, Retain.
 PV `mts-prometheus`: 12Gi, `/var/lib/mts-stack/prometheus`, UID/GID 1000:2000.
