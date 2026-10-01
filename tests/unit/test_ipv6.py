@@ -6,6 +6,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 from ipv6_checks import validate_snapshot
+from ipv6_transport import ipv4_flows, validate as validate_transport
 from stacklib import http_url, lock_document
 
 
@@ -24,6 +25,31 @@ SNAPSHOT = {
 
 
 class IPv6Contract(unittest.TestCase):
+    def test_transport_rejects_hidden_ipv4_health_and_mapped_peers(self):
+        for connection in (
+            'tcp TIME-WAIT 0 0 127.0.0.1:43122 127.0.0.1:8080',
+            'tcp ESTAB 0 0 [::ffff:127.0.0.1]:43122 [::ffff:127.0.0.1]:8080',
+        ):
+            self.assertEqual(len(ipv4_flows(connection)), 1)
+        self.assertEqual(ipv4_flows('tcp ESTAB 0 0 [::1]:43122 [::1]:8080'), [])
+        self.assertEqual(ipv4_flows('tcp LISTEN 0 10 0.0.0.0:8080 0.0.0.0:*'), [])
+        self.assertEqual(ipv4_flows('udp UNCONN 0 0 192.0.2.1:68 0.0.0.0:*', host=True), [])
+        self.assertEqual(ipv4_flows('udp UNCONN 0 0 127.0.0.53%lo:53 0.0.0.0:*', host=True), [])
+        self.assertEqual(ipv4_flows('tcp ESTAB 0 0 192.0.2.1:40000 1.1.1.1:443', host=True), [])
+        self.assertEqual(len(ipv4_flows('tcp ESTAB 0 0 192.0.2.1:40000 192.168.1.10:443', host=True)), 1)
+        self.assertEqual(len(ipv4_flows('tcp ESTAB 0 0 192.0.2.1:40000 198.51.100.1:6443', host=True)), 1)
+
+    def test_transport_requires_both_api_loopback_refusals(self):
+        data = {'ntp_server': '2001:db8::123', 'host_sockets': '', 'pods': [
+            {'namespace': 'monitoring', 'name': 'prometheus', 'sockets': '',
+             'ipv4_loopback_connect_ex': 111, 'ipv6_api_port': 9090},
+            {'namespace': 'logging', 'name': 'loki', 'sockets': '',
+             'ipv4_loopback_connect_ex': 111, 'ipv6_api_port': 3100}]}
+        self.assertEqual(validate_transport(data)['ipv4_runtime_flows'], 0)
+        data['pods'][0]['ipv4_loopback_connect_ex'] = 0
+        with self.assertRaises(ValueError):
+            validate_transport(data)
+
     def test_complete_snapshot(self):
         report = validate_snapshot(ENV, copy.deepcopy(SNAPSHOT))
         self.assertEqual(report['family'], 'IPv6')

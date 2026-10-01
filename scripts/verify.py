@@ -13,6 +13,7 @@ import uuid
 
 from stacklib import ROOT, VERSIONS, command, environment, forward, http_url, internal_http, kubectl, resource, write_json
 from ipv6_checks import network_evidence
+from ipv6_transport import transport_evidence
 
 HTTP = internal_http()
 
@@ -167,10 +168,12 @@ def main():
                                     '--run-id', run_id, '--request-id', run_id, '--error-marker', run_id + '-err',
                                     '--start-time', start, '--timeout', '120'))
         check(report, 'runtime_security', 'Non-root PID1, zero capabilities, root mount ro, API token absent', lambda: runtime(env))
+        check(report, 'ipv6_transport', 'No IPv4 runtime flows, including Pod loopback and CRI forwarding',
+              lambda: transport_evidence(env, directory))
     except Exception as error:
         report['checks'].append({'name': 'orchestration', 'status': 'fail', 'expected': 'All required checks execute', 'actual': str(error)})
     finally:
-        required = {'readiness', 'ipv6_network', 'gateway_conditions', 'metrics_baseline', 'http', 'metrics_delta', 'logs', 'runtime_security'}
+        required = {'readiness', 'ipv6_network', 'ipv6_transport', 'gateway_conditions', 'metrics_baseline', 'http', 'metrics_delta', 'logs', 'runtime_security'}
         missing = required - {c['name'] for c in report['checks']}
         for name in sorted(missing):
             report['checks'].append({'name': name, 'status': 'fail', 'expected': 'Required MVP check', 'actual': 'Not executed because prerequisite failed'})
