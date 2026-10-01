@@ -18,6 +18,13 @@ for folder in ('config', 'ansible'):
         if '.local.' not in path.name:
             list(yaml.safe_load_all(path.read_text()))
 
+yaml_paths = []
+for folder in ('config', 'ansible', 'deploy'):
+    for path in (ROOT / folder).rglob('*.yaml'):
+        if '.local.' not in path.name and 'templates' not in path.parts:
+            yaml_paths.append(str(path))
+command([ROOT / '.venv/bin/yamllint', '-c', ROOT / '.yamllint', *yaml_paths])
+
 charts = [('storage', 'default', ROOT / 'deploy/storage', []),
           ('app', 'demo', ROOT / 'deploy/app', []),
           ('gateway', 'demo', ROOT / 'deploy/gateway', []),
