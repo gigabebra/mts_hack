@@ -51,13 +51,13 @@ values. Versioned веб-страницы Prometheus 3.8 через browsing б�
 Команды из корня worktree; локальные инструменты подготовлены интегратором.
 
 ```sh
-/home/Bebroid/mts_hack/.cache/tools/helm lint \
-  /home/Bebroid/mts_hack/.cache/charts/kube-prometheus-stack \
+.cache/tools/helm lint \
+  .cache/charts/kube-prometheus-stack \
   -f deploy/monitoring/values.yaml
-/home/Bebroid/mts_hack/.cache/tools/helm lint deploy/monitoring/extras
+.cache/tools/helm lint deploy/monitoring/extras
 python3 deploy/monitoring/tests/check_render.py \
-  --helm /home/Bebroid/mts_hack/.cache/tools/helm \
-  --chart /home/Bebroid/mts_hack/.cache/charts/kube-prometheus-stack
+  --helm .cache/tools/helm \
+  --chart .cache/charts/kube-prometheus-stack
 python3 -m py_compile scripts/check-metrics.py
 python3 -m unittest discover -s deploy/monitoring/tests -v
 git diff --check

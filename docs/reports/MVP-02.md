@@ -67,8 +67,8 @@ probe; оба содержат method/uri/status/body/bytes/request_id.
 ## Выполненные проверки
 
 Все команды ниже выполнялись из выданного worktree. `helm` в примерах —
-`/home/Bebroid/mts_hack/.cache/tools/helm`; `TRAEFIK_CHART` — проверенный
-локальный `/home/Bebroid/mts_hack/.cache/charts/traefik`.
+`.cache/tools/helm`; `TRAEFIK_CHART` — проверенный
+локальный `.cache/charts/traefik`.
 
 | Статус | Проверка | Результат |
 | --- | --- | --- |

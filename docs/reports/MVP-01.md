@@ -37,18 +37,18 @@ digest, вложенные init/regular images, пересечение node/pod/
 
 ```sh
 export ANSIBLE_LOCAL_TEMP=/tmp/mvp01-ansible
-/home/Bebroid/mts_hack/.venv/bin/ansible-playbook -i mvp, \
+.venv/bin/ansible-playbook -i mvp, \
   ansible/bootstrap.yaml --syntax-check -e @config/environments/ubuntu.example.yaml
-/home/Bebroid/mts_hack/.venv/bin/ansible-playbook -i mvp, \
+.venv/bin/ansible-playbook -i mvp, \
   ansible/health.yaml --syntax-check -e @config/environments/ubuntu.example.yaml
-/home/Bebroid/mts_hack/.venv/bin/ansible-playbook -i localhost, \
-  ansible/render.yaml -e calico_source_file=/home/Bebroid/mts_hack/.cache/calico.yaml
-/home/Bebroid/mts_hack/.venv/bin/python -m unittest discover -s ansible/tests -v
-/home/Bebroid/mts_hack/.cache/tools/helm lint deploy/storage
-/home/Bebroid/mts_hack/.cache/tools/helm template storage deploy/storage \
+.venv/bin/ansible-playbook -i localhost, \
+  ansible/render.yaml -e calico_source_file=.cache/calico.yaml
+.venv/bin/python -m unittest discover -s ansible/tests -v
+.cache/tools/helm lint deploy/storage
+.cache/tools/helm template storage deploy/storage \
   --namespace default --set nodeName=mts-acceptance --set dataRoot=/var/lib/mts-stack
 # Expected exit 1:
-/home/Bebroid/mts_hack/.cache/tools/helm template storage deploy/storage --set nodeName=BAD_NODE
+.cache/tools/helm template storage deploy/storage --set nodeName=BAD_NODE
 ```
 
 `fail`: нет незакрытых ошибок локальных проверок. Первоначальный системный
@@ -80,3 +80,14 @@ PV Retain требует ручной процедуры reclaim после уд
 не выполняет version migration/cluster repair/reset. Внешний firewall и
 сетевой доступ — предпосылки среды; порты и endpoints описаны в
 `ansible/README.md`.
+
+## Живая интеграция, 2026-10-01
+
+Интегратор выполнил bootstrap на новой Ubuntu 24.04.5 amd64 VM
+(4 vCPU, 8 GiB nominal RAM, диск 60 GiB), Kubernetes 1.34.3,
+containerd 1.7.28, kernel 6.8.0-142-generic. Первый запуск: failed=0,
+unreachable=0; повторный запуск: failed=0, unreachable=0. Node Ready,
+все kube-system workloads Ready, DNS и HTTP между двумя pod подтверждены
+штатным health job. Контролируемый reboot выполнен Ansible reboot;
+перезапуск и восстановление SSH заняли 28 секунд, последующий make health
+прошел. Привязка PVC будет проверена общим deploy MVP-05.
