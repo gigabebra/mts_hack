@@ -126,9 +126,12 @@ def download(spec, name):
 
 
 def locked_image(ref):
-    if '@sha256:' in ref:
-        if ref.split('@')[1] not in IMAGES.values():
-            raise ValueError(f'Image digest absent from lock: {ref}')
+    if '@' in ref:
+        accepted = {candidate for tagged, digest in IMAGES.items()
+                    for candidate in (tagged + '@' + digest,
+                                      tagged.rsplit(':', 1)[0] + '@' + digest)}
+        if ref not in accepted:
+            raise ValueError(f'Image repository/tag and digest absent from lock: {ref}')
         return ref
     if ref not in IMAGES:
         raise ValueError(f'Image absent from lock: {ref}')

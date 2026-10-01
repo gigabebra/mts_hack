@@ -4,7 +4,10 @@
 артефактов — `config/versions.yaml`; OCI index/manifest digests —
 `config/images.lock.yaml`. Deployment не разрешает теги по сети: применяет
 принятый lock, отказывается от неизвестного image. Обновление lock — отдельная
-операция интегратора. Transitive images включены, в том числе создаваемый
+операция интегратора. Для уже закрепленного `repository@digest` проверяется
+пара repository+digest; если сохранен tag, он также должен совпадать с lock.
+Известный digest не разрешает неизвестный repository/tag.
+Transitive images включены, в том числе создаваемый
 Operator config-reloader. Неиспользуемые Grafana/Alertmanager/admission hooks
 выключены. Запрещены `latest`, `main`, пустые image tags и Helm dependencies
 без принятого архива с checksum.
@@ -51,8 +54,11 @@ Kubeadm получает IPv6,IPv4 CIDR в этом порядке; kubelet об
 Calico имеет два явных VXLAN/NAT pools, IPv4 и IPv6 IPAM включены, BGP выключен.
 Обычные Pod получают оба адреса. Наши Helm Services задают
 `ipFamilies: [IPv6, IPv4]`, `ipFamilyPolicy: RequireDualStack`. Автоматически
-созданные системные Services могут оставаться SingleStack IPv6; это явно
-учитывается проверкой, не означает отсутствие dual-stack у Pod и приложения.
+созданные `default/kubernetes`, `kube-system/kube-dns` и
+`monitoring/prometheus-operated` могут оставаться SingleStack IPv6. Только эти
+три имени получают исключение в проверке; namespace или headless Service
+сами по себе исключения не дают. Это не означает отсутствие dual-stack у Pod
+и приложения.
 Gateway status объявляет основной IPv6; HTTP NodePort 30080 проверяется по
 обоим адресам VM. Для каждого IPv6:port в URL нужны квадратные скобки.
 
@@ -160,10 +166,15 @@ ENV=ubuntu`, `make evidence ENV=ubuntu`. Обязательные инструм
 `--run-id`; Gateway принимает также `--kubeconfig` (обязателен).
 
 - `check-gateway.py --mode conditions|traffic|all --kubeconfig PATH
+  --expected-address NODE_IPV6
   --base-url URL --run-id ID --request-id ID --error-marker ID
   --requests 20 --output PATH`. Traffic сохраняет основную access-пробу
   (GET `/`, request-id), делает еще нагрузку с производными ID и error-пробу;
   data: `request_id`, `error_marker`, `request_count`, `http`, `error_http`.
+  Conditions требуют пригодный native unicast IPv6 в Gateway status;
+  общий verify передает `--expected-address node_ip` для точного совпадения.
+  При самостоятельном запуске без этого аргумента проверяется только
+  допустимость адреса, а не его принадлежность заданному узлу.
 - `check-metrics.py --mode snapshot|verify --prometheus-url URL --run-id ID
   --baseline PATH --min-increase 20 --output PATH`. Snapshot сохраняет
   серии со значениями/timestamps, targets, query и время; verify читает

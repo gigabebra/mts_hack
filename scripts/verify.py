@@ -133,6 +133,7 @@ def main():
         check(report, 'dual_stack_network', 'IPv6-primary API and dual-stack Node, Pods, Services, EndpointSlices and Calico pools',
               lambda: network_evidence(env, directory))
         common = ['--kubeconfig', env['kubeconfig'], '--base-url', base, '--run-id', run_id,
+                  '--expected-address', env['node_ip'],
                   '--request-id', run_id, '--error-marker', run_id + '-err', '--timeout', '90']
         common4 = ['--kubeconfig', env['kubeconfig'], '--base-url', http_url(env['node_ipv4'], env['node_port']),
                    '--run-id', run_id, '--request-id', run_id + '-v4', '--error-marker', run_id + '-v4-err', '--timeout', '90']

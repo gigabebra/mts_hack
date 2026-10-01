@@ -157,10 +157,12 @@ PVC bindings и содержимое существующих прикладны
 
 ## Ручная диагностика
 
-Используйте kubeconfig именно этого стенда:
+Используйте kubeconfig из выбранного локального environment, а не текущий
+контекст kubectl. Ниже выбран `ubuntu`; при другом `ENV` замените имя в
+`environment("ubuntu")`. Путь разрешается относительно корня репозитория:
 
 ```bash
-export KUBECONFIG="$PWD/.state/ubuntu/admin.kubeconfig"
+export KUBECONFIG="$(.venv/bin/python -c 'import sys; sys.path.insert(0, "scripts"); from stacklib import environment; print(environment("ubuntu")["kubeconfig"])')"
 export PATH="$PWD/.cache/tools:$PATH"
 kubectl get nodes
 kubectl get pods -A
