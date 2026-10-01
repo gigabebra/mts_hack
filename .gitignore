@@ -1,0 +1,17 @@
+.cache/
+.state/
+.worktrees/
+.venv/
+artifacts/
+config/environments/*.local.yaml
+ansible/inventory/*.local.*
+*.kubeconfig
+*kubeconfig*
+*.pem
+*.key
+*.p12
+.env
+__pycache__/
+*.pyc
+*.retry
+!**/*.example.*

@@ -1,0 +1,22 @@
+images:
+  docker.io/grafana/fluent-plugin-loki:3.6.2: sha256:c87bd0e76339c2eef04a768af413e8637f0c673c36e7f996d07aba10e5a180f2
+  docker.io/grafana/loki:3.6.2: sha256:fad94db64eeb0e14544953789c942453df68a860b6f760d867f06c5b31f461ab
+  docker.io/library/busybox:1.37.0: sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+  docker.io/library/traefik:v3.6.2: sha256:aaf0f6185419a50c74651448c1a5bf4606bd2d2ddb7b8749eed505d55bf8b8ea
+  docker.io/nginxinc/nginx-unprivileged:1.28.0-alpine: sha256:c97ff0bf7cbae369953c6da1232ec14ad9f971d66360c5698db0856a4cd657a0
+  quay.io/calico/cni:v3.31.2: sha256:62f50ed3070fd5da4df907fc2d618faf53f2d69d2c64232f7f464a646806cb5b
+  quay.io/calico/kube-controllers:v3.31.2: sha256:7308b279c79816c9386a593644814a7f0f5caaf3b753982cbf226953782524ee
+  quay.io/calico/node:v3.31.2: sha256:5255c2844abb4eea023cd15ceda5380d5bab3d5cf714fd113774597d2265f876
+  quay.io/prometheus-operator/prometheus-config-reloader:v0.87.1: sha256:257ce3543e8f45c059dab488bcf897d8cc598cabd78afba12f41d6dbe36e22d2
+  quay.io/prometheus-operator/prometheus-operator:v0.87.1: sha256:6dbbbbeca6d7b94aa30723bfaa55262e41b9f8c15304c484611c696503840aac
+  quay.io/prometheus/node-exporter:v1.10.2: sha256:337ff1d356b68d39cef853e8c6345de11ce7556bb34cda8bd205bcf2ed30b565
+  quay.io/prometheus/prometheus:v3.8.1: sha256:2b6f734e372c1b4717008f7d0a0152316aedd4d13ae17ef1e3268dbfaf68041b
+  registry.k8s.io/coredns/coredns:v1.12.1: sha256:e8c262566636e6bc340ece6473b0eed193cad045384401529721ddbe6463d31c
+  registry.k8s.io/etcd:3.6.5-0: sha256:042ef9c02799eb9303abf1aa99b09f09d94b8ee3ba0c2dd3f42dc4e1d3dce534
+  registry.k8s.io/kube-apiserver:v1.34.3: sha256:5af1030676ceca025742ef5e73a504d11b59be0e5551cdb8c9cf0d3c1231b460
+  registry.k8s.io/kube-controller-manager:v1.34.3: sha256:716a210d31ee5e27053ea0e1a3a3deb4910791a85ba4b1120410b5a4cbcf1954
+  registry.k8s.io/kube-proxy:v1.34.3: sha256:7298ab89a103523d02ff4f49bedf9359710af61df92efdc07bac873064f03ed6
+  registry.k8s.io/kube-scheduler:v1.34.3: sha256:f9a9bc7948fd804ef02255fe82ac2e85d2a66534bae2fe1348c14849260a1fe2
+  registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.17.0: sha256:2bbc915567334b13632bf62c0a97084aff72a36e13c4dabd5f2f11c898c5bacd
+  registry.k8s.io/pause:3.10.1: sha256:278fb9dbcca9518083ad1e11276933a2e96f23de604a3a08cc3c80002767d24c
+schema_version: 1

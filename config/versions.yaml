@@ -1,0 +1,54 @@
+schema_version: 1
+platform:
+  os: Ubuntu 24.04 LTS
+  architecture: amd64
+  kubernetes: 1.34.3
+  kubernetes_package: 1.34.3-1.1
+  kubernetes_minor: v1.34
+  containerd: 1.7.28
+  runc: 1.3.3
+  cni_plugins: 1.8.0
+  calico: 3.31.2
+  gateway_api: 1.4.0
+tools:
+  helm: 3.19.0
+  kubectl: 1.34.3
+  ansible_core: 2.19.3
+  pyyaml: 6.0.3
+charts:
+  traefik:
+    version: 37.4.0
+    url: https://traefik.github.io/charts/traefik/traefik-37.4.0.tgz
+    sha256: 04819a82ef6aa90ee28e5a01269e5b4414149d585c3bc938b66afa64dc78a595
+  monitoring:
+    version: 80.6.0
+    url: https://github.com/prometheus-community/helm-charts/releases/download/kube-prometheus-stack-80.6.0/kube-prometheus-stack-80.6.0.tgz
+    sha256: 31e1447570472b1cc9e8844a45e9f62f3c2edd10763e7c6afe6277dcab7d3c52
+images:
+  nginx: docker.io/nginxinc/nginx-unprivileged:1.28.0-alpine
+  traefik: docker.io/library/traefik:v3.6.2
+  loki: docker.io/grafana/loki:3.6.2
+  fluentd: docker.io/grafana/fluent-plugin-loki:3.6.2
+  busybox: docker.io/library/busybox:1.37.0
+downloads:
+  helm:
+    url: https://get.helm.sh/helm-v3.19.0-linux-amd64.tar.gz
+    sha256: a7f81ce08007091b86d8bd696eb4d86b8d0f2e1b9f6c714be62f82f96a594496
+  kubectl:
+    url: https://dl.k8s.io/release/v1.34.3/bin/linux/amd64/kubectl
+    sha256: ab60ca5f0fd60c1eb81b52909e67060e3ba0bd27e55a8ac147cbc2172ff14212
+  gateway_api:
+    url: https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
+    sha256: 6a4029e661446d64add866a00ecdc40c14219b68777ab614c5cdaac0adb481f1
+  calico:
+    url: https://raw.githubusercontent.com/projectcalico/calico/v3.31.2/manifests/calico.yaml
+    sha256: c74c5a073af478dc841c909de708bd93242d685a6543616638c8f81b5d8daa71
+  containerd:
+    url: https://github.com/containerd/containerd/releases/download/v1.7.28/containerd-1.7.28-linux-amd64.tar.gz
+    sha256: 7a8c262deb63becc877e82d23749e4f99f4a17e8e660f9b8c257ca87a5c056b6
+  runc:
+    url: https://github.com/opencontainers/runc/releases/download/v1.3.3/runc.amd64
+    sha256: 8781ab9f71c12f314d21c8e85f13ca1a82d90cf475aa5131a7b543fcc5487543
+  cni_plugins:
+    url: https://github.com/containernetworking/plugins/releases/download/v1.8.0/cni-plugins-linux-amd64-v1.8.0.tgz
+    sha256: ab3bda535f9d90766cccc90d3dddb5482003dd744d7f22bcf98186bf8eea8be6
