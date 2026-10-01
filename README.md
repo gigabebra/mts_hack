@@ -5,19 +5,19 @@ Prometheus измеряет HTTP и состояние узла, Fluentd дос�
 логи в Loki. `make verify` связывает HTTP-ответ и access-log одним Request-ID
 и отдельно подтверждает увеличение агрегированного HTTP counter.
 
-Первоначальный MVP принят на чистой Ubuntu 24.04.5, кодовая ревизия
-`337d0c671617929ebf162e1216099524fe8d611d`. Сейчас выполняется назначенный
-переход на полноценный dual-stack Kubernetes: IPv6 основной, IPv4 также доступен приложению и компонентам.
-[Сетевой контракт, диагностика и переход](docs/networking.md).
-[Протокол и матрица требований](docs/acceptance/mvp-acceptance.md),
+MVP с полноценным dual-stack Kubernetes принят на чистой Ubuntu 24.04.5,
+кодовая ревизия `cc3afc6cab06a4cb441c3f0c705e79cc04910a0f`.
+IPv6 — основной; приложение и компоненты доступны также по IPv4.
+[Сетевой контракт и диагностика](docs/networking.md),
+[независимая приемка](docs/acceptance/dual-stack-acceptance.md),
 [реестр](docs/status.md), [черновик паспорта](docs/passport/mvp-draft.md).
 Этап FINAL не начат.
 
 ```mermaid
 flowchart LR
-    User[Проверяющий] -->|HTTP NodePort 30080| Traefik
+    User[Проверяющий IPv6 / IPv4] -->|HTTP NodePort 30080| Traefik
     Traefik --> Gateway[Gateway / HTTPRoute]
-    Gateway --> Service[Service hello]
+    Gateway --> Service[Dual-stack Service hello]
     Service --> Nginx
     Nginx -->|stdout / stderr, CRI| Fluentd
     Fluentd --> Loki[(Loki / local PV)]
@@ -94,13 +94,14 @@ Git. Все команды запускайте из корня репозито
 и HTTP TCP 30080 по IPv6 и IPv4. Для одноузлового стенда сетевой overlay остается внутри VM;
 дополнительные узлы в MVP не поддерживаются.
 
-В первоначальной IPv4-приемке путь от `make tools` до первого успешного `make verify`
-занял 5 минут 54 секунды; весь прогон с повторным bootstrap и двумя deploy —
-8 минут 56 секунд. Создание VM и установка системных prerequisites сюда не
-входят. После проверки ОС видела 7,76 GiB RAM, доступно было 5,87 GiB;
-диск занимал 6,12 GiB, свободно 50,94 GiB. CPU busy за 30 секунд — 3,89%.
+В чистой dual-stack приемке путь от `make tools` до первого успешного
+`make verify` занял 7 минут 8 секунд; весь прогон из 11 стадий, включая
+повторный bootstrap, два повторных deploy и recovery, — 12 минут 9 секунд.
+Создание VM и установка системных prerequisites сюда не входят.
+После проверки ОС видела 7,76 GiB RAM, доступно было 5,86 GiB;
+диск занимал 6,13 GiB, свободно 50,94 GiB. CPU busy за 30 секунд — 3,59%.
 Это снимок после проверки, не пик нагрузки или нагрузочный тест.
-Точные измерения и длительности — в [evidence](docs/acceptance/mvp-clean-vm.json).
+Точные измерения и длительности — в [evidence](docs/acceptance/dual-stack-evidence.json).
 
 ## Установка и проверка
 
@@ -122,7 +123,7 @@ Traefik, ServiceMonitor, Loki/Fluentd, Nginx и Gateway. Конфигураци�
 `make verify` явно выбирает kubeconfig из environment, открывает временные
 loopback port-forward к Prometheus/Loki и закрывает их при завершении.
 Отчет всегда сохраняется в `artifacts/verify/<run-id>/report.json`, в том
-числе при отказе. Код 0 означает успех всех обязательных проверок:
+числе при отказе. Код 0 означает успех всех 11 обязательных проверок:
 
 - Ready node/workloads и Bound PVC; актуальные Gateway/HTTPRoute conditions.
 - Основной IPv6 API, обе семьи Node/Pod и Calico pools; собственные Services
