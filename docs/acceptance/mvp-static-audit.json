@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "scope": "Independent static/fixture audit; no live cluster access",
+  "revision": "337d0c671617929ebf162e1216099524fe8d611d",
+  "result": "pass",
+  "checks": [
+    {
+      "name": "make lint",
+      "status": "pass",
+      "kind": "static_and_fixtures",
+      "sha256": "894ebc590fa08cc95280e15dc9d920653b4691f637abcad5ae9b42a0afe58ffb",
+      "note": "Initial sandbox denied loopback socket; complete rerun passed outside sandbox."
+    },
+    {
+      "name": "monitoring semantic render",
+      "status": "pass",
+      "kind": "static"
+    },
+    {
+      "name": "PROFILE=final refusal",
+      "status": "pass",
+      "kind": "negative_cli",
+      "expected": "nonzero exit and fail JSON"
+    },
+    {
+      "name": "missing environment refusal",
+      "status": "pass",
+      "kind": "negative_cli",
+      "expected": "nonzero exit and fail JSON"
+    },
+    {
+      "name": "make lint after acceptance fixes",
+      "status": "pass",
+      "kind": "static_and_fixtures",
+      "revision": "337d0c671617929ebf162e1216099524fe8d611d",
+      "sha256": "577278a91dac4017155cccc30f4444d9f242f00e9efeab7ba33692e71d2de6be",
+      "note": "Includes monitoring semantic render and scoped counter query fixture."
+    }
+  ],
+  "negative_reports": [
+    {
+      "source": "artifacts/verify/20261001T113531Z-e767de6d/report.json",
+      "sha256": "9ef719be77241100f551e054a221d539de2682da0a2bc112c866a20090202faa",
+      "run_id": "20261001T113531Z-e767de6d",
+      "requested_profile": "final",
+      "observed_status": "fail",
+      "orchestration_message": "Unsupported profile: only mvp is implemented; final checks cannot be skipped",
+      "revision": "7a9b305f417b6e509ef57dc20ea57aa9394f9605"
+    },
+    {
+      "source": "artifacts/verify/20261001T113618Z-9d81a37e/report.json",
+      "sha256": "29d6ce244dd912a28bef3a5608f69baf5c11016b54d608257807903c860343af",
+      "run_id": "20261001T113618Z-9d81a37e",
+      "requested_profile": "mvp",
+      "observed_status": "fail",
+      "orchestration_message": "Missing explicit local environment; no cluster commands executed.",
+      "revision": "7a9b305f417b6e509ef57dc20ea57aa9394f9605"
+    }
+  ],
+  "initial_revision": "7a9b305f417b6e509ef57dc20ea57aa9394f9605"
+}

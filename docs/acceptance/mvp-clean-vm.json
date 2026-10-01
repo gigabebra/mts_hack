@@ -1,0 +1,652 @@
+{
+  "schema_version": 1,
+  "status": "pass",
+  "pristine": {
+    "source": ".state/acceptance/pristine.json",
+    "sha256": "fcdbed4eecdc1976d829db6afca635b365cb9896431c2b8df25aef6f47daf0c0",
+    "captured_at": "2026-10-01T11:38:51.713664+00:00",
+    "os": "Ubuntu 24.04.5 LTS",
+    "architecture": "amd64",
+    "kernel": "6.8.0-142-generic",
+    "cpu_count": 4,
+    "memory_total_kib": 8131756,
+    "memory_available_kib": 7664192,
+    "root_filesystem_bytes": {
+      "total": 61285326848,
+      "used": 1991237632,
+      "free": 59277312000
+    },
+    "binaries_before_bootstrap": {
+      "kubeadm": null,
+      "kubelet": null,
+      "kubectl": null,
+      "containerd": null
+    },
+    "etc_kubernetes_exists_before_bootstrap": false,
+    "cloud_init": "status: done",
+    "image": {
+      "url": "https://cloud-images.ubuntu.com/releases/noble/release-20260926/ubuntu-24.04-server-cloudimg-amd64.img",
+      "sha256": "6a81c37564db9b1ee84e141922625e1d7c5b389b99bb3c572e0243607d5bb4d2",
+      "checksum_verification": "operator verified original official image before independent import",
+      "creation": "Second VM independently imported from original image, not cloned from installed first VM; first boot during acceptance"
+    },
+    "checkout_transport": "fresh git clone from bundle, checkout main; public anonymous clone not run until FINAL-07"
+  },
+  "initial_verify": {
+    "source": "artifacts/verify/20261001T114640Z-116d8df2/report.json",
+    "sha256": "731acfbd701af8307d7038d4f3c5a9a81ec605385a9f046af034563f21552057",
+    "revision": "337d0c671617929ebf162e1216099524fe8d611d",
+    "run_id": "20261001T114640Z-116d8df2",
+    "status": "pass",
+    "working_tree_dirty": false,
+    "started_at": "2026-10-01T11:46:40.560566+00:00",
+    "finished_at": "2026-10-01T11:47:10.556240+00:00",
+    "checks": [
+      {
+        "name": "readiness",
+        "status": "pass"
+      },
+      {
+        "name": "gateway_conditions",
+        "status": "pass"
+      },
+      {
+        "name": "metrics_warmup",
+        "status": "pass"
+      },
+      {
+        "name": "metrics_baseline",
+        "status": "pass"
+      },
+      {
+        "name": "http",
+        "status": "pass"
+      },
+      {
+        "name": "metrics_delta",
+        "status": "pass"
+      },
+      {
+        "name": "logs",
+        "status": "pass"
+      },
+      {
+        "name": "runtime_security",
+        "status": "pass"
+      }
+    ],
+    "http": {
+      "status": 200,
+      "body": "Hello World!",
+      "bytes": 12,
+      "request_id": "20261001T114640Z-116d8df2",
+      "successful_probe_count": 24
+    },
+    "metrics": {
+      "query": "traefik_entrypoint_requests_total{namespace=\"edge\",service=\"traefik-metrics\",endpoint=\"metrics\",entrypoint=\"web\",code=\"200\",method=\"GET\"}",
+      "before": 1.0,
+      "after": 25.0,
+      "increase": 24.0,
+      "min_increase": 24.0,
+      "window_start": 1790855214.865,
+      "window_end": 1790855230.2244973
+    },
+    "logs": {
+      "run_id": "20261001T114640Z-116d8df2",
+      "request_id": "20261001T114640Z-116d8df2",
+      "error_marker": "20261001T114640Z-116d8df2-err",
+      "start_time": "1790855215.3827083",
+      "generated_probes": false,
+      "queries": {
+        "access": "{app=\"hello\",namespace=\"demo\",container=\"nginx\",stream=\"stdout\"} |= \"20261001T114640Z-116d8df2\"",
+        "error": "{app=\"hello\",namespace=\"demo\",container=\"nginx\",stream=\"stderr\"} |= \"20261001T114640Z-116d8df2-err\""
+      },
+      "access_match": {
+        "labels": {
+          "app": "hello",
+          "namespace": "demo",
+          "container": "nginx",
+          "stream": "stdout"
+        },
+        "timestamp_ns": "1790855215453692975",
+        "fields": {
+          "request_id": "20261001T114640Z-116d8df2",
+          "method": "GET",
+          "uri": "/",
+          "status": 200
+        },
+        "cri_time": "2026-10-01T11:46:55.453692975Z",
+        "source_verified": true
+      },
+      "error_match": {
+        "labels": {
+          "app": "hello",
+          "namespace": "demo",
+          "container": "nginx",
+          "stream": "stderr"
+        },
+        "timestamp_ns": "1790855215947896506",
+        "uri": "/verify/missing/20261001T114640Z-116d8df2-err",
+        "missing_file": true,
+        "cri_time": "2026-10-01T11:46:55.947896506Z",
+        "source_verified": true
+      },
+      "poll_attempts": 1
+    },
+    "runtime_security": [
+      {
+        "pod": "hello-9c8c568f5-q9tv5",
+        "exec_uid": 101,
+        "pid1_uids": [
+          "101",
+          "101",
+          "101",
+          "101"
+        ],
+        "cap_effective": "0000000000000000",
+        "root_mount_options": [
+          "ro",
+          "relatime"
+        ],
+        "serviceaccount_token": "absent"
+      }
+    ]
+  },
+  "bootstrap_identity": {
+    "status": "pass",
+    "object_count": 5,
+    "compared": [
+      "uid",
+      "created_at",
+      "volume_name",
+      "claim_ref"
+    ],
+    "before_captured_at": "2026-10-01T11:46:41.796551+00:00",
+    "after_captured_at": "2026-10-01T11:48:40.195065+00:00",
+    "artifacts": [
+      {
+        "source": ".state/acceptance/identity-before-repeat.json",
+        "sha256": "e7e5898d6575bc4740cf2ad91431a36c8dae844f98637b54323297686c0658d3"
+      },
+      {
+        "source": ".state/acceptance/identity-after-repeat.json",
+        "sha256": "f7de59b9ba2f0313f3dbb9a0333ca2122dce0a0b665c2de4ab7186c552b3744c"
+      },
+      {
+        "source": ".state/acceptance/identity-comparison.json",
+        "sha256": "15b898f0cb21170273db5ccba4e247ccb94cb78dfe54c731bee3c5c3ea0141dc"
+      }
+    ]
+  },
+  "verdict": "MVP accepted",
+  "accepted_code_revision": "337d0c671617929ebf162e1216099524fe8d611d",
+  "reviewed_at": "2026-10-01T11:52:40.664641+00:00",
+  "run": {
+    "source": "acceptance/run.json",
+    "sha256": "6160636a19f86739061fa6e4c63fb9c2d50c0bb1534e366483ce4eda3b47a92f",
+    "started_at": "2026-10-01T11:41:16.657055+00:00",
+    "finished_at": "2026-10-01T11:50:12.770066+00:00",
+    "python": "3.12.3",
+    "git_status_start": "",
+    "git_status_end": "",
+    "total_seconds": 536.11,
+    "first_successful_verify_seconds": 353.91,
+    "timing_scope": "From make tools through make evidence; prerequisite apt and VM creation excluded",
+    "stages": [
+      {
+        "name": "tools",
+        "command": [
+          "make",
+          "tools"
+        ],
+        "started_at": "2026-10-01T11:41:16.658523+00:00",
+        "log": "acceptance/01-tools.log",
+        "exit_code": 0,
+        "elapsed_seconds": 10.37,
+        "finished_at": "2026-10-01T11:41:27.025701+00:00",
+        "sha256": "7a7753868dedf4f0257625a352730dd82adaa940bd34a2e6ce1a745e63ca9e3b"
+      },
+      {
+        "name": "lint",
+        "command": [
+          "make",
+          "lint"
+        ],
+        "started_at": "2026-10-01T11:41:27.026406+00:00",
+        "log": "acceptance/02-lint.log",
+        "exit_code": 0,
+        "elapsed_seconds": 8.83,
+        "finished_at": "2026-10-01T11:41:35.856899+00:00",
+        "sha256": "6fad5ba08676401516985e3b2a4046e206be486f1bb461b7c688ce1277395f5a"
+      },
+      {
+        "name": "bootstrap",
+        "command": [
+          "make",
+          "bootstrap",
+          "ENV=ubuntu"
+        ],
+        "started_at": "2026-10-01T11:41:35.857257+00:00",
+        "log": "acceptance/03-bootstrap.log",
+        "exit_code": 0,
+        "elapsed_seconds": 199.95,
+        "finished_at": "2026-10-01T11:44:55.804344+00:00",
+        "sha256": "e6f2e2f2d728c21ab25859189fc3ab1d05c0aa5bcf5a0ff381e2b8c9dea0c755"
+      },
+      {
+        "name": "deploy",
+        "command": [
+          "make",
+          "deploy",
+          "ENV=ubuntu"
+        ],
+        "started_at": "2026-10-01T11:44:55.804812+00:00",
+        "log": "acceptance/04-deploy.log",
+        "exit_code": 0,
+        "elapsed_seconds": 104.68,
+        "finished_at": "2026-10-01T11:46:40.483409+00:00",
+        "sha256": "089c043374d30fb773c7e1d89e0077ce423a86016cb3943e82c4f2d31354e303"
+      },
+      {
+        "name": "verify",
+        "command": [
+          "make",
+          "verify",
+          "ENV=ubuntu"
+        ],
+        "started_at": "2026-10-01T11:46:40.483918+00:00",
+        "log": "acceptance/05-verify.log",
+        "exit_code": 0,
+        "elapsed_seconds": 30.08,
+        "finished_at": "2026-10-01T11:47:10.568843+00:00",
+        "sha256": "21114b21ffcf8106613296395838f90bfc9f820e1aef4813349ce01b2f65f89c"
+      },
+      {
+        "name": "bootstrap-repeat",
+        "command": [
+          "make",
+          "bootstrap",
+          "ENV=ubuntu"
+        ],
+        "started_at": "2026-10-01T11:47:10.569430+00:00",
+        "log": "acceptance/06-bootstrap-repeat.log",
+        "exit_code": 0,
+        "elapsed_seconds": 88.51,
+        "finished_at": "2026-10-01T11:48:39.079819+00:00",
+        "sha256": "df9f8e769a88242e120e200a19827f1c0829478999d2fbcd087c9057cec996be"
+      },
+      {
+        "name": "health",
+        "command": [
+          "make",
+          "health",
+          "ENV=ubuntu"
+        ],
+        "started_at": "2026-10-01T11:48:39.080169+00:00",
+        "log": "acceptance/07-health.log",
+        "exit_code": 0,
+        "elapsed_seconds": 42.79,
+        "finished_at": "2026-10-01T11:49:21.873584+00:00",
+        "sha256": "b04b8a29bf177804b090299153ffdf0f51e718c325d2761279f0c841cbb1e6b5"
+      },
+      {
+        "name": "verify-after-bootstrap",
+        "command": [
+          "make",
+          "verify",
+          "ENV=ubuntu"
+        ],
+        "started_at": "2026-10-01T11:49:21.874132+00:00",
+        "log": "acceptance/08-verify-after-bootstrap.log",
+        "exit_code": 0,
+        "elapsed_seconds": 5.59,
+        "finished_at": "2026-10-01T11:49:27.467945+00:00",
+        "sha256": "fe61052275417d033d3c51bdfad9cf341ef1b973159ca1dabb99cf831cd33aea"
+      },
+      {
+        "name": "idempotency",
+        "command": [
+          "make",
+          "verify-idempotency",
+          "ENV=ubuntu"
+        ],
+        "started_at": "2026-10-01T11:49:27.468244+00:00",
+        "log": "acceptance/09-idempotency.log",
+        "exit_code": 0,
+        "elapsed_seconds": 45.21,
+        "finished_at": "2026-10-01T11:50:12.679721+00:00",
+        "sha256": "f01a72e39ee19ca38c46763f83bec586de543657a2b0beebea64471ab790a536"
+      },
+      {
+        "name": "evidence",
+        "command": [
+          "make",
+          "evidence",
+          "ENV=ubuntu"
+        ],
+        "started_at": "2026-10-01T11:50:12.680265+00:00",
+        "log": "acceptance/10-evidence.log",
+        "exit_code": 0,
+        "elapsed_seconds": 0.09,
+        "finished_at": "2026-10-01T11:50:12.769484+00:00",
+        "sha256": "4854b5071235ebcdf46f861227973298abcba26d07b71c4afcca75b118c79861"
+      }
+    ]
+  },
+  "reports": [
+    {
+      "source": "artifacts/idempotency/20261001T114927Z-a83b06ec/report.json",
+      "sha256": "e92b190c3cd81be10785b22011ef29bd415d7182e2198c8ff42679af8a0b9c5a",
+      "run_id": "20261001T114927Z-a83b06ec",
+      "revision": "337d0c671617929ebf162e1216099524fe8d611d",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "deploy_1",
+          "status": "pass"
+        },
+        {
+          "name": "deploy_2",
+          "status": "pass"
+        }
+      ],
+      "compared_resource_count": 25,
+      "pvc_count": 2
+    },
+    {
+      "source": "artifacts/verify/20261001T114640Z-116d8df2/report.json",
+      "sha256": "731acfbd701af8307d7038d4f3c5a9a81ec605385a9f046af034563f21552057",
+      "run_id": "20261001T114640Z-116d8df2",
+      "revision": "337d0c671617929ebf162e1216099524fe8d611d",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "readiness",
+          "status": "pass"
+        },
+        {
+          "name": "gateway_conditions",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_warmup",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_baseline",
+          "status": "pass"
+        },
+        {
+          "name": "http",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_delta",
+          "status": "pass"
+        },
+        {
+          "name": "logs",
+          "status": "pass"
+        },
+        {
+          "name": "runtime_security",
+          "status": "pass"
+        }
+      ],
+      "profile": "mvp",
+      "working_tree_dirty": false,
+      "http_status": 200,
+      "body_bytes": 12,
+      "request_id": "20261001T114640Z-116d8df2",
+      "successful_probe_count": 24,
+      "metrics": {
+        "query": "traefik_entrypoint_requests_total{namespace=\"edge\",service=\"traefik-metrics\",endpoint=\"metrics\",entrypoint=\"web\",code=\"200\",method=\"GET\"}",
+        "before": 1.0,
+        "after": 25.0,
+        "increase": 24.0,
+        "min_increase": 24.0,
+        "window_start": 1790855214.865,
+        "window_end": 1790855230.2244973
+      },
+      "access_error_correlated": true,
+      "runtime_invariants": "pass"
+    },
+    {
+      "source": "artifacts/verify/20261001T114921Z-4eda473d/report.json",
+      "sha256": "42a6e1c157debf2364260ce75ba00c50ac97f27e385985b41266af0bb7d2c6ab",
+      "run_id": "20261001T114921Z-4eda473d",
+      "revision": "337d0c671617929ebf162e1216099524fe8d611d",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "readiness",
+          "status": "pass"
+        },
+        {
+          "name": "gateway_conditions",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_warmup",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_baseline",
+          "status": "pass"
+        },
+        {
+          "name": "http",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_delta",
+          "status": "pass"
+        },
+        {
+          "name": "logs",
+          "status": "pass"
+        },
+        {
+          "name": "runtime_security",
+          "status": "pass"
+        }
+      ],
+      "profile": "mvp",
+      "working_tree_dirty": false,
+      "http_status": 200,
+      "body_bytes": 12,
+      "request_id": "20261001T114921Z-4eda473d",
+      "successful_probe_count": 24,
+      "metrics": {
+        "query": "traefik_entrypoint_requests_total{namespace=\"edge\",service=\"traefik-metrics\",endpoint=\"metrics\",entrypoint=\"web\",code=\"200\",method=\"GET\"}",
+        "before": 25.0,
+        "after": 50.0,
+        "increase": 25.0,
+        "min_increase": 24.0,
+        "window_start": 1790855349.865,
+        "window_end": 1790855365.2090662
+      },
+      "access_error_correlated": true,
+      "runtime_invariants": "pass"
+    },
+    {
+      "source": "artifacts/verify/20261001T114927Z-a83b06ec-1/report.json",
+      "sha256": "e5cea921e324c2ffd828ffa36b197f4c2de6870a10eecd711f5ca4ce87d8c7fd",
+      "run_id": "20261001T114927Z-a83b06ec-1",
+      "revision": "337d0c671617929ebf162e1216099524fe8d611d",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "readiness",
+          "status": "pass"
+        },
+        {
+          "name": "gateway_conditions",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_warmup",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_baseline",
+          "status": "pass"
+        },
+        {
+          "name": "http",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_delta",
+          "status": "pass"
+        },
+        {
+          "name": "logs",
+          "status": "pass"
+        },
+        {
+          "name": "runtime_security",
+          "status": "pass"
+        }
+      ],
+      "profile": "mvp",
+      "working_tree_dirty": false,
+      "http_status": 200,
+      "body_bytes": 12,
+      "request_id": "20261001T114927Z-a83b06ec-1",
+      "successful_probe_count": 24,
+      "metrics": {
+        "query": "traefik_entrypoint_requests_total{namespace=\"edge\",service=\"traefik-metrics\",endpoint=\"metrics\",entrypoint=\"web\",code=\"200\",method=\"GET\"}",
+        "before": 50.0,
+        "after": 75.0,
+        "increase": 25.0,
+        "min_increase": 24.0,
+        "window_start": 1790855379.865,
+        "window_end": 1790855394.981293
+      },
+      "access_error_correlated": true,
+      "runtime_invariants": "pass"
+    },
+    {
+      "source": "artifacts/verify/20261001T114927Z-a83b06ec-2/report.json",
+      "sha256": "5debe95c9f1d4a64479838b32aac5588f41a12728fc49f29d388a437db0f4cd8",
+      "run_id": "20261001T114927Z-a83b06ec-2",
+      "revision": "337d0c671617929ebf162e1216099524fe8d611d",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "readiness",
+          "status": "pass"
+        },
+        {
+          "name": "gateway_conditions",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_warmup",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_baseline",
+          "status": "pass"
+        },
+        {
+          "name": "http",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_delta",
+          "status": "pass"
+        },
+        {
+          "name": "logs",
+          "status": "pass"
+        },
+        {
+          "name": "runtime_security",
+          "status": "pass"
+        }
+      ],
+      "profile": "mvp",
+      "working_tree_dirty": false,
+      "http_status": 200,
+      "body_bytes": 12,
+      "request_id": "20261001T114927Z-a83b06ec-2",
+      "successful_probe_count": 24,
+      "metrics": {
+        "query": "traefik_entrypoint_requests_total{namespace=\"edge\",service=\"traefik-metrics\",endpoint=\"metrics\",entrypoint=\"web\",code=\"200\",method=\"GET\"}",
+        "before": 75.0,
+        "after": 100.0,
+        "increase": 25.0,
+        "min_increase": 24.0,
+        "window_start": 1790855394.865,
+        "window_end": 1790855410.2732394
+      },
+      "access_error_correlated": true,
+      "runtime_invariants": "pass"
+    }
+  ],
+  "external_http": {
+    "source": ".state/acceptance/external-http.json",
+    "sha256": "29243d492c28545e750bf2e91b44e483441719093834c3a01d1f956f2ad20def",
+    "captured_at": "2026-10-01T11:50:44.016998+00:00",
+    "vantage": "controller outside acceptance VM; NodePort direct, no port-forward",
+    "curl_exit_code": 0,
+    "http_status": "200",
+    "body": "Hello World!",
+    "body_bytes": 12,
+    "request_id": "mvp06-external-7a87c161a376",
+    "response_request_id": "mvp06-external-7a87c161a376",
+    "status": "pass"
+  },
+  "measurements": {
+    "source": ".state/acceptance/measurements.json",
+    "sha256": "67255818dc31fec51de5b202c4a1ca88a763ed76ba0fcec89012ecb7d1d81137",
+    "captured_at": "2026-10-01T11:51:07.740911+00:00",
+    "cpu_count": 4,
+    "memory_bytes": {
+      "MemTotal": 8326918144,
+      "MemFree": 1229398016,
+      "MemAvailable": 6305460224
+    },
+    "disk_root": {
+      "total": 61285326848,
+      "used": 6568845312,
+      "free": 54699704320
+    },
+    "load_average": [
+      0.251953125,
+      0.56494140625,
+      0.35595703125
+    ],
+    "cpu_sample": {
+      "seconds": 30.0,
+      "busy_percent": 3.89,
+      "iowait_percent": 0.19,
+      "note": "30-second snapshot after verification; not a benchmark or minimum sizing claim"
+    }
+  },
+  "evidence_archive": {
+    "source": "artifacts/evidence/20261001T115012Z.tar.gz",
+    "sha256": "1c6503ffb6ec6fcabcaa050106a90f8293f8855f9508fca337828db76d7c3ac1",
+    "members": [
+      "index.json",
+      "artifacts/verify/20261001T114640Z-116d8df2/report.json",
+      "artifacts/verify/20261001T114921Z-4eda473d/report.json",
+      "artifacts/verify/20261001T114927Z-a83b06ec-1/report.json",
+      "artifacts/verify/20261001T114927Z-a83b06ec-2/report.json",
+      "artifacts/idempotency/20261001T114927Z-a83b06ec/report.json"
+    ],
+    "contents_verified": true
+  },
+  "not_run": [
+    {
+      "check": "recovery on second VM",
+      "reason": "Independent review uses successful first-VM recovery; implementation unchanged by acceptance corrections"
+    },
+    {
+      "check": "public anonymous Git clone, final PDF and submission archive",
+      "reason": "FINAL-07 not assigned"
+    }
+  ]
+}
