@@ -1,0 +1,6 @@
+apiVersion: v2
+name: logging
+description: Single-node Loki and Fluentd for the MVP Nginx logs
+type: application
+version: 0.1.0
+appVersion: "3.6.2"
