@@ -80,9 +80,10 @@ port name `metrics`, 9100; labels `app.kubernetes.io/name: traefik`,
 ServiceMonitor в edge, label `release: monitoring`, selector соответствует
 Service; Prometheus выбирает release=monitoring во всех namespaces.
 Scrape/evaluation 15s, timeout 10s. Фиксированный HTTP scope:
-`traefik_entrypoint_requests_total{entrypoint="web",code="200",method="GET"}`.
-Фактические labels подтверждаются в live. Job/service фильтр добавляется
-после проверки labels. До baseline выполнить warm-up и дождаться sample.
+`traefik_entrypoint_requests_total{namespace="edge",service="traefik-metrics",endpoint="metrics",entrypoint="web",code="200",method="GET"}`.
+Source labels подтверждены в live integration. До baseline выполнить warm-up
+и дождаться sample. Проверка отклоняет наблюдаемое уменьшение counter;
+reset с восстановлением между scrape может остаться незамеченным.
 App probes идут на pod:8080/healthz и не увеличивают web counter.
 Required targets: Traefik, node-exporter, kube-state-metrics, Prometheus.
 Kubelet/cAdvisor/etcd/controller-manager/scheduler/kube-proxy и defaultRules

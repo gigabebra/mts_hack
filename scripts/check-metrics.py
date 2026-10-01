@@ -13,7 +13,8 @@ import urllib.parse
 import urllib.request
 
 
-COUNTER = 'traefik_entrypoint_requests_total{entrypoint="web",code="200",method="GET"}'
+COUNTER = ('traefik_entrypoint_requests_total{namespace="edge",service="traefik-metrics",'
+           'endpoint="metrics",entrypoint="web",code="200",method="GET"}')
 INFRA = '{__name__=~"up|node_memory_MemAvailable_bytes|kube_node_info",namespace=~"edge|monitoring"}'
 REQUIRED = {
     "traefik": ("edge", "traefik-metrics", "metrics"),

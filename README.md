@@ -110,7 +110,7 @@ loopback port-forward к Prometheus/Loki и закрывает их при за�
 - HTTP 200 и ровно 12 bytes `Hello World!`, совпадающий Request-ID; fallback
   для невалидного ID, отрицательный маршрут и настоящий missing-file 404.
 - Живые targets Traefik/node exporter/kube state metrics/Prometheus, свежие
-  samples, рост scoped counter после нагрузки без незамеченного reset.
+  samples, рост scoped counter после нагрузки без наблюдаемого уменьшения counter.
 - Точная запись access с тем же Request-ID и независимая stderr error-запись
   через Loki API, правильные stream и source labels.
 - Реальные UID PID1, отсутствие capabilities/API token и read-only root mount.
@@ -150,7 +150,7 @@ curl -i -H 'X-Request-ID: manual-check-01' http://<VM_IP>:30080/
 kubectl -n monitoring port-forward --address=127.0.0.1 service/monitoring-prometheus 9090:9090
 curl -s http://127.0.0.1:9090/api/v1/targets
 curl -sG http://127.0.0.1:9090/api/v1/query \
-  --data-urlencode 'query=traefik_entrypoint_requests_total{entrypoint="web",code="200",method="GET"}'
+  --data-urlencode 'query=traefik_entrypoint_requests_total{namespace="edge",service="traefik-metrics",endpoint="metrics",entrypoint="web",code="200",method="GET"}'
 ```
 
 Логи (еще один терминал):

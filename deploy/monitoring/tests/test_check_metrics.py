@@ -141,6 +141,10 @@ class MetricsFixtures(unittest.TestCase):
         self.assertEqual(after["status"], "pass", after)
         self.assertEqual(after["data"]["increase"], 20)
         self.assertTrue(all("[" in q and q.endswith("ms]") for q in self.server.state["queries"]))
+        for query in self.server.state["queries"]:
+            if query.startswith("traefik_entrypoint"):
+                for selector in ('namespace="edge"', 'service="traefik-metrics"', 'endpoint="metrics"'):
+                    self.assertIn(selector, query)
 
     def test_snapshot_rejects_invalid_or_missing_data(self):
         for failure in ("http_503", "down", "reloader_down", "missing_target", "stale_target", "empty", "vector",
