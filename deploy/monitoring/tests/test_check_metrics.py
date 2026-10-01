@@ -65,6 +65,15 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             if mode == "duplicate_monitor_target":
                 targets.append(dict(targets[0], labels=dict(targets[0]["labels"],
                                     job="alternate-monitor", service="alternate-service", endpoint="alias-port")))
+            if mode in ("duplicate_optional_family", "duplicate_optional_monitor"):
+                optional = dict(targets[0], labels={"namespace": "optional", "service": "extra",
+                                "endpoint": "metrics", "pod": "optional-fixture", "job": "extra-monitor",
+                                "instance": "192.0.2.12:19100"}, scrapeUrl="http://192.0.2.12:19100/metrics")
+                alternate = dict(optional, labels=dict(optional["labels"], job="alternate-monitor", service="alias"))
+                if mode == "duplicate_optional_family":
+                    alternate["labels"]["instance"] = "[2001:db8::12]:19100"
+                    alternate["scrapeUrl"] = "http://[2001:db8::12]:19100/metrics"
+                targets.extend([optional, alternate])
             if mode == "mapped_target":
                 targets[0]["scrapeUrl"] = "http://[::ffff:192.0.2.10]:9100/metrics"
             if mode == "missing_scrape_url":
@@ -198,6 +207,16 @@ class MetricsFixtures(unittest.TestCase):
             result = self.invoke("snapshot")
             self.assertEqual(result["status"], "fail")
             self.assertIn("target_traefik_unique", [item["name"] for item in result["checks"] if item["status"] == "fail"])
+
+    def test_duplicate_optional_endpoints_fail_global_gate(self):
+        for mode in ("duplicate_optional_family", "duplicate_optional_monitor"):
+            with self.subTest(mode=mode):
+                self.server.state["failure"] = mode
+                result = self.invoke("snapshot")
+                self.assertEqual(result["status"], "fail", result)
+                self.assertIn("all_targets_unique", [item["name"] for item in result["checks"] if item["status"] == "fail"])
+                self.assertTrue(all(item["status"] == "pass" for item in result["checks"]
+                                    if item["name"].startswith("target_")), result)
 
     def test_snapshot_rejects_invalid_or_missing_data(self):
         for failure in ("duplicate_family_target", "ipv4_target", "mapped_target", "missing_scrape_url", "ipv4_instance", "http_503", "down", "reloader_down", "missing_target", "stale_target", "empty", "vector",

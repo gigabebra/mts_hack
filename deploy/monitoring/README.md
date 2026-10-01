@@ -67,8 +67,9 @@ Prometheus слушает `[::]:9090` — обычный wildcard обеих с�
 обнаруженные endpoints этих services должны быть здоровы и свежи, включая
 Prometheus config-reloader. `check-metrics.py` принимает native IPv4 и
 IPv6 в `scrapeUrl`/`labels.instance`; необязательный IPv4 target не является
-ошибкой. Дополнительно обязательные Pod/порт/path должны встречаться
-ровно один раз среди всех active targets, независимо от IP, job и Service.
+ошибкой. Дополнительно все идентифицируемые Pod/порт/path должны встречаться
+ровно один раз среди всех active targets, включая необязательные targets,
+независимо от IP, job и Service.
 Повторный scrape через другую семью либо другой ServiceMonitor дает fail.
 URL API допускает IPv4 или IPv6 literal с квадратными скобками. Проверки
 сохраняют прямое соединение без HTTP proxy и не следуют redirect.

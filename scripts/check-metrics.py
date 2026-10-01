@@ -165,10 +165,16 @@ def inspect_targets(api, now):
     if not isinstance(targets, list):
         raise ValueError("missing activeTargets array")
     checks, saved, selected = [], [], []
-    # Include optional/aliased jobs in duplicate detection: another monitor or
-    # Service for a required Pod listener must not silently scrape it again.
+    # Count physical Pod listeners across all jobs, Services and IP families,
+    # including optional endpoints outside the required infrastructure targets.
     endpoint_counts = Counter(identity for target in targets
                               if (identity := target_endpoint_identity(target)) is not None)
+    checks.append(check("all_targets_unique", all(count == 1 for count in endpoint_counts.values()),
+                        "one scrape per identifiable Pod/port/path across all active targets",
+                        {"identifiable_targets": sum(endpoint_counts.values()),
+                         "unique_endpoints": len(endpoint_counts),
+                         "duplicate_endpoints": sum(count > 1 for count in endpoint_counts.values()),
+                         "unidentified_targets": len(targets) - sum(endpoint_counts.values())}))
     for name, expected in REQUIRED.items():
         matched = [target for target in targets
                    if (target.get("labels", {}).get("namespace"),

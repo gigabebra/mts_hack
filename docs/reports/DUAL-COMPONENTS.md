@@ -58,3 +58,10 @@ Recovery Fluentd URI может быть `http://127.0.0.1:24220/api/plugins.jso
 Метаданные семейства подтверждены pinned
 [Prometheus 3.8.1 EndpointSlice discovery](https://github.com/prometheus/prometheus/blob/v3.8.1/discovery/kubernetes/endpointslice.go#L281).
 Historical IPv6-only reports не являются приемкой нового dual-stack профиля.
+
+Дополнение независимого ревью: `all_targets_unique` теперь отклоняет
+дубли любых идентифицируемых active Pod/port/path, включая два optional
+endpoints, не относящихся к REQUIRED. Отрицательный fixture воспроизводит
+optional duplicate по разным IP-семьям и через другой ServiceMonitor;
+required checks при этом остаются pass, а глобальная проверка дает fail.
+`python3 deploy/monitoring/tests/test_check_metrics.py` — pass, 7 tests.
