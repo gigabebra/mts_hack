@@ -1,0 +1,81 @@
+---
+- name: Set stable hostname
+  ansible.builtin.hostname:
+    name: "{{ node_name }}"
+- name: Ensure cloud-init configuration directory exists on ISO installs too
+  ansible.builtin.file:
+    path: /etc/cloud/cloud.cfg.d
+    state: directory
+    mode: '0755'
+- name: Preserve hostname across cloud-init boots
+  ansible.builtin.copy:
+    dest: /etc/cloud/cloud.cfg.d/99-mts-hostname.cfg
+    content: "preserve_hostname: true\n"
+    mode: '0644'
+- name: Resolve the node hostname locally
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: "^{{ node_ip | regex_escape }}\\s"
+    line: "{{ node_ip }} {{ node_name }}"
+- name: Install OS prerequisites through signed Ubuntu repositories
+  ansible.builtin.apt:
+    name: [ca-certificates, curl, gpg, conntrack, socat, iptables, ethtool, python3, python3-apt, systemd-timesyncd]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+- name: Enable network time synchronization
+  ansible.builtin.systemd_service:
+    name: systemd-timesyncd
+    state: started
+    enabled: true
+- name: Wait for synchronized wall clock
+  ansible.builtin.command: timedatectl show --property=NTPSynchronized --value
+  register: ntp_sync
+  changed_when: false
+  until: ntp_sync.stdout == 'yes'
+  retries: 24
+  delay: 5
+- name: Disable active swap
+  ansible.builtin.command: swapoff -a
+  when: ansible_facts.swaptotal_mb > 0
+- name: Disable persistent swap entries
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^(?!#)(\S+\s+\S+\s+swap\s+.*)$'
+    replace: '# mts disabled swap: \1'
+- name: Persist required kernel modules
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/mts-kubernetes.conf
+    content: "overlay\nbr_netfilter\n"
+    mode: '0644'
+- name: Load kernel modules
+  ansible.builtin.command:
+    argv: [modprobe, "{{ item }}"]
+  loop: [overlay, br_netfilter]
+  changed_when: false
+- name: Persist Kubernetes networking sysctls
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-mts-kubernetes.conf
+    mode: '0644'
+    content: |
+      net.bridge.bridge-nf-call-iptables = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.ipv4.ip_forward = 1
+  register: sysctl_config
+- name: Apply required sysctls
+  ansible.builtin.command: sysctl --load=/etc/sysctl.d/99-mts-kubernetes.conf
+  changed_when: sysctl_config.changed
+- name: Create bootstrap directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ remote_state }}"
+    - "{{ remote_state }}/patches"
+    - "{{ remote_cache }}"
+    - /etc/containerd
+    - /etc/apt/keyrings
+    - /opt/cni/bin
+    - /usr/local/sbin
+    - "{{ data_root }}"

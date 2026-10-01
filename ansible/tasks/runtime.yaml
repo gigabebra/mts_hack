@@ -1,0 +1,98 @@
+---
+- name: Download checksum-verified runtime archives
+  ansible.builtin.get_url:
+    url: "{{ downloads[item].url }}"
+    checksum: "sha256:{{ downloads[item].sha256 }}"
+    dest: "{{ remote_cache }}/{{ item }}-{{ downloads[item].sha256 }}"
+    mode: '0644'
+    timeout: 120
+  loop: [containerd, cni_plugins, helm]
+  register: runtime_archives
+- name: Extract containerd
+  ansible.builtin.unarchive:
+    src: "{{ remote_cache }}/containerd-{{ downloads.containerd.sha256 }}"
+    dest: /usr/local
+    remote_src: true
+  notify: Restart containerd
+- name: Install checksum-verified runc
+  ansible.builtin.get_url:
+    url: "{{ downloads.runc.url }}"
+    checksum: "sha256:{{ downloads.runc.sha256 }}"
+    dest: /usr/local/sbin/runc
+    mode: '0755'
+    timeout: 120
+  notify: Restart containerd
+- name: Extract pinned CNI binaries
+  ansible.builtin.unarchive:
+    src: "{{ remote_cache }}/cni_plugins-{{ downloads.cni_plugins.sha256 }}"
+    dest: /opt/cni/bin
+    remote_src: true
+- name: Extract pinned Helm
+  ansible.builtin.unarchive:
+    src: "{{ remote_cache }}/helm-{{ downloads.helm.sha256 }}"
+    dest: "{{ remote_cache }}"
+    remote_src: true
+- name: Install Helm executable
+  ansible.builtin.copy:
+    src: "{{ remote_cache }}/linux-amd64/helm"
+    dest: /usr/local/bin/helm
+    remote_src: true
+    mode: '0755'
+- name: Configure containerd CRI and systemd cgroups
+  ansible.builtin.template:
+    src: containerd.toml.j2
+    dest: /etc/containerd/config.toml
+    mode: '0644'
+  notify: Restart containerd
+- name: Install containerd systemd service
+  ansible.builtin.copy:
+    src: containerd.service
+    dest: /etc/systemd/system/containerd.service
+    mode: '0644'
+  notify: Restart containerd
+- name: Apply runtime changes before Kubernetes
+  ansible.builtin.meta: flush_handlers
+- name: Enable containerd across boots
+  ansible.builtin.systemd_service:
+    name: containerd
+    enabled: true
+    state: started
+    daemon_reload: true
+- name: Check installed containerd version
+  ansible.builtin.command: /usr/local/bin/containerd --version
+  changed_when: false
+  register: containerd_version
+  failed_when: platform.containerd not in containerd_version.stdout
+- name: Check CRI plugin is healthy
+  ansible.builtin.command: /usr/local/bin/ctr plugins ls
+  changed_when: false
+  register: containerd_plugins
+  failed_when: not (containerd_plugins.stdout is search('io.containerd.grpc.v1\s+cri\s+linux/amd64\s+ok'))
+- name: Download Kubernetes signing key
+  ansible.builtin.get_url:
+    url: "https://pkgs.k8s.io/core:/stable:/{{ platform.kubernetes_minor }}/deb/Release.key"
+    dest: /etc/apt/keyrings/kubernetes.asc
+    mode: '0644'
+    timeout: 60
+- name: Configure minor-version Kubernetes repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/kubernetes.list
+    mode: '0644'
+    content: "deb [signed-by=/etc/apt/keyrings/kubernetes.asc] https://pkgs.k8s.io/core:/stable:/{{ platform.kubernetes_minor }}/deb/ /\n"
+- name: Install exact Kubernetes package versions
+  ansible.builtin.apt:
+    name:
+      - "kubelet={{ platform.kubernetes_package }}"
+      - "kubeadm={{ platform.kubernetes_package }}"
+      - "kubectl={{ platform.kubernetes_package }}"
+    update_cache: true
+    state: present
+- name: Hold Kubernetes packages against accidental upgrades
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: [kubelet, kubeadm, kubectl]
+- name: Enable kubelet across boots
+  ansible.builtin.systemd_service:
+    name: kubelet
+    enabled: true

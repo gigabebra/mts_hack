@@ -1,0 +1,123 @@
+---
+- name: Render kubeadm configuration
+  ansible.builtin.template:
+    src: kubeadm.yaml.j2
+    dest: "{{ remote_state }}/kubeadm.yaml"
+    mode: '0600'
+- name: Ask the installed kubeadm for its exact image list
+  ansible.builtin.command:
+    argv: [kubeadm, config, images, list, --config, "{{ remote_state }}/kubeadm.yaml"]
+  changed_when: false
+  register: kubeadm_images
+- name: Require every kubeadm image in the accepted lock
+  ansible.builtin.assert:
+    that: item in image_lock.images
+    fail_msg: "kubeadm image missing from immutable lock: {{ item }}"
+  loop: "{{ kubeadm_images.stdout_lines }}"
+- name: List images already present in containerd
+  ansible.builtin.command: /usr/local/bin/ctr --namespace k8s.io images list --quiet
+  changed_when: false
+  register: cached_images
+- name: Pull control-plane images by digest only
+  ansible.builtin.command:
+    argv: [timeout, 300, /usr/local/bin/ctr, --namespace, k8s.io, images, pull, --platform, linux/amd64, "{{ item | mvp_image(image_lock.images) }}"]
+  loop: "{{ kubeadm_images.stdout_lines }}"
+  when: (item | mvp_image(image_lock.images)) not in cached_images.stdout_lines
+- name: Provide local immutable aliases for kubeadm preflight
+  ansible.builtin.command:
+    argv: [/usr/local/bin/ctr, --namespace, k8s.io, images, tag, --force, "{{ item | mvp_image(image_lock.images) }}", "{{ item }}"]
+  loop: "{{ kubeadm_images.stdout_lines }}"
+  changed_when: item not in cached_images.stdout_lines
+- name: Pin static pod images before their first launch
+  ansible.builtin.copy:
+    dest: "{{ remote_state }}/patches/{{ item.name }}+strategic.yaml"
+    mode: '0600'
+    content: |
+      spec:
+        containers:
+          - name: {{ item.name }}
+            image: {{ item.image | mvp_image(image_lock.images) | to_json }}
+  loop:
+    - {name: kube-apiserver, image: "registry.k8s.io/kube-apiserver:v{{ platform.kubernetes }}"}
+    - {name: kube-controller-manager, image: "registry.k8s.io/kube-controller-manager:v{{ platform.kubernetes }}"}
+    - {name: kube-scheduler, image: "registry.k8s.io/kube-scheduler:v{{ platform.kubernetes }}"}
+    - {name: etcd, image: 'registry.k8s.io/etcd:3.6.5-0'}
+- name: Pin CoreDNS before its first launch
+  ansible.builtin.copy:
+    dest: "{{ remote_state }}/patches/corednsdeployment+strategic.yaml"
+    mode: '0600'
+    content: |
+      spec:
+        template:
+          spec:
+            containers:
+              - name: coredns
+                image: {{ 'registry.k8s.io/coredns/coredns:v1.12.1' | mvp_image(image_lock.images) | to_json }}
+- name: Record the reserved VM identity before initialization
+  ansible.builtin.copy:
+    dest: "{{ remote_state }}/identity.json"
+    content: "{{ expected_identity | to_nice_json }}\n"
+    mode: '0600'
+- name: Initialize only a fresh cluster without unpinned kube-proxy
+  ansible.builtin.command:
+    argv: [timeout, 900, kubeadm, init, --config, "{{ remote_state }}/kubeadm.yaml", --skip-phases=addon/kube-proxy, --skip-token-print]
+    creates: "{{ admin_config }}"
+  when: not cluster_exists
+- name: Ensure administrator kubeconfig is private
+  ansible.builtin.file:
+    path: "{{ admin_config }}"
+    mode: '0600'
+- name: Render kube-proxy from the installed kubeadm
+  ansible.builtin.command:
+    argv: [kubeadm, init, phase, addon, kube-proxy, --config, "{{ remote_state }}/kubeadm.yaml", --print-manifest]
+  register: kube_proxy_manifest
+  changed_when: false
+- name: Store digest-pinned kube-proxy resources
+  ansible.builtin.copy:
+    dest: "{{ remote_state }}/kube-proxy.yaml"
+    mode: '0600'
+    content: "{{ kube_proxy_manifest.stdout | from_yaml_all | list | mvp_pin_images(image_lock.images) | map('to_nice_yaml') | join('---\n') }}"
+- name: Apply kube-proxy resources
+  ansible.builtin.command:
+    argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=60s, apply, -f, "{{ remote_state }}/kube-proxy.yaml"]
+  register: apply_proxy
+  changed_when: "'created' in apply_proxy.stdout or 'configured' in apply_proxy.stdout"
+- name: Download the checksum-verified upstream Calico manifest
+  ansible.builtin.get_url:
+    url: "{{ downloads.calico.url }}"
+    checksum: "sha256:{{ downloads.calico.sha256 }}"
+    dest: "{{ remote_cache }}/calico.yaml"
+    mode: '0644'
+    timeout: 120
+- name: Read Calico source for structural customization
+  ansible.builtin.slurp:
+    src: "{{ remote_cache }}/calico.yaml"
+  register: calico_source
+- name: Render Calico VXLAN and immutable images
+  ansible.builtin.copy:
+    dest: "{{ remote_state }}/calico.yaml"
+    mode: '0600'
+    content: "{{ calico_source.content | b64decode | from_yaml_all | list | mvp_calico(image_lock.images, pod_cidr, node_ip) | map('to_nice_yaml') | join('---\n') }}"
+- name: Apply Calico using server-side apply for large CRDs
+  ansible.builtin.command:
+    argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=120s, apply, --server-side, --field-manager=mts-bootstrap, -f, "{{ remote_state }}/calico.yaml"]
+  register: apply_calico
+  changed_when: "'created' in apply_calico.stdout or 'serverside-applied' in apply_calico.stdout"
+- name: Read current control-plane taints
+  ansible.builtin.command:
+    argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=30s, get, node, "{{ node_name }}", -o, json]
+  changed_when: false
+  register: bootstrap_node
+- name: Allow workloads on the single control-plane
+  ansible.builtin.command:
+    argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=30s, taint, nodes, "{{ node_name }}", node-role.kubernetes.io/control-plane:NoSchedule-]
+  when: (bootstrap_node.stdout | from_json).spec.taints | default([]) | selectattr('key', 'equalto', 'node-role.kubernetes.io/control-plane') | list | length > 0
+- name: Wait for node readiness
+  ansible.builtin.command:
+    argv: [kubectl, --kubeconfig, "{{ admin_config }}", wait, --for=condition=Ready, "node/{{ node_name }}", --timeout=300s]
+  changed_when: false
+- name: Wait for network and DNS controllers
+  ansible.builtin.command:
+    argv: [kubectl, --kubeconfig, "{{ admin_config }}", -n, kube-system, rollout, status, "{{ item }}", --timeout=300s]
+  loop: [daemonset/calico-node, deployment/calico-kube-controllers, daemonset/kube-proxy, deployment/coredns]
+  changed_when: false

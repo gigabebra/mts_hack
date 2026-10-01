@@ -1,0 +1,42 @@
+---
+# Offline render only: never connects to a VM or Kubernetes.
+- name: Render bootstrap assets against the accepted source and lock
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../config/versions.yaml
+    - ../config/environments/ubuntu.example.yaml
+  vars:
+    remote_state: /etc/mts-stack
+    output_dir: /tmp/mts-bootstrap-render
+    health_uuid: {stdout: 00000000-0000-4000-8000-000000000000}
+  tasks:
+    - name: Load accepted image lock
+      ansible.builtin.include_vars:
+        file: ../config/images.lock.yaml
+        name: image_lock
+    - name: Check explicit source file checksum
+      ansible.builtin.stat:
+        path: "{{ calico_source_file }}"
+        checksum_algorithm: sha256
+      register: calico_file
+    - name: Refuse an unverified upstream source
+      ansible.builtin.assert:
+        that: calico_file.stat.checksum == downloads.calico.sha256
+    - name: Create local render directory
+      ansible.builtin.file:
+        path: "{{ output_dir }}"
+        state: directory
+        mode: '0700'
+    - name: Render config and health files
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: "{{ output_dir }}/{{ item }}"
+        mode: '0600'
+      loop: [kubeadm.yaml, containerd.toml, health.yaml]
+    - name: Render Calico from the verified manifest
+      ansible.builtin.copy:
+        dest: "{{ output_dir }}/calico.yaml"
+        mode: '0600'
+        content: "{{ lookup('ansible.builtin.file', calico_source_file) | from_yaml_all | list | mvp_calico(image_lock.images, pod_cidr, node_ip) | map('to_nice_yaml') | join('---\n') }}"

@@ -1,0 +1,27 @@
+---
+- name: Check explicit cluster after bootstrap or a controlled reboot
+  hosts: mvp
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../config/versions.yaml
+  vars:
+    admin_config: /etc/kubernetes/admin.conf
+    remote_state: /etc/mts-stack
+  tasks:
+    - name: Load accepted image lock
+      ansible.builtin.include_vars:
+        file: ../config/images.lock.yaml
+        name: image_lock
+    - name: Require one explicit VM and node name
+      ansible.builtin.assert:
+        that:
+          - groups['mvp'] | length == 1
+          - node_name is defined
+    - name: Check containerd and kubelet after boot
+      ansible.builtin.command:
+        argv: [systemctl, is-active, "{{ item }}"]
+      loop: [containerd, kubelet]
+      changed_when: false
+    - name: Run workload network health checks
+      ansible.builtin.import_tasks: tasks/health.yaml

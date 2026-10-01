@@ -1,0 +1,137 @@
+---
+- name: Bootstrap the explicitly selected disposable Ubuntu VM
+  hosts: mvp
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+  vars_files:
+    - ../config/versions.yaml
+  vars:
+    repo_root: "{{ playbook_dir | dirname }}"
+    remote_state: /etc/mts-stack
+    remote_cache: /var/cache/mts-stack
+    admin_config: /etc/kubernetes/admin.conf
+  pre_tasks:
+    - name: Load immutable image lock without shadowing versions.images
+      ansible.builtin.include_vars:
+        file: ../config/images.lock.yaml
+        name: image_lock
+    - name: Validate platform and explicit environment
+      ansible.builtin.assert:
+        that:
+          - groups['mvp'] | length == 1
+          - ansible_facts.distribution == 'Ubuntu'
+          - ansible_facts.distribution_version == '24.04'
+          - ansible_facts.architecture == 'x86_64'
+          - ansible_facts.memtotal_mb >= 7000
+          - ansible_facts.processor_vcpus >= 4
+          - node_name is match('^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$')
+          - node_ip in ansible_facts.all_ipv4_addresses
+          - pod_cidr is defined
+          - service_cidr is defined
+          - kubeconfig is defined and kubeconfig | length > 0
+          - data_root is match('^/[a-zA-Z0-9_/-]+$') and data_root != '/'
+        fail_msg: Explicit single-host Ubuntu 24.04 amd64 environment, 4 CPUs and at least 7000 MiB RAM are required.
+    - name: Inspect existing bootstrap state
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ admin_config }}"
+        - "{{ remote_state }}/identity.json"
+        - /etc/kubernetes/manifests/kube-apiserver.yaml
+      register: bootstrap_state
+    - name: Refuse foreign or partially initialized clusters
+      ansible.builtin.assert:
+        that:
+          - not bootstrap_state.results[0].stat.exists or bootstrap_state.results[1].stat.exists
+          - bootstrap_state.results[0].stat.exists == bootstrap_state.results[2].stat.exists
+        fail_msg: Existing unmanaged or partial kubeadm state requires manual diagnosis. Automatic reset is prohibited.
+    - name: Set immutable identity
+      ansible.builtin.set_fact:
+        cluster_exists: "{{ bootstrap_state.results[0].stat.exists }}"
+        expected_identity:
+          node_name: "{{ node_name }}"
+          node_ip: "{{ node_ip }}"
+          pod_cidr: "{{ pod_cidr }}"
+          service_cidr: "{{ service_cidr }}"
+          kubernetes: "{{ platform.kubernetes }}"
+          containerd: "{{ platform.containerd }}"
+          calico: "{{ platform.calico }}"
+          data_root: "{{ data_root }}"
+    - name: Read previously recorded identity
+      ansible.builtin.slurp:
+        src: "{{ remote_state }}/identity.json"
+      register: existing_identity
+      when: bootstrap_state.results[1].stat.exists
+    - name: Reject an environment change before modifying the VM
+      ansible.builtin.assert:
+        that: existing_identity.content | b64decode | from_json == expected_identity
+        fail_msg: This VM belongs to a different bootstrap identity; upgrades and resets are not implicit.
+      when: bootstrap_state.results[1].stat.exists
+    - name: Check routes and usable disk without mutation
+      ansible.builtin.script:
+        cmd: "files/preflight.py {{ pod_cidr | quote }} {{ service_cidr | quote }} {{ node_ip | quote }} {{ cluster_exists | ternary('existing', 'new') }}"
+        executable: /usr/bin/python3
+      changed_when: false
+    - name: Verify access to the existing cluster before mutation
+      ansible.builtin.command:
+        argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=20s, get, nodes, -o, json]
+      register: existing_nodes
+      changed_when: false
+      when: cluster_exists
+    - name: Validate live node identity and version
+      ansible.builtin.assert:
+        that:
+          - (existing_nodes.stdout | from_json)['items'] | length == 1
+          - (existing_nodes.stdout | from_json)['items'][0].metadata.name == node_name
+          - (existing_nodes.stdout | from_json)['items'][0].status.nodeInfo.kubeletVersion == 'v' ~ platform.kubernetes
+          - node_ip in ((existing_nodes.stdout | from_json)['items'][0].status.addresses | selectattr('type', 'equalto', 'InternalIP') | map(attribute='address') | list)
+      when: cluster_exists
+  tasks:
+    - name: Prepare operating system
+      ansible.builtin.import_tasks: tasks/os.yaml
+    - name: Install runtime and kubeadm
+      ansible.builtin.import_tasks: tasks/runtime.yaml
+    - name: Initialize and reconcile cluster
+      ansible.builtin.import_tasks: tasks/cluster.yaml
+    - name: Check DNS and workload network
+      ansible.builtin.import_tasks: tasks/health.yaml
+    - name: Prepare local persistent directories
+      ansible.builtin.file:
+        path: "{{ data_root }}/{{ item.name }}"
+        state: directory
+        owner: "{{ item.uid }}"
+        group: "{{ item.gid }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - {name: prometheus, uid: '1000', gid: '2000', mode: '0770'}
+        - {name: loki, uid: '10001', gid: '10001', mode: '0770'}
+        - {name: fluentd, uid: '0', gid: '0', mode: '0750'}
+    - name: Resolve kubeconfig destination relative to repository
+      ansible.builtin.set_fact:
+        kubeconfig_destination: "{{ kubeconfig if kubeconfig.startswith('/') else repo_root ~ '/' ~ kubeconfig }}"
+    - name: Protect local kubeconfig directory
+      ansible.builtin.file:
+        path: "{{ kubeconfig_destination | dirname }}"
+        state: directory
+        mode: '0700'
+      delegate_to: localhost
+      become: false
+    - name: Fetch administrator kubeconfig explicitly
+      ansible.builtin.fetch:
+        src: "{{ admin_config }}"
+        dest: "{{ kubeconfig_destination }}"
+        flat: true
+      no_log: true
+    - name: Restrict local kubeconfig permissions
+      ansible.builtin.file:
+        path: "{{ kubeconfig_destination }}"
+        mode: '0600'
+      delegate_to: localhost
+      become: false
+  handlers:
+    - name: Restart containerd
+      ansible.builtin.systemd_service:
+        name: containerd
+        state: restarted
+        daemon_reload: true

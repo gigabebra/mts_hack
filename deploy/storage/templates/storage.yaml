@@ -1,0 +1,38 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-retain
+  annotations:
+    helm.sh/resource-policy: keep
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+allowVolumeExpansion: false
+{{- range $name := list "prometheus" "loki" }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mts-{{ $name }}
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    app.kubernetes.io/part-of: mts-stack
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  capacity:
+    storage: 12Gi
+  volumeMode: Filesystem
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-retain
+  local:
+    path: {{ printf "%s/%s" $.Values.dataRoot $name | quote }}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [{{ $.Values.nodeName | quote }}]
+{{- end }}

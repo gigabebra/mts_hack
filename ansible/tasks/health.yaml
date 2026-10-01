@@ -1,0 +1,50 @@
+---
+- name: Confirm the node is Ready
+  ansible.builtin.command:
+    argv: [kubectl, --kubeconfig, "{{ admin_config }}", wait, --for=condition=Ready, "node/{{ node_name }}", --timeout=300s]
+  changed_when: false
+- name: Confirm the API readiness endpoint
+  ansible.builtin.command:
+    argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=20s, get, --raw=/readyz]
+  changed_when: false
+- name: Generate a unique health resource suffix
+  ansible.builtin.command: cat /proc/sys/kernel/random/uuid
+  register: health_uuid
+  changed_when: false
+- name: Run a disposable pod network and DNS probe
+  block:
+    - name: Render health resources
+      ansible.builtin.template:
+        src: health.yaml.j2
+        dest: "{{ remote_state }}/health-{{ health_uuid.stdout }}.yaml"
+        mode: '0600'
+    - name: Create an isolated server and client on the pod network
+      ansible.builtin.command:
+        argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=30s, apply, -f, "{{ remote_state }}/health-{{ health_uuid.stdout }}.yaml"]
+    - name: Wait for real DNS resolution and cross-pod HTTP
+      ansible.builtin.command:
+        argv: [kubectl, --kubeconfig, "{{ admin_config }}", -n, default, wait, --for=condition=complete, "job/mts-health-{{ health_uuid.stdout }}", --timeout=180s]
+      changed_when: false
+    - name: Read successful health evidence
+      ansible.builtin.command:
+        argv: [kubectl, --kubeconfig, "{{ admin_config }}", -n, default, logs, "job/mts-health-{{ health_uuid.stdout }}", --all-containers]
+      register: health_result
+      changed_when: false
+      failed_when: "'MTS_DNS_AND_POD_NETWORK_OK' not in health_result.stdout"
+  rescue:
+    - name: Collect bounded health diagnostics
+      ansible.builtin.command:
+        argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=20s, -n, default, get, pods, -l, "mts-health={{ health_uuid.stdout }}", -o, wide]
+      changed_when: false
+      failed_when: false
+    - name: Propagate health failure
+      ansible.builtin.fail:
+        msg: DNS or pod network health check failed; inspect cluster events and CNI before retry.
+  always:
+    - name: Remove health workload resources
+      ansible.builtin.command:
+        argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=30s, delete, -f, "{{ remote_state }}/health-{{ health_uuid.stdout }}.yaml", --ignore-not-found=true, --wait=true, --timeout=60s]
+    - name: Remove health manifest
+      ansible.builtin.file:
+        path: "{{ remote_state }}/health-{{ health_uuid.stdout }}.yaml"
+        state: absent
