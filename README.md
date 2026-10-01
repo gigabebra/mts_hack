@@ -5,8 +5,9 @@ Prometheus измеряет HTTP и состояние узла, Fluentd дос�
 логи в Loki. `make verify` связывает HTTP-ответ и access-log одним Request-ID
 и отдельно подтверждает увеличение агрегированного HTTP counter.
 
-MVP принят независимым проверяющим на чистой Ubuntu 24.04.5:
-кодовая ревизия `337d0c671617929ebf162e1216099524fe8d611d`.
+Первоначальный MVP принят на чистой Ubuntu 24.04.5, кодовая ревизия
+`337d0c671617929ebf162e1216099524fe8d611d`. Сейчас выполняется назначенный
+переход на IPv6-only для внешнего доступа и внутреннего обмена.
 [Протокол и матрица требований](docs/acceptance/mvp-acceptance.md),
 [реестр](docs/status.md), [черновик паспорта](docs/passport/mvp-draft.md).
 Этап FINAL не начат.
@@ -57,13 +58,17 @@ GitHub, Docker Hub, quay.io и registry.k8s.io. Управляющей маши�
 PyPI/files.pythonhosted.org, get.helm.sh, dl.k8s.io и Helm chart repositories.
 Этот размер проверен чистой приемкой; минимальная конфигурация не определялась.
 На VM не должно быть другого
-Kubernetes/CNI. Примерные CIDR `10.244.0.0/16` и `10.96.0.0/12` должны
+Kubernetes/CNI. Примерные CIDR `fd4d:5453:1000:100::/56` и
+`fd4d:5453:1000:200::/112` должны
 не пересекаться с вашими сетями/VPN.
 
 Можно установить обычный Ubuntu Server 24.04 из ISO или использовать
 официальный Ubuntu 24.04 cloud image. Подготовка VM не требует Kubernetes
 ресурсов. Задайте стабильный IP/hostname и SSH public key; приватный ключ
-остается на управляющей машине. Не открывайте NodePort в Internet для MVP.
+остается на управляющей машине. Нужны маршрутизируемый IPv6 узла (ULA или
+GUA), рабочие IPv6 DNS/NTP и IPv6 на управляющей машине, включая `::1`.
+IPv4 у ОС допускается только для внешней загрузки пакетов/образов.
+Не открывайте NodePort в Internet для MVP.
 
 На управляющей Ubuntu 24.04 (это может быть та же VM при доступном SSH):
 
@@ -76,14 +81,16 @@ cp config/environments/ubuntu.example.yaml config/environments/ubuntu.local.yaml
 ```
 
 Отредактируйте только локальный environment: имя/IP узла, SSH host/user/port,
-путь к вашему ключу, kubeconfig и непересекающиеся CIDR. Этот файл игнорируется
+путь к вашему ключу, kubeconfig, IPv6 DNS/NTP и непересекающиеся IPv6 CIDR.
+`node_ip` и `ssh_host` задавайте без скобок; URL содержит IPv6 в `[скобках]`.
+Этот файл игнорируется
 Git. Все команды запускайте из корня репозитория. SSH host key нужно проверить
 и принять до bootstrap обычным SSH-подключением. `make tools` устанавливает
 инструменты в `.venv` и `.cache/tools`, без Nix и без root на управляющей машине.
 
 До установки должен проходить `ssh <user>@<VM> sudo -n true`. На VM необходимы
 исходящий HTTPS/DNS/NTP; с управляющей машины — SSH, Kubernetes API TCP 6443
-и HTTP TCP 30080. Для одноузлового стенда сетевой overlay остается внутри VM;
+и HTTP TCP 30080 по IPv6. Для одноузлового стенда сетевой overlay остается внутри VM;
 дополнительные узлы в MVP не поддерживаются.
 
 На проверенной VM путь от `make tools` до первого успешного `make verify`
@@ -117,6 +124,8 @@ loopback port-forward к Prometheus/Loki и закрывает их при за�
 числе при отказе. Код 0 означает успех всех обязательных проверок:
 
 - Ready node/workloads и Bound PVC; актуальные Gateway/HTTPRoute conditions.
+- Фактические IPv6 API/InternalIP/Pod/Service/EndpointSlice и единственный
+  Calico IPv6 pool; IPv4/mapped IPv4/dual-stack не проходят проверку.
 - HTTP 200 и ровно 12 bytes `Hello World!`, совпадающий Request-ID; fallback
   для невалидного ID, отрицательный маршрут и настоящий missing-file 404.
 - Живые targets Traefik/node exporter/kube state metrics/Prometheus, свежие
@@ -153,23 +162,23 @@ kubectl get nodes
 kubectl get pods -A
 kubectl get gatewayclass
 kubectl -n demo get gateway,httproute
-curl -i -H 'X-Request-ID: manual-check-01' http://<VM_IP>:30080/
+curl -6 --noproxy '*' -g -i -H 'X-Request-ID: manual-check-01' 'http://[<VM_IPv6>]:30080/'
 ```
 
 Метрики (отдельный терминал для port-forward):
 
 ```bash
-kubectl -n monitoring port-forward --address=127.0.0.1 service/monitoring-prometheus 9090:9090
-curl -s http://127.0.0.1:9090/api/v1/targets
-curl -sG http://127.0.0.1:9090/api/v1/query \
+kubectl -n monitoring port-forward --address=::1 service/monitoring-prometheus 9090:9090
+curl -6 --noproxy '*' -gs 'http://[::1]:9090/api/v1/targets'
+curl -6 --noproxy '*' -gsG 'http://[::1]:9090/api/v1/query' \
   --data-urlencode 'query=traefik_entrypoint_requests_total{namespace="edge",service="traefik-metrics",endpoint="metrics",entrypoint="web",code="200",method="GET"}'
 ```
 
 Логи (еще один терминал):
 
 ```bash
-kubectl -n logging port-forward --address=127.0.0.1 service/loki 3100:3100
-curl -sG http://127.0.0.1:3100/loki/api/v1/query_range \
+kubectl -n logging port-forward --address=::1 service/loki 3100:3100
+curl -6 --noproxy '*' -gsG 'http://[::1]:3100/loki/api/v1/query_range' \
   --data-urlencode 'query={app="hello",namespace="demo",stream="stdout"} |= "manual-check-01"'
 ```
 

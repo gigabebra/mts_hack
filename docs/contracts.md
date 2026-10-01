@@ -1,4 +1,4 @@
-# Контракт MVP, версия 1
+# Контракт MVP, версия 2 — IPv6
 
 Владельцы и границы — `AGENTS.md`. Версии и проверенные SHA256 публичных
 артефактов — `config/versions.yaml`; OCI index/manifest digests —
@@ -32,15 +32,23 @@ checkout; ресурсоемкие прогоны по очереди. Спос�
 чистой ОС — официальный Ubuntu 24.04 cloud image с проверкой SHA256 и
 cloud-init; обычная установка Ubuntu Server ISO также допустима.
 
-Pod CIDR `10.244.0.0/16`, service CIDR `10.96.0.0/12`, IPv4, Calico VXLAN,
-BGP выключен. Проверены отличия от известных homelab/VPN сетей 10.42/16,
-10.43/16, 10.0.0/24, 10.10.11/24 и 192.168.X/24. Bootstrap дополнительно
-проверяет локальные маршруты и не выполняет kubeadm reset автоматически.
+Сетевой контракт после назначения IPv6: single-stack IPv6 для SSH, Kubernetes
+API, node InternalIP, Pod, Service, EndpointSlice, Gateway/NodePort и всех
+соединений наблюдаемости. Пример Pod CIDR `fd4d:5453:1000:100::/56`, service
+CIDR `fd4d:5453:1000:200::/112`; это отдельный ULA-префикс, не LAN узла.
+Calico VXLAN IPv6, BGP выключен. Bootstrap проверяет IPv6-маршруты,
+пересечения и прежнюю identity; смена IPv4 identity не разрешает reset.
+Для перехода создается отдельный кластер, прежняя VM и ее история сохраняются.
+IPv4 у ОС разрешен пользователем только для внешних загрузок пакетов/образов;
+для работы Kubernetes и приложения IPv4-подсети и fallback не используются.
 
 Environment — `config/environments/<ENV>.local.yaml`, пример
 `config/environments/ubuntu.example.yaml`. Верхние ключи: `node_name`,
 `node_ip`, `ssh_host`, `ssh_user`, `ssh_private_key_file`, `ssh_port`,
-`pod_cidr`, `service_cidr`, `node_port`, `kubeconfig`, `data_root`.
+`pod_cidr`, `service_cidr`, `node_port`, `kubeconfig`, `data_root`,
+`dns_servers`, `ntp_servers` (списки IPv6-адресов). `node_ip` и `ssh_host` —
+IPv6 literals без скобок; в HTTP(S) URL литерал обязательно в `[скобках]`.
+Kubernetes DNS upstream и NTP используют IPv6. Loopback port-forward — `::1`.
 Пути относительно корня проекта. Общие команды берут kubeconfig только из
 environment; унаследованный KUBECONFIG не меняет выбранный стенд. Компонентные
 checks принимают явный `--kubeconfig`.

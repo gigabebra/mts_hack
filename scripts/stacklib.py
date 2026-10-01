@@ -2,6 +2,7 @@
 import contextlib
 import fcntl
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -16,7 +17,18 @@ VERSIONS = yaml.safe_load((ROOT / 'config/versions.yaml').read_text())
 IMAGES = yaml.safe_load((ROOT / 'config/images.lock.yaml').read_text())['images']
 
 
+def direct_api_env(source=None):
+    result = dict(os.environ if source is None else source)
+    for key in tuple(result):
+        if key.lower() in ('http_proxy', 'https_proxy', 'all_proxy'):
+            result.pop(key)
+    return result
+
+
 def command(argv, *, capture=False, timeout=900, **kwargs):
+    if '--kubeconfig' in argv:
+        # API access is direct IPv6 even if artifact downloads use an HTTP proxy.
+        kwargs['env'] = direct_api_env(kwargs.pop('env', None))
     return subprocess.run([str(x) for x in argv], check=True, text=True,
                           capture_output=capture, timeout=timeout, **kwargs)
 
@@ -35,14 +47,32 @@ def environment(name):
     env.setdefault('node_port', 30080)
     env.setdefault('data_root', '/var/lib/mts-stack')
     env.setdefault('ssh_port', 22)
-    env.setdefault('pod_cidr', '10.244.0.0/16')
-    env.setdefault('service_cidr', '10.96.0.0/12')
+    env.setdefault('pod_cidr', 'fd4d:5453:1000:100::/56')
+    env.setdefault('service_cidr', 'fd4d:5453:1000:200::/112')
+    ipv6_host(env['node_ip'])
+    if ipaddress.IPv6Address(env['node_ip']).is_loopback:
+        raise ValueError('node_ip must be reachable outside the node, not loopback')
+    ipv6_host(env['ssh_host'])
+    for key in ('pod_cidr', 'service_cidr'):
+        if ipaddress.ip_network(env[key]).version != 6:
+            raise ValueError(f'{key} must be an IPv6 network; existing IPv4 clusters require a separate new VM')
     for key in ('kubeconfig', 'ssh_private_key_file'):
         if env.get(key):
             p = Path(os.path.expanduser(env[key]))
             env[key] = str(p if p.is_absolute() else ROOT / p)
     env['_file'] = str(path)
     return env
+
+
+def ipv6_host(value):
+    address = ipaddress.IPv6Address(value)
+    if address.ipv4_mapped or address.is_unspecified or address.is_multicast or address.is_link_local:
+        raise ValueError('Expected an unscoped unicast IPv6 address')
+    return str(address)
+
+
+def http_url(host, port):
+    return f'http://[{ipv6_host(host)}]:{int(port)}'
 
 
 def kubectl(env, *args, capture=False, timeout=300, **kwargs):
@@ -82,6 +112,24 @@ def locked_image(ref):
 
 def lock_document(node):
     if isinstance(node, dict):
+        if node.get('name') == 'traefik' and 'image' in node:
+            node['args'] = [arg.replace('.address=:', '.address=[::]:')
+                            if arg.lower().startswith('--entrypoints.') else arg
+                            for arg in node.get('args', [])]
+        if node.get('name') == 'kube-prometheus-stack' and 'image' in node:
+            node['args'] = [arg.replace('--web.listen-address=:', '--web.listen-address=[::]:')
+                            for arg in node.get('args', [])]
+        if node.get('name') == 'node-exporter' and 'image' in node:
+            for item in node.get('env', []):
+                if item.get('name') == 'HOST_IP':
+                    item['value'] = '::'
+        if node.get('kind') == 'Service' and node.get('apiVersion') == 'v1':
+            spec = node.setdefault('spec', {})
+            if spec.get('type') != 'ExternalName':
+                if spec.get('ipFamilies', ['IPv6']) != ['IPv6']:
+                    raise ValueError('IPv4 or dual-stack Service is forbidden in the IPv6-only profile')
+                spec['ipFamilies'] = ['IPv6']
+                spec['ipFamilyPolicy'] = 'SingleStack'
         for key, value in node.items():
             if key == 'image' and isinstance(value, str):
                 node[key] = locked_image(value)
@@ -114,18 +162,18 @@ def forward(env, namespace, service, remote_port, directory):
     log = Path(directory) / f'port-forward-{namespace}.log'
     with log.open('w+') as stream:
         process = subprocess.Popen([tool('kubectl'), '--kubeconfig', env['kubeconfig'],
-                                    '-n', namespace, 'port-forward', '--address=127.0.0.1',
+                                    '-n', namespace, 'port-forward', '--address=::1',
                                     'service/' + service, ':' + str(remote_port)],
-                                   stdout=stream, stderr=stream, text=True)
+                                   stdout=stream, stderr=stream, text=True, env=direct_api_env())
         try:
             import re
             until = time.monotonic() + 30
             while time.monotonic() < until:
                 stream.flush()
                 text = log.read_text()
-                match = re.search(r'Forwarding from 127.0.0.1:(\d+)', text)
+                match = re.search(r'Forwarding from \[::1\]:(\d+)', text)
                 if match:
-                    yield 'http://127.0.0.1:' + match.group(1)
+                    yield http_url('::1', match.group(1))
                     return
                 if process.poll() is not None:
                     raise RuntimeError('port-forward failed: ' + text[-2000:])

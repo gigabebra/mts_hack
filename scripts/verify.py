@@ -11,7 +11,10 @@ import time
 import urllib.request
 import uuid
 
-from stacklib import ROOT, VERSIONS, command, environment, forward, kubectl, resource, write_json
+from stacklib import ROOT, VERSIONS, command, environment, forward, http_url, kubectl, resource, write_json
+from ipv6_checks import network_evidence
+
+HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def now():
@@ -124,8 +127,10 @@ def main():
             raise ValueError('Unsupported profile: only mvp is implemented; final checks cannot be skipped')
         env = environment(args.env)
         report['environment'] = {'name': args.env, 'node_name': env['node_name']}
-        base = 'http://' + env['node_ip'] + ':' + str(env['node_port'])
+        base = http_url(env['node_ip'], env['node_port'])
         check(report, 'readiness', 'Expected node, workloads Ready, PVC Bound', lambda: readiness(env))
+        check(report, 'ipv6_network', 'IPv6 API, node, Pod/Service/EndpointSlice addresses and Calico pool',
+              lambda: network_evidence(env))
         common = ['--kubeconfig', env['kubeconfig'], '--base-url', base, '--run-id', run_id,
                   '--request-id', run_id, '--error-marker', run_id + '-err', '--timeout', '90']
         check(report, 'gateway_conditions', 'Current Accepted/Programmed/ResolvedRefs',
@@ -135,7 +140,7 @@ def main():
             loki = stack.enter_context(forward(env, 'logging', 'loki', 3100, directory))
             def warmup():
                 req = urllib.request.Request(base + '/', headers={'X-Request-ID': run_id + '-warmup'})
-                with urllib.request.urlopen(req, timeout=10) as response:
+                with HTTP.open(req, timeout=10) as response:
                     if response.status != 200 or response.read() != b'Hello World!':
                         raise ValueError('Warm-up did not reach the expected app')
                 return 'HTTP 200; exact body'
@@ -165,7 +170,7 @@ def main():
     except Exception as error:
         report['checks'].append({'name': 'orchestration', 'status': 'fail', 'expected': 'All required checks execute', 'actual': str(error)})
     finally:
-        required = {'readiness', 'gateway_conditions', 'metrics_baseline', 'http', 'metrics_delta', 'logs', 'runtime_security'}
+        required = {'readiness', 'ipv6_network', 'gateway_conditions', 'metrics_baseline', 'http', 'metrics_delta', 'logs', 'runtime_security'}
         missing = required - {c['name'] for c in report['checks']}
         for name in sorted(missing):
             report['checks'].append({'name': name, 'status': 'fail', 'expected': 'Required MVP check', 'actual': 'Not executed because prerequisite failed'})

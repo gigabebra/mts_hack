@@ -54,4 +54,5 @@ command([sys.executable, 'deploy/monitoring/tests/check_render.py', '--helm', to
          '--chart', ROOT / '.cache/downloads/monitoring.tgz'], timeout=180)
 command([sys.executable, '-m', 'unittest', 'discover', '-s', 'ansible/tests', '-v'])
 command([sys.executable, 'scripts/check-gateway.test.py'], timeout=180)
+command([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/unit', '-v'], timeout=180)
 print('PASS: Python/Ansible syntax, Helm lint/render, locked images, component negative checks')

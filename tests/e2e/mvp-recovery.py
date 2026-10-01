@@ -12,13 +12,15 @@ import urllib.request
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
-from stacklib import ROOT, command, deployment_lock, environment, forward, kubectl, resource, write_json
+from stacklib import ROOT, command, deployment_lock, environment, forward, http_url, kubectl, resource, write_json
+
+HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def api(url, path, params=None):
     if params:
         path += '?' + urllib.parse.urlencode(params)
-    with urllib.request.urlopen(url + path, timeout=10) as response:
+    with HTTP.open(url + path, timeout=10) as response:
         return json.load(response)
 
 
@@ -37,7 +39,7 @@ def poll(operation, timeout=120):
 
 
 def http(base, marker):
-    with urllib.request.urlopen(urllib.request.Request(base + '/', headers={'X-Request-ID': marker}), timeout=10) as response:
+    with HTTP.open(urllib.request.Request(base + '/', headers={'X-Request-ID': marker}), timeout=10) as response:
         if response.read() != b'Hello World!' or response.headers.get('X-Request-ID') != marker:
             raise ValueError('Unexpected Gateway response')
 
@@ -61,7 +63,7 @@ def collector_state(env):
     for line in position_text.splitlines():
         path, offset, inode = line.split('\t')
         positions[(path, inode)] = int(offset, 16)
-    ruby = 'j=JSON.parse(Net::HTTP.get(URI("http://127.0.0.1:24220/api/plugins.json"))); puts JSON.generate(j["plugins"].find{|p| p["plugin_id"]=="nginx_cri"})'
+    ruby = 'j=JSON.parse(Net::HTTP.get(URI("http://[::1]:24220/api/plugins.json"))); puts JSON.generate(j["plugins"].find{|p| p["plugin_id"]=="nginx_cri"})'
     metrics = json.loads(kubectl(env, '-n', 'logging', 'exec', 'daemonset/fluentd', '-c', 'fluentd',
                                 '--', 'ruby', '-rnet/http', '-rjson', '-e', ruby, capture=True).stdout)
     return positions, metrics['emit_records']
@@ -92,7 +94,7 @@ def main():
     directory.mkdir(parents=True)
     report = {'run_id': run_id, 'revision': command(['git', 'rev-parse', 'HEAD'], capture=True).stdout.strip(),
               'status': 'fail', 'checks': [], 'started_at': time.time()}
-    base = 'http://' + env['node_ip'] + ':' + str(env['node_port'])
+    base = http_url(env['node_ip'], env['node_port'])
     try:
         with deployment_lock(args.env):
             nodes = resource(env, 'nodes')['items']
