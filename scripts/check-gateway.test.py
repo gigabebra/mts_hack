@@ -94,6 +94,21 @@ class ConditionTests(unittest.TestCase):
         resources["gateway"]["status"]["listeners"][0]["attachedRoutes"] = 0
         self.assert_failed(resources)
 
+    def test_reject_nonusable_native_ipv6_status_addresses(self):
+        for value in ("::", "::1", "ff02::1", "fe80::1", "2001:db8::10%eth0"):
+            with self.subTest(value=value):
+                resources = snapshot()
+                resources["gateway"]["status"]["addresses"][0]["value"] = value
+                self.assert_failed(resources)
+
+    def test_gateway_status_matches_expected_node_by_canonical_ip(self):
+        resources = snapshot()
+        checks = GATEWAY.conditions_checks(resources, "2001:0db8:0:0:0:0:0:0010")
+        self.assertTrue(all(c["status"] == "pass" for c in checks))
+        checks = GATEWAY.conditions_checks(resources, "2001:db8::99")
+        self.assertIn("fail", [c["status"] for c in checks])
+        self.assertNotIn("2001:db8", json.dumps(checks))
+
     def test_duplicate_condition_is_not_accepted(self):
         resources = snapshot()
         resources["gatewayclass"]["status"]["conditions"] *= 2
@@ -232,6 +247,24 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(len(calls), 3)
         for command in calls:
             self.assertEqual(command[command.index("--kubeconfig") + 1], str(self.kubeconfig.resolve()))
+
+    def test_expected_address_cli_rejects_invalid_input_and_wrong_status(self):
+        for address in ("::", "::1", "ff02::1", "fe80::1", "192.0.2.10", "::ffff:192.0.2.10", "2001:db8::10%eth0"):
+            with self.subTest(address=address):
+                code, report = self.run_fixture(args=self.args + ["--expected-address", address])
+                self.assertEqual(code, 1)
+                self.assertEqual(report["status"], "fail")
+
+        resources = snapshot()
+        def run(command, **kwargs):
+            kind = command[command.index("get") + 1].split(".")[0]
+            return mock.Mock(returncode=0, stdout=json.dumps(resources[kind]))
+        with mock.patch.object(GATEWAY.subprocess, "run", side_effect=run):
+            matching = self.args + ["--mode", "conditions", "--expected-address", "2001:db8::10"]
+            self.assertEqual(GATEWAY.main(matching), 0)
+            mismatch = self.args + ["--mode", "conditions", "--expected-address", "2001:db8::99"]
+            self.assertEqual(GATEWAY.main(mismatch), 1)
+        self.assertEqual(json.loads(self.output.read_text())["status"], "fail")
 
     def test_kubectl_does_not_inherit_ipv4_proxy_environment(self):
         resources = snapshot()
