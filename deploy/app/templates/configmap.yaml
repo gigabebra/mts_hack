@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+data:
+  index.html: "Hello World!"
+  nginx.conf: |
+    {{- .Files.Get "files/nginx.conf" | nindent 4 }}

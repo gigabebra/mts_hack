@@ -1,0 +1,3 @@
+gatewayClassName: mts-traefik
+controllerName: traefik.io/gateway-controller
+listenerPort: 8000

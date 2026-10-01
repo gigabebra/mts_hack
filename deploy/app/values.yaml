@@ -1,0 +1,10 @@
+image: docker.io/nginxinc/nginx-unprivileged:1.28.0-alpine
+imagePullPolicy: IfNotPresent
+replicas: 1
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 250m
+    memory: 96Mi

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: gateway
+description: Standard Gateway API resources for the MVP
+type: application
+version: 0.1.0
+appVersion: "1.4.0"

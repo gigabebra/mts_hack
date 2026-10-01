@@ -1,0 +1,87 @@
+# Apply to the verified upstream Traefik 37.4.0 chart, release traefik in edge.
+# The integrator sets statusAddress.ip and ports.web.nodePort from environment.
+fullnameOverride: traefik
+image:
+  registry: docker.io
+  repository: library/traefik
+  tag: v3.6.2
+deployment:
+  replicas: 1
+  revisionHistoryLimit: 2
+ingressClass:
+  enabled: false
+gateway:
+  enabled: false
+gatewayClass:
+  enabled: false
+api:
+  dashboard: false
+providers:
+  kubernetesCRD:
+    enabled: false
+  kubernetesIngress:
+    enabled: false
+    publishedService:
+      enabled: false
+  kubernetesGateway:
+    enabled: true
+    experimentalChannel: false
+    statusAddress:
+      ip: ""
+      service:
+        enabled: false
+service:
+  type: NodePort
+ports:
+  traefik:
+    expose:
+      default: false
+  web:
+    port: 8000
+    exposedPort: 80
+    nodePort: 30080
+    expose:
+      default: true
+  websecure: null
+  metrics:
+    port: 9100
+    exposedPort: 9100
+    expose:
+      default: false
+metrics:
+  prometheus:
+    entryPoint: metrics
+    addEntryPointsLabels: true
+    addRoutersLabels: false
+    addServicesLabels: true
+    service:
+      enabled: true
+    serviceMonitor:
+      enabled: false
+logs:
+  general:
+    format: json
+    level: INFO
+  access:
+    enabled: false
+rbac:
+  enabled: true
+  namespaced: false
+resources:
+  requests:
+    cpu: 50m
+    memory: 96Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
