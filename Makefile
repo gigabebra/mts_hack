@@ -2,6 +2,8 @@ ENV ?= ubuntu
 PROFILE ?= mvp
 PYTHON := $(CURDIR)/.venv/bin/python
 export PATH := $(CURDIR)/.cache/tools:$(CURDIR)/.venv/bin:$(PATH)
+export ANSIBLE_LOCAL_TEMP := $(CURDIR)/.state/ansible/tmp
+export ANSIBLE_SSH_CONTROL_PATH_DIR := $(CURDIR)/.state/ansible/cp
 
 .PHONY: tools lint bootstrap health deploy verify verify-idempotency verify-recovery evidence
 tools:

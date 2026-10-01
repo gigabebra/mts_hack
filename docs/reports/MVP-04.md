@@ -42,15 +42,15 @@ request URI. Дополнительно проверяются источник,
 Команды из корня worktree:
 
 ```sh
-/home/Bebroid/mts_hack/.cache/tools/helm lint deploy/logging
-/home/Bebroid/mts_hack/.cache/tools/helm template logging deploy/logging --namespace logging
-/home/Bebroid/mts_hack/.cache/tools/helm template logging deploy/logging --namespace logging --set dataRoot=/srv/mts-data
+.cache/tools/helm lint deploy/logging
+.cache/tools/helm template logging deploy/logging --namespace logging
+.cache/tools/helm template logging deploy/logging --namespace logging --set dataRoot=/srv/mts-data
 # Expected nonzero (негативный тест):
-/home/Bebroid/mts_hack/.cache/tools/helm lint deploy/logging --set dataRoot=relative
-/home/Bebroid/mts_hack/.venv/bin/yamllint -c /home/Bebroid/mts_hack/.yamllint deploy/logging/Chart.yaml deploy/logging/values.yaml deploy/logging/files/loki.yaml
+.cache/tools/helm lint deploy/logging --set dataRoot=relative
+.venv/bin/yamllint -c .yamllint deploy/logging/Chart.yaml deploy/logging/values.yaml deploy/logging/files/loki.yaml
 python3 -m py_compile scripts/check-logs.py
 python3 -m unittest discover -s deploy/logging/tests -p 'test_*.py' -v
-/home/Bebroid/mts_hack/.venv/bin/python deploy/logging/tests/docker_smoke.py --helm /home/Bebroid/mts_hack/.cache/tools/helm
+.venv/bin/python deploy/logging/tests/docker_smoke.py --helm .cache/tools/helm
 git diff --check
 ```
 
