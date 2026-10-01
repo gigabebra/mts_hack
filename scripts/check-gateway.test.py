@@ -229,6 +229,30 @@ class ReportTests(unittest.TestCase):
         for command in calls:
             self.assertEqual(command[command.index("--kubeconfig") + 1], str(self.kubeconfig.resolve()))
 
+    def test_kubectl_does_not_inherit_ipv4_proxy_environment(self):
+        resources = snapshot()
+        inherited = {name: "http://192.0.2.1:3128" for name in (
+            "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy",
+            "NO_PROXY", "no_proxy", "HtTpS_PrOxY")}
+        inherited["MTS_PROXY_FIXTURE_KEEP"] = "preserved"
+
+        def run(command, **kwargs):
+            self.assertIn("env", kwargs)
+            environment = kwargs["env"]
+            self.assertFalse(any(name.lower() in {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}
+                                 for name in environment))
+            self.assertEqual(environment["MTS_PROXY_FIXTURE_KEEP"], "preserved")
+            self.assertEqual(environment.get("PATH"), GATEWAY.os.environ.get("PATH"))
+            kind = command[command.index("get") + 1].split(".")[0]
+            return mock.Mock(returncode=0, stdout=json.dumps(resources[kind]))
+
+        args = self.args + ["--mode", "conditions", "--timeout", "1"]
+        with mock.patch.dict(GATEWAY.os.environ, inherited), \
+                mock.patch.object(GATEWAY.subprocess, "run", side_effect=run) as subprocess_run:
+            self.assertEqual(GATEWAY.main(args), 0)
+            self.assertEqual(subprocess_run.call_count, 3)
+            self.assertEqual(GATEWAY.os.environ["HTTPS_PROXY"], "http://192.0.2.1:3128")
+
     def test_malformed_api_json_does_not_pass(self):
         with mock.patch.object(GATEWAY.subprocess, "run", return_value=mock.Mock(returncode=0, stdout="{}")):
             self.assertEqual(GATEWAY.main(self.args + ["--mode", "conditions"]), 1)

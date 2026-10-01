@@ -110,6 +110,10 @@ def remaining(deadline):
 
 
 def wait_conditions(args, deadline):
+    # kubectl uses Go's proxy environment independently of urllib's ProxyHandler.
+    # Keep standalone checks on the direct IPv6 API transport too.
+    kubectl_env = {key: value for key, value in os.environ.items()
+                   if key.lower() not in {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}}
     last_checks = []
     attempts = 0
     while True:
@@ -124,7 +128,8 @@ def wait_conditions(args, deadline):
                 if kind != "gatewayclass":
                     command.extend(["--namespace", "demo"])
                 # Even with a KUBECONFIG in the calling environment, always pass the explicit file.
-                result = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
+                result = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False,
+                                        env=kubectl_env)
                 if result.returncode:
                     raise RuntimeError(f"kubectl get {kind} failed (exit {result.returncode})")
                 resources[kind] = json.loads(result.stdout)

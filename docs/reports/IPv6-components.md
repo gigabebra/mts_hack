@@ -48,3 +48,10 @@ Root подтвердил эту реализацию. Operator-created headless
 [Prometheus argument generation](https://github.com/prometheus-operator/prometheus-operator/blob/v0.87.1/pkg/prometheus/promcfg.go),
 [Loki v3.6.2 common ring propagation](https://github.com/grafana/loki/blob/v3.6.2/pkg/loki/config_wrapper.go)
 и Fluentd 1.19 HTTP helper из закрепленного image.
+
+Дополнение после независимого ревью: standalone Gateway checker передает
+каждому `kubectl` subprocess отдельный env без HTTP/HTTPS/ALL/NO_PROXY
+независимо от регистра имени. Environment родительского процесса и прочие
+переменные сохраняются. Fixture с унаследованным IPv4 proxy проверяет env
+всех трех вызовов kubectl; 14 Gateway tests — pass. Metrics/logs checkers
+не запускают kubectl/subprocess и уже используют ProxyHandler({}).
