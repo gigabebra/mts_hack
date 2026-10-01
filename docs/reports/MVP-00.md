@@ -1,5 +1,11 @@
 # MVP-00
 
+> Исторический отчет первоначального MVP на IPv4; итоговая приемка этого
+> этапа относится к `337d0c6`. Приведенные ниже статусы, команды и числа
+> описывают ту ревизию, а не текущий dual-stack. Актуальный результат:
+> [интеграция dual-stack](DUAL-INTEGRATION.md) и
+> [независимая приемка](../acceptance/dual-stack-acceptance.md).
+
 Статус: done. Дата: 2026-10-01. Runtime-приемка матрицы ожидает MVP-05/06.
 
 Созданы AGENTS.md, docs/contracts.md, docs/status.md, config/versions.yaml,

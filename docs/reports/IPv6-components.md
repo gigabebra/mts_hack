@@ -1,5 +1,10 @@
 # IPv6: Gateway, application, monitoring, logging
 
+> Историческая попытка IPv6-only, замененная требованием dual-stack.
+> Ограничения IPv4 и конфигурации ниже не действуют; принятой strict
+> IPv6-only ревизии нет. Текущая реализация: [DUAL-COMPONENTS.md](DUAL-COMPONENTS.md)
+> и [сетевой контракт](../networking.md). Результаты попытки сохранены без изменений.
+
 Дата: 2026-10-01. Статус: `ready_for_integration`. Live Kubernetes acceptance
 выполняет интегратор; этот отчет не подменяет ее.
 

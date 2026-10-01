@@ -1,5 +1,10 @@
 # IPv6 infrastructure — ready_for_integration
 
+> Историческая попытка IPv6-only, замененная требованием dual-stack.
+> Ограничения IPv4 и конфигурации ниже не действуют; принятой strict
+> IPv6-only ревизии нет. Текущая реализация: [DUAL-INFRA.md](DUAL-INFRA.md)
+> и [сетевой контракт](../networking.md). Результаты попытки сохранены без изменений.
+
 Scope: `ansible/`, `config/environments/ubuntu.example.yaml`. Живые VM и
 общие файлы не изменялись; bootstrap/reset/SSH автором отчета не запускались.
 

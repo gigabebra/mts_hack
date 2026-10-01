@@ -1,5 +1,12 @@
 # Ubuntu bootstrap MVP-01: dual-stack, IPv6 основной
 
+Команды ниже выполняются из корня checkout после `make tools`. Для прямого
+вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
+
+```sh
+export PATH="$PWD/.cache/tools:$PWD/.venv/bin:$PATH"
+```
+
 Контракт — `docs/contracts.md` версии 3. Интегратор запускает bootstrap на
 новой выделенной Ubuntu 24.04 amd64 VM: 4 vCPU, nominal 8 GiB RAM, диск
 60 GiB. Guard требует минимум 7000 MiB MemTotal, 50 GiB root filesystem,

@@ -1,5 +1,12 @@
 # Fluentd → Loki для MVP
 
+Команды ниже выполняются из корня checkout после `make tools`. Для прямого
+вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
+
+```sh
+export PATH="$PWD/.cache/tools:$PWD/.venv/bin:$PATH"
+```
+
 Chart `logging` ставится в namespace `logging`. Интегратор передает
 `images.loki`, `images.fluentd`, `dataRoot`; общий post-renderer заменяет image
 tags принятым digest lock. Loki требует заранее созданный PV `mts-loki`,

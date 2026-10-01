@@ -1,5 +1,12 @@
 # Мониторинг MVP
 
+Команды ниже выполняются из корня checkout после `make tools`. Для прямого
+вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
+
+```sh
+export PATH="$PWD/.cache/tools:$PWD/.venv/bin:$PATH"
+```
+
 `values.yaml` применяется к архиву kube-prometheus-stack **80.6.0** из
 `config/versions.yaml`; Helm release `monitoring`, namespace `monitoring`.
 Устанавливать CRDs до release `monitoring-extras` из `extras/`. Namespace
@@ -78,8 +85,10 @@ URL API допускает IPv4 или IPv6 literal с квадратными с
 `traefik_entrypoint_requests_total{namespace="edge",service="traefik-metrics",endpoint="metrics",entrypoint="web",code="200",method="GET"}`.
 В `/api/v1/query` передается **range selector**, не `query_range` с
 шагом и не обычный instant vector: matrix содержит timestamps сохраненных
-scrape samples. Все samples должны быть не старше 45s; будущие timestamps
-более чем на 5s отклоняются. Verify требует sample после времени baseline,
+scrape samples. Последний sample каждой серии должен быть не старше 45s;
+timestamp этого sample более чем на 5s в будущем отклоняется. Исторические
+samples для сравнения с baseline и проверки reset могут быть старше 45s.
+Verify требует sample после времени baseline,
 полное совпадение labels серий, наличие исходного sample и отсутствие
 падения счетчика между любыми соседними сохраненными samples. Таким образом,
 reset с последующим ростом выше baseline также дает fail. Reset, полностью
@@ -91,7 +100,7 @@ JSON содержит query/raw_query, инфраструктурные samples,
 exit 1. Baseline должен быть успешным snapshot того же run ID не старше часа.
 Фоновый HTTP-трафик может увеличить общий delta: это проверка scope, а не
 трассировка Request-ID. Минимальное увеличение должно соответствовать числу
-успешных GET/200 общей нагрузки. Labels подтвердит live-приемка MVP-05/06;
+успешных GET/200 общей нагрузки. Labels подтверждены [live-приемкой](../../docs/acceptance/dual-stack-acceptance.md);
 ни одного собственного Request-ID label не добавляется.
 
 Fixtures запускаются командой:
