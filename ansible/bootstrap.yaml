@@ -27,10 +27,13 @@
           - ansible_facts.processor_vcpus >= 4
           - node_name is match('^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$')
           - node_ip is defined
+          - node_ipv4 is defined
           - pod_cidr is defined
           - service_cidr is defined
-          - dns_servers is defined and dns_servers | mvp_ipv6_servers | length > 0
-          - ntp_servers | default(['2606:4700:f1::123']) | mvp_ipv6_servers | length > 0
+          - pod_cidr_ipv4 is defined
+          - service_cidr_ipv4 is defined
+          - dns_servers is defined and dns_servers | mvp_servers | length > 0
+          - ntp_servers | default(['2606:4700:f1::123']) | mvp_servers | length > 0
           - kubeconfig is defined and kubeconfig | length > 0
           - data_root is match('^/[a-zA-Z0-9_/-]+$') and data_root != '/'
         fail_msg: Explicit single-host Ubuntu 24.04 amd64 environment, 4 CPUs and at least 7000 MiB RAM are required.
@@ -52,11 +55,14 @@
       ansible.builtin.set_fact:
         cluster_exists: "{{ bootstrap_state.results[0].stat.exists }}"
         expected_identity:
-          network_family: IPv6
+          network_family: dual-stack-ipv6-primary
           node_name: "{{ node_name }}"
           node_ip: "{{ node_ip }}"
+          node_ipv4: "{{ node_ipv4 }}"
           pod_cidr: "{{ pod_cidr }}"
           service_cidr: "{{ service_cidr }}"
+          pod_cidr_ipv4: "{{ pod_cidr_ipv4 }}"
+          service_cidr_ipv4: "{{ service_cidr_ipv4 }}"
           dns_servers: "{{ dns_servers }}"
           ntp_servers: "{{ ntp_servers | default(['2606:4700:f1::123']) }}"
           kubernetes: "{{ platform.kubernetes }}"
@@ -75,7 +81,7 @@
       when: bootstrap_state.results[1].stat.exists
     - name: Check routes and usable disk without mutation
       ansible.builtin.script:
-        cmd: "files/preflight.py {{ pod_cidr | quote }} {{ service_cidr | quote }} {{ node_ip | quote }} {{ cluster_exists | ternary('existing', 'new') }}"
+        cmd: "files/preflight.py {{ pod_cidr | quote }} {{ service_cidr | quote }} {{ node_ip | quote }} {{ pod_cidr_ipv4 | quote }} {{ service_cidr_ipv4 | quote }} {{ node_ipv4 | quote }} {{ cluster_exists | ternary('existing', 'new') }}"
         executable: /usr/bin/python3
       changed_when: false
       register: network_preflight
@@ -95,6 +101,7 @@
           - (existing_nodes.stdout | from_json)['items'][0].metadata.name == node_name
           - (existing_nodes.stdout | from_json)['items'][0].status.nodeInfo.kubeletVersion == 'v' ~ platform.kubernetes
           - node_ip in ((existing_nodes.stdout | from_json)['items'][0].status.addresses | selectattr('type', 'equalto', 'InternalIP') | map(attribute='address') | list)
+          - node_ipv4 in ((existing_nodes.stdout | from_json)['items'][0].status.addresses | selectattr('type', 'equalto', 'InternalIP') | map(attribute='address') | list)
       when: cluster_exists
   tasks:
     - name: Prepare operating system

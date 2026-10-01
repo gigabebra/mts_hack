@@ -1,20 +1,24 @@
-# Ubuntu bootstrap MVP-01
+# Ubuntu bootstrap MVP-01: dual-stack, IPv6 основной
 
-Интегратор запускает bootstrap только на выделенной Ubuntu 24.04 amd64 VM:
-4 vCPU, nominal 8 GiB RAM, диск 60 GiB. Guard учитывает накладные расходы ОС:
-минимум 7000 MiB MemTotal, 50 GiB root filesystem, 35 GiB свободного места
-для первой установки и 10 GiB для повторной. Требуются Python3, SSH с sudo
-без интерактивного пароля и синхронизация времени. Cloud image должен
-закончить cloud-init до запуска; установка из Server ISO также поддерживается.
+Контракт — `docs/contracts.md` версии 3. Интегратор запускает bootstrap на
+новой выделенной Ubuntu 24.04 amd64 VM: 4 vCPU, nominal 8 GiB RAM, диск
+60 GiB. Guard требует минимум 7000 MiB MemTotal, 50 GiB root filesystem,
+35 GiB свободного места для установки и 10 GiB для повторного запуска.
+Нужны Python3, SSH с sudo без пароля, завершенный cloud-init и доступные
+DNS/NTP. Установка из Ubuntu Server ISO также поддерживается.
 
 Скопируйте `config/environments/ubuntu.example.yaml` в игнорируемый
-`<ENV>.local.yaml`. Inventory должен содержать ровно один явный хост в группе
-`mvp`; общий wrapper интегратора строит inventory из environment. Например:
+`<ENV>.local.yaml`. `node_ip` — основной стабильный IPv6, `node_ipv4` — IPv4
+той же VM. Документальные адреса `2001:db8:20::10` и `192.0.2.10` заменяются
+реальными. SSH и kubeconfig используют IPv6 по умолчанию. Inventory содержит
+ровно один явный host в группе `mvp`; wrapper строит его из environment.
 
-```ini
-[mvp]
-dedicated ansible_host=2001:db8:20::10 ansible_user=ubuntu ansible_port=22 ansible_python_interpreter=/usr/bin/python3
+```sh
+make bootstrap ENV=ubuntu
+make health ENV=ubuntu
 ```
+
+Прямой запуск с уже подготовленным inventory:
 
 ```sh
 ansible-playbook -i .state/ubuntu/inventory.yaml ansible/bootstrap.yaml \
@@ -23,128 +27,107 @@ ansible-playbook -i .state/ubuntu/inventory.yaml ansible/health.yaml \
   -e @config/environments/ubuntu.local.yaml
 ```
 
-Пути kubeconfig разрешаются относительно корня checkout; итоговый файл
-имеет mode 0600, его каталог — 0700. Playbook нигде не обращается к локальному
-current-context. `health.yaml` обращается только к явному
-`/etc/kubernetes/admin.conf` на выбранной VM. Он пригоден и после
-контролируемого reboot, который запускает интегратор отдельно.
+Пути kubeconfig разрешаются относительно checkout. Файл имеет mode 0600,
+каталог — 0700. Playbooks не используют local current-context; `health.yaml`
+обращается только к `/etc/kubernetes/admin.conf` выбранной VM и пригоден после
+контролируемого reboot интегратором.
 
-Bootstrap сверяет ОС, IP, ресурсы, CIDR и существующую идентичность до
-изменения VM. Чужой кластер, несовпадение versions/environment, частичный
-kubeadm init или недоступный существующий API завершаются ошибкой. Reset
-и upgrade не выполняются. При повторном запуске kubeadm init пропускается;
-настройки ОС, сеть и image digests сверяются повторно. Временные health Pod,
-Service и Job создаются с уникальными именами и удаляются даже после сбоя.
-Они проверяют реальные AAAA Kubernetes и тестового Service, единственную
-IPv6-семью Pod/Service, HTTP между двумя pod через IPv6 ClusterIP и напрямую
-по `[PodIPv6]:8080`. Ошибки DNS/IPv6 не считаются успешным пропуском.
+## Сеть и предварительные проверки
 
-Containerd, runc, CNI plugins, Helm и Calico скачиваются с SHA256 из
-`versions.yaml`; Kubernetes deb packages имеют точную версию и apt hold.
-Все kubeadm images проверяются по фактическому `kubeadm config images list`,
-pull выполняется по digest. Локальные tag aliases нужны kubeadm preflight;
-`imagePullPolicy: Never` запрещает ему заново разрешать tag. Static Pods и
-CoreDNS получают patches с digest до запуска; kube-proxy генерируется
-`kubeadm init phase addon kube-proxy --print-manifest`, затем pin/apply.
-CoreDNS получает `POD_IP` через downward API. Управляемый
-`ansible/files/coredns.Corefile` привязывает DNS, health, readiness и metrics
-к этому IPv6; `bind` также задает IPv6 для startup loop-check. Это исключает
-IPv4 loopback self-health, который CoreDNS по умолчанию выполняет каждую
-секунду. Bootstrap обновляет только Corefile в ConfigMap и собственный
-Deployment patch при каждом запуске, включая уже инициализированный кластер.
-Checksum Corefile в Pod template вызывает rollout только при изменении
-конфигурации; image остается закрепленным digest, reset не нужен.
-Calico YAML структурно переводится в IPv6 VXLAN без BGP; все images закрепляются.
-CNI назначает только IPv6 (`assign_ipv4=false`, `assign_ipv6=true`), Calico
-не ищет IPv4 узла (`IP=none`, `IP6=<node_ip>`). `NO_DEFAULT_POOLS=true`
-предотвращает неявное создание IPv4 pool. После Established CRD отдельно
-применяется `mts-ipv6-pool`: CIDR environment, VXLAN Always, IPIP Never,
-blockSize 122, NAT outgoing и отключенный BGP export. Это также обходит
-особенность закрепленного [startup Calico 3.31.2](https://github.com/projectcalico/calico/blob/v3.31.2/node/pkg/lifecycle/startup/startup.go):
-чтение `CALICO_IPV6POOL_VXLAN` вложено в ветку IPv4 pool, поэтому одного env
-для явно отключенного IPv4 pool недостаточно. Felix health слушает `::1`;
-Kubelet проверяет HTTP по IPv6, без exec-helper с конкатенацией IPv6 без скобок.
+Kubeadm получает сети в порядке IPv6,IPv4:
 
-Необязательная внешняя usage/version-warning проверка Felix выключена через
-`FELIX_USAGEREPORTINGENABLED=false`, в том числе если upstream manifest
-задаст `true`. В закрепленном Calico 3.31.2 параметр по умолчанию включен:
-[config_params.go](https://github.com/projectcalico/calico/blob/v3.31.2/felix/config/config_params.go#L424).
-[Daemon](https://github.com/projectcalico/calico/blob/v3.31.2/felix/daemon/daemon.go#L625)
-запускает reporter только при этом флаге; [reporter](https://github.com/projectcalico/calico/blob/v3.31.2/felix/usagerep/usagerep.go#L34)
-использует внешний `usage.projectcalico.org/UsageCheck/calicoVersionCheck`.
-Один флаг выключает и отчеты, и получение version/security warnings через
-этот endpoint. Исключение IPv4 для загрузки пакетов/образов не распространяется
-на runtime telemetry. Проверки доступности Kubernetes/Calico сохраняются.
+| Назначение | IPv6 | IPv4 |
+| --- | --- | --- |
+| Pod CIDR | `fd4d:5453:1000:100::/56` | `10.244.0.0/16` |
+| Service CIDR | `fd4d:5453:1000:200::/112` | `10.96.0.0/16` |
+| Per-node Pod CIDR | /64 | /24 |
+| Calico allocation block | /122 | /26 |
 
-Bootstrap готовит directories, но PV принадлежат Helm release `storage`
-в namespace `default`, который применяет общий deploy интегратора:
+Поддерживаемые размеры: IPv6 Pod /48../64 и Service /108../120;
+IPv4 Pod /8../24 и Service /12../24. До изменений проверяются обе назначенные
+node IP на UP интерфейсах, default routes обеих семей и пересечения Pod,
+Service, node IP и уже существующих маршрутов каждой семьи. При повторе
+исключаются только Calico routes внутри Pod CIDR подтвержденного кластера.
 
-```sh
-helm upgrade --install storage deploy/storage --namespace default \
-  --kubeconfig .state/ubuntu/admin.kubeconfig \
-  --set nodeName=mts-mvp --set dataRoot=/var/lib/mts-stack
-```
+Immutable identity включает `dual-stack-ipv6-primary`, оба адреса, четыре
+CIDR, версии, DNS/NTP и data_root. Чужой кластер, частичный kubeadm init,
+изменение identity или недоступный existing API вызывают отказ. Старый
+single-stack стенд нельзя преобразовать этим bootstrap: нужна новая чистая
+VM; автоматических reset, upgrade и переноса старых PVC нет. Даже удаление
+устаревших ограничивающих конфигов разрешено только после identity guard.
 
-Chart создает `local-retain`, `mts-prometheus` и `mts-loki` по 12Gi с
-WaitForFirstConsumer, Retain и node affinity. Никакого dynamic provisioner
-нет: Prometheus volumeClaimTemplate и Loki PVC должны использовать
-`volumeName` из контракта. Каталоги: prometheus 1000:2000/0770,
-loki 10001:10001/0770, fluentd root:root/0750. Retain и Helm keep предотвращают
-автоматическое удаление PV, но не являются backup. Емкость PV — запрос
-Kubernetes, а не отдельная filesystem quota; данные делят диск VM.
+Kubelet объявляет `node-ip=IPv6,IPv4`. Выбор основного PodIP подтвержден
+[исходником kubelet 1.34.3](https://github.com/kubernetes/kubernetes/blob/v1.34.3/pkg/kubelet/kubelet_pods.go#L2015):
+он сортирует PodIPs по семье первого node IP, в том числе для downward API.
+API и kubelet слушают `::` с `net.ipv6.bindv6only=0`, принимая обе семьи.
+API advertises IPv6, сертификат включает оба адреса; kubeconfig остается
+основным IPv6 путем. Это не автоматическое переключение control plane
+при отказе сети и не multi-node HA. Kube-proxy NodePort ограничен двумя
+адресами VM (`node_ip/128`, `node_ipv4/32`).
 
-Сеть стенда — IPv6-only: пример node `2001:db8:20::10`, Pod
-`fd4d:5453:1000:100::/56`, Service `fd4d:5453:1000:200::/112`. Пример node —
-документальный адрес; для установки нужен реальный доступный IPv6 из вашей
-сети. Поддерживаются Pod prefix /48../64 и Service /108../120. Node /64
-выделяет kube-controller-manager; Calico использует блоки /122 внутри pool.
-Bootstrap до изменений требует назначенный стабильный unicast IPv6 на UP
-интерфейсе, IPv6 default route и отсутствие пересечений с маршрутами. При
-повторе разрешены только маршруты подтвержденного Calico внутри Pod CIDR.
-Идентичность включает семейство сети, CIDR, node и DNS/NTP servers. Старый
-IPv4 кластер не преобразуется на месте: нужна новая чистая VM; reset не
-выполняется и старые PVC автоматически не мигрируют.
+Calico CNI включает обе IPAM семьи, `IP` и `IP6` задаются явно. После
+Established CRD применяются два явных IPPool: VXLAN Always, IPIP Never,
+NAT outgoing, BGP export off. `NO_DEFAULT_POOLS=true` предотвращает
+неявные сторонние pools. BGP выключен; health оставляет штатные Felix exec
+пробы без BIRD. IP forwarding включен в обеих семьях; `accept_ra=2` для
+all/default/uplink устанавливается до IPv6 forwarding и сохраняет SLAAC.
 
-API и kubelet слушают только node IPv6; scheduler/controller-manager и
-health endpoints — `::1`. Kubeadm выбирает IPv6 также для etcd и соединения
-API → etcd. Containerd CRI stream server использует `::1`. Kube-proxy
-обрабатывает единственный IPv6 Service CIDR и публикует NodePort только на
-`node_ip/128`. SSH ограничен AddressFamily inet6; Ubuntu `ssh.socket`
-получает отдельный IPv6-only listener с BindIPv6Only, существующие IPv6 SSH
-сессии сохраняются при перезапуске master. Router advertisements остаются
-разрешены (`accept_ra=2`) для all/default/реального uplink до включения IPv6
-forwarding, чтобы SLAAC и default route не потерялись после bootstrap.
+SSH принимает обе семьи: AddressFamily any, IPv4/IPv6 ListenAddress. Для
+Ubuntu socket activation используется `[::]:port` с BindIPv6Only=both.
+Сначала проверяется `sshd -t`; master/socket перезапускаются одним systemd
+job с проверкой KillMode=process, сохраняющей установленные SSH сессии.
+Специальные SSH IPv6-only overrides удаляются на идентифицированной dual VM.
 
-`dns_servers` — 1–3 доступных рекурсивных IPv6 DNS; kubelet использует
-`/etc/mts-stack/resolv.conf`, поэтому CoreDNS не наследует DHCP IPv4 DNS.
-Для ОС systemd-resolved получает те же IPv6 upstreams, пустой FallbackDNS
-и route domain `~.`. Локальный stub ОС `127.0.0.53` может обслуживать
-процессы загрузки; кластерный DNS обращается к IPv6 servers напрямую.
-`ntp_servers` — 1–3 IPv6 NTP, по умолчанию `2606:4700:f1::123` из
-[документации Cloudflare Time Services](https://developers.cloudflare.com/time-services/ntp/usage/),
-FallbackNTP явно содержит тот же список IPv6: пустое значение в systemd 255
-снова включает compiled-in hostname fallback. Дополнительный override только
-для `systemd-timesyncd.service` устанавливает `IPAddressDeny=any` и
-`IPAddressAllow=::/0`, сбросив предыдущие service-level значения. На целевой
-Ubuntu 24.04 с cgroup BPF это запрещает входящие/исходящие IPv4 NTP пакеты,
-даже если DHCP продолжает показывать IPv4 peer в LinkNTPServers. DHCP,
-сетевые интерфейсы, DNS и SSH этим фильтром не изменяются. В live приемке
-проверяются активный IPv6 peer и установленный BPF filter.
-IPv4 адрес ОС допустим только для внешних загрузок
-пакетов и образов из Internet; runtime Node/API/Pod/Service/SSH работает по
-IPv6. Bootstrap не отключает DHCP IPv4 и не меняет netplan.
+`dns_servers` и `ntp_servers` содержат 1–3 IP обеих семей, доступные из VM;
+IPv6 задается первым при наличии маршрута. Для kubelet/CoreDNS создается
+явный `/etc/mts-stack/resolv.conf`, systemd-resolved получает тот же список.
+NTP fallback задается явными адресами; прежний timesyncd BPF-фильтр удаляется.
+DHCP IPv4 NTP, обычный resolver stub, IPv4 loopback и внешние загрузки
+разрешены. Bootstrap не изменяет netplan, router или гипервизор.
 
-Доступ извне по IPv6: TCP SSH (environment.ssh_port), TCP 6443 для интегратора,
-TCP NodePort 30080 для HTTP-проб. Метрики/Loki не публикуются: проверка через
-loopback port-forward с явным kubeconfig. Между node/pods допускаются
-Kubernetes/CNI потоки; VXLAN UDP4789 нужен при будущих нескольких узлах,
-в MVP узел один. Наружу VM нужны DNS, NTP и HTTPS к Ubuntu archive/security,
-pkgs.k8s.io, GitHub/raw.githubusercontent.com, get.helm.sh, registry.k8s.io,
-quay.io и Docker Hub (включая registry redirect/CDN). Host firewall должен
-допускать маршрутизацию pod и локальные Kubernetes порты. Playbook не меняет
-router, Proxmox firewall или домашние сервисы.
+CoreDNS использует штатные wildcard DNS/health/ready/metrics, без PodIP bind
+и специальных self-health overrides. Containerd CRI streaming и локальные
+control-plane health probes используют штатный loopback. Образы остаются
+закреплены digest. Управляемый Corefile применяется и при repeat; стабильный
+checksum перезапускает CoreDNS только при изменении конфигурации.
 
-Локальные проверки без VM:
+Необязательные usage/version checks Felix остаются выключены отдельным
+`FELIX_USAGEREPORTINGENABLED=false`. [Default](https://github.com/projectcalico/calico/blob/v3.31.2/felix/config/config_params.go#L424),
+[условие запуска](https://github.com/projectcalico/calico/blob/v3.31.2/felix/daemon/daemon.go#L625)
+и [внешний endpoint](https://github.com/projectcalico/calico/blob/v3.31.2/felix/usagerep/usagerep.go#L34)
+сверены с Calico 3.31.2. Это решение независимо от допустимости IPv4 трафика.
+
+## Health и сохранение данных
+
+Health создает отдельные server/client Pods и собственный Service
+`ipFamilies: [IPv6, IPv4]`, `ipFamilyPolicy: RequireDualStack`. Он требует
+два реальных адреса у обоих Pods, проверяет AAAA/A Service, HTTP по обоим
+Service IP и напрямую по обоим server Pod IP. Single-stack или неверный
+primary порядок вызывает fail. Ресурсы получают уникальные имена и удаляются
+даже при сбое. Системные Services `kubernetes` и `kube-dns` могут оставаться
+SingleStack IPv6: health проверяет основной Kubernetes AAAA и не пытается
+насильно преобразовать эти ресурсы. Это совместимо с dual-stack приложением.
+
+Containerd, runc, CNI, Helm и Calico скачиваются с SHA256 из `versions.yaml`;
+Kubernetes packages имеют точные версии и apt hold. Все kubeadm images
+проверяются по реальному списку установленного kubeadm и скачиваются по
+digest. Локальные tag aliases и imagePullPolicy Never служат kubeadm
+preflight; static Pod/CoreDNS patches и сгенерированный kube-proxy закреплены.
+
+Bootstrap готовит директории хранения; PV принадлежат Helm release `storage`:
+`local-retain`, `mts-prometheus`, `mts-loki`, по 12Gi, WaitForFirstConsumer,
+Retain, node affinity. Prometheus: 1000:2000/0770, Loki: 10001:10001/0770,
+Fluentd: root:root/0750. Retain/Helm keep не являются backup; 12Gi — capacity
+Kubernetes, не отдельная filesystem quota. Данные делят диск VM.
+
+Снаружи по обеим семьям нужны SSH, API 6443 и HTTP NodePort 30080. Метрики
+и Loki не публикуются; диагностика использует loopback port-forward с явным
+kubeconfig. Host firewall должен пропускать маршрутизацию Pod. Для будущих
+нескольких узлов VXLAN требует UDP4789 обеих семей, но MVP — один узел.
+Наружу нужны DNS, NTP и HTTPS для Ubuntu, pkgs.k8s.io, GitHub, get.helm.sh,
+registry.k8s.io, quay.io и Docker Hub с их redirect/CDN.
+
+## Проверки без VM
 
 ```sh
 export ANSIBLE_LOCAL_TEMP=/tmp/mvp01-ansible
@@ -156,23 +139,10 @@ ansible-playbook -i localhost, ansible/render.yaml \
   -e calico_source_file=/absolute/path/to/checksum-verified/calico.yaml
 python -m unittest discover -s ansible/tests -v
 helm lint deploy/storage
-helm template storage deploy/storage --set nodeName=mts-acceptance
 ```
 
-`render.yaml` проверяет SHA256 Calico и создает только локальные файлы
-в `/tmp/mts-bootstrap-render`. Эти проверки не заменяют чистый bootstrap,
-повторный bootstrap, PVC binding, reboot и health на живой VM.
-
-Принятые defaults etcd/CoreDNS/pause сверены с [исходником kubeadm v1.34.3](https://github.com/kubernetes/kubernetes/blob/v1.34.3/cmd/kubeadm/app/constants/constants.go).
-Формат patches соответствует [Kubeadm API customization](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/control-plane-flags/).
-
-Сетевые параметры сверены с [Calico IPv6-only](https://docs.tigera.io/calico/latest/networking/ipam/ipv6),
-[Calico IPv6 VXLAN](https://docs.tigera.io/calico/latest/networking/configuring/vxlan-ipip),
-[официальным kubeadm networking](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/dual-stack-support/)
-и исходниками закрепленного [kubeadm 1.34.3](https://github.com/kubernetes/kubernetes/blob/v1.34.3/cmd/kubeadm/app/phases/controlplane/manifests.go).
-IPv6 self-health CoreDNS следует официальным [health](https://coredns.io/plugins/health/)
-и [bind](https://coredns.io/plugins/bind/). Ограничение только NTP service
-соответствует [systemd IPAddressAllow/IPAddressDeny](https://www.freedesktop.org/software/systemd/man/255/systemd.resource-control.html).
-Наличие IPv6 default route не доказывает достижимость выбранных внешних
-DNS/NTP; их работоспособность, сохранение маршрута после reboot и полный
-IPv6 verify должен подтвердить интегратор на чистом стенде.
+`render.yaml` проверяет SHA256 исходного Calico и пишет только локальные
+файлы. Fixtures/render не заменяют чистый bootstrap, повтор, reboot, реальные
+AAAA/A и HTTP/SSH/API по обеим семьям. Сетевые параметры соответствуют
+[официальному kubeadm dual-stack](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/dual-stack-support/)
+и [Calico dual-stack](https://docs.tigera.io/calico/latest/networking/ipam/ipv6).

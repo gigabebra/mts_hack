@@ -21,7 +21,7 @@
     - name: Create an isolated server and client on the pod network
       ansible.builtin.command:
         argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=30s, apply, -f, "{{ remote_state }}/health-{{ health_uuid.stdout }}.yaml"]
-    - name: Wait for the disposable IPv6 HTTP server
+    - name: Wait for the disposable dual-stack HTTP server
       ansible.builtin.command:
         argv: [kubectl, --kubeconfig, "{{ admin_config }}", -n, default, wait, --for=condition=Ready, "pod/mts-health-server-{{ health_uuid.stdout }}", --timeout=180s]
       changed_when: false
@@ -35,31 +35,37 @@
         argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=20s, -n, default, get, services, kubernetes, "mts-health-{{ health_uuid.stdout }}", -o, json]
       register: health_services
       changed_when: false
-    - name: Require one IPv6 address for the server and both Services
+    - name: Select the workload Service and primary system Service
+      ansible.builtin.set_fact:
+        health_workload_service: "{{ (health_services.stdout | from_json)['items'] | rejectattr('metadata.name', 'equalto', 'kubernetes') | first }}"
+        health_kubernetes_service: "{{ (health_services.stdout | from_json)['items'] | selectattr('metadata.name', 'equalto', 'kubernetes') | first }}"
+    - name: Require both workload Service families with IPv6 primary
       ansible.builtin.assert:
         that:
-          - (health_server.stdout | from_json).status.podIPs | length == 1
-          - "':' in (health_server.stdout | from_json).status.podIP"
-          - item.spec.ipFamilies == ['IPv6']
-          - item.spec.clusterIPs | length == 1
-          - "':' in item.spec.clusterIP"
-      loop: "{{ (health_services.stdout | from_json)['items'] }}"
-      loop_control:
-        label: "{{ item.metadata.name }}"
-    - name: Record the actual IPv6 addresses for DNS and direct Pod probes
+          - health_workload_service.spec.ipFamilies == ['IPv6', 'IPv4']
+          - health_workload_service.spec.ipFamilyPolicy == 'RequireDualStack'
+          - health_kubernetes_service.spec.ipFamilies[0] == 'IPv6'
+          - "':' in health_kubernetes_service.spec.clusterIP"
+    - name: Validate actual Pod and Service addresses and their primary family
       ansible.builtin.set_fact:
-        health_server_ipv6: "{{ (health_server.stdout | from_json).status.podIP }}"
-        health_service_ipv6: "{{ ((health_services.stdout | from_json)['items'] | rejectattr('metadata.name', 'equalto', 'kubernetes') | first).spec.clusterIP }}"
-        health_kubernetes_ipv6: "{{ ((health_services.stdout | from_json)['items'] | selectattr('metadata.name', 'equalto', 'kubernetes') | first).spec.clusterIP }}"
-    - name: Render the client with the observed IPv6 destinations
+        health_server_addresses: "{{ (health_server.stdout | from_json).status.podIPs | map(attribute='ip') | list | mvp_dual_ips }}"
+        health_service_addresses: "{{ health_workload_service.spec.clusterIPs | mvp_dual_ips }}"
+    - name: Record actual addresses for AAAA and A and direct HTTP probes
+      ansible.builtin.set_fact:
+        health_server_ipv6: "{{ health_server_addresses.ipv6 }}"
+        health_server_ipv4: "{{ health_server_addresses.ipv4 }}"
+        health_service_ipv6: "{{ health_service_addresses.ipv6 }}"
+        health_service_ipv4: "{{ health_service_addresses.ipv4 }}"
+        health_kubernetes_ipv6: "{{ health_kubernetes_service.spec.clusterIP }}"
+    - name: Render the client with the observed dual-stack destinations
       ansible.builtin.template:
         src: health-client.yaml.j2
         dest: "{{ remote_state }}/health-client-{{ health_uuid.stdout }}.yaml"
         mode: '0600'
-    - name: Create the disposable IPv6 client
+    - name: Create the disposable dual-stack client
       ansible.builtin.command:
         argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=30s, apply, -f, "{{ remote_state }}/health-client-{{ health_uuid.stdout }}.yaml"]
-    - name: Wait for real AAAA resolution and IPv6 Service and direct cross-pod HTTP
+    - name: Wait for AAAA and A resolution and both Service and direct Pod HTTP paths
       ansible.builtin.command:
         argv: [kubectl, --kubeconfig, "{{ admin_config }}", -n, default, wait, --for=condition=complete, "job/mts-health-{{ health_uuid.stdout }}", --timeout=180s]
       changed_when: false
@@ -68,8 +74,23 @@
         argv: [kubectl, --kubeconfig, "{{ admin_config }}", -n, default, logs, "job/mts-health-{{ health_uuid.stdout }}", --all-containers]
       register: health_result
       changed_when: false
-      failed_when: "'MTS_IPV6_AAAA_SERVICE_AND_DIRECT_POD_OK' not in health_result.stdout"
+      failed_when: "'MTS_DUAL_AAAA_A_SERVICE_AND_DIRECT_POD_OK' not in health_result.stdout"
+    - name: Read the successful client's actual Pod addresses
+      ansible.builtin.command:
+        argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=20s, -n, default, get, pods, -l, "mts-health-client={{ health_uuid.stdout }}", -o, json]
+      register: health_clients
+      changed_when: false
+    - name: Require exactly one successful client Pod with both addresses
+      ansible.builtin.assert:
+        that:
+          - (health_clients.stdout | from_json)['items'] | length == 1
+          - ((health_clients.stdout | from_json)['items'][0].status.podIPs | map(attribute='ip') | list | mvp_dual_ips) | length == 2
   rescue:
+    - name: Collect bounded client probe output
+      ansible.builtin.command:
+        argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=20s, -n, default, logs, "job/mts-health-{{ health_uuid.stdout }}", --all-containers]
+      changed_when: false
+      failed_when: false
     - name: Collect bounded health diagnostics
       ansible.builtin.command:
         argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=20s, -n, default, get, pods, -l, "mts-health-run={{ health_uuid.stdout }}", -o, wide]

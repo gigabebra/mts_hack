@@ -1,16 +1,15 @@
 .:53 {
-    bind {$POD_IP}
     errors
-    health [{$POD_IP}]:8080 {
+    health {
         lameduck 5s
     }
-    ready [{$POD_IP}]:8181
+    ready
     kubernetes cluster.local in-addr.arpa ip6.arpa {
         pods insecure
         fallthrough in-addr.arpa ip6.arpa
         ttl 30
     }
-    prometheus [{$POD_IP}]:9153
+    prometheus :9153
     forward . /etc/resolv.conf {
         max_concurrent 1000
     }

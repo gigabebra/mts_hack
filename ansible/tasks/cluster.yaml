@@ -42,10 +42,10 @@
     - {name: kube-controller-manager, image: "registry.k8s.io/kube-controller-manager:v{{ platform.kubernetes }}"}
     - {name: kube-scheduler, image: "registry.k8s.io/kube-scheduler:v{{ platform.kubernetes }}"}
     - {name: etcd, image: 'registry.k8s.io/etcd:3.6.5-0'}
-- name: Load the managed IPv6 Corefile
+- name: Load the managed standard Corefile
   ansible.builtin.set_fact:
     coredns_corefile: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/files/coredns.Corefile', rstrip=False) }}"
-- name: Pin CoreDNS and provide its IPv6 Pod address before first launch
+- name: Pin CoreDNS before its first launch
   ansible.builtin.template:
     src: corednsdeployment+strategic.yaml.j2
     dest: "{{ remote_state }}/patches/corednsdeployment+strategic.yaml"
@@ -69,12 +69,12 @@
     dest: "{{ remote_state }}/coredns-config.patch.json"
     mode: '0600'
     content: "{{ {'data': {'Corefile': coredns_corefile}} | to_nice_json }}\n"
-- name: Reconcile IPv6 DNS listeners and self-probes on fresh and existing clusters
+- name: Reconcile the standard CoreDNS configuration on fresh and existing clusters
   ansible.builtin.command:
     argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=30s, -n, kube-system, patch, configmap, coredns, --type=merge, --field-manager=mts-bootstrap, --patch-file, "{{ remote_state }}/coredns-config.patch.json"]
   register: coredns_config_patch
   changed_when: "'patched (no change)' not in coredns_config_patch.stdout"
-- name: Reconcile the immutable CoreDNS image and IPv6 env with a stable config checksum
+- name: Reconcile the immutable CoreDNS image with a stable config checksum
   ansible.builtin.command:
     argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=30s, -n, kube-system, patch, deployment, coredns, --type=strategic, --field-manager=mts-bootstrap, --patch-file, "{{ remote_state }}/patches/corednsdeployment+strategic.yaml"]
   register: coredns_deployment_patch
@@ -109,7 +109,7 @@
   ansible.builtin.copy:
     dest: "{{ remote_state }}/calico.yaml"
     mode: '0600'
-    content: "{{ calico_source.content | b64decode | from_yaml_all | list | mvp_calico(image_lock.images, pod_cidr, node_ip) | map('to_nice_yaml') | join('---\n') }}"
+    content: "{{ calico_source.content | b64decode | from_yaml_all | list | mvp_calico(image_lock.images, pod_cidr, node_ip, pod_cidr_ipv4, node_ipv4) | map('to_nice_yaml') | join('---\n') }}"
 - name: Apply Calico using server-side apply for large CRDs
   ansible.builtin.command:
     argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=120s, apply, --server-side, --field-manager=mts-bootstrap, -f, "{{ remote_state }}/calico.yaml"]
@@ -119,12 +119,12 @@
   ansible.builtin.command:
     argv: [kubectl, --kubeconfig, "{{ admin_config }}", wait, --for=condition=Established, crd/ippools.crd.projectcalico.org, --timeout=120s]
   changed_when: false
-- name: Render the explicit IPv6 VXLAN pool
+- name: Render the explicit IPv6 and IPv4 VXLAN pools
   ansible.builtin.template:
     src: calico-pool.yaml.j2
     dest: "{{ remote_state }}/calico-pool.yaml"
     mode: '0600'
-- name: Apply the single IPv6 VXLAN pool
+- name: Apply the two explicit VXLAN pools
   ansible.builtin.command:
     argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=60s, apply, --server-side, --field-manager=mts-bootstrap, -f, "{{ remote_state }}/calico-pool.yaml"]
   register: apply_pool

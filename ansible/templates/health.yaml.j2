@@ -11,7 +11,11 @@ spec:
   containers:
     - name: http
       image: {{ images.busybox | mvp_image(image_lock.images) | to_json }}
-      command: [sh, -ec, 'mkdir -p /tmp/www; printf MTS_POD_HTTP_OK >/tmp/www/index.html; exec httpd -f -p [::]:8080 -h /tmp/www']
+      command: [sh, -ec, 'mkdir -p /tmp/www; printf MTS_POD_HTTP_OK >/tmp/www/index.html; httpd -p "[$POD_IP]:8080" -h /tmp/www; exec httpd -f -p 0.0.0.0:8080 -h /tmp/www']
+      env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef: {fieldPath: status.podIP}
       securityContext: {runAsNonRoot: true, runAsUser: 65534, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}, seccompProfile: {type: RuntimeDefault}}
       resources: {requests: {cpu: 10m, memory: 16Mi}, limits: {cpu: 100m, memory: 32Mi}}
       volumeMounts: [{name: tmp, mountPath: /tmp}]
@@ -26,8 +30,8 @@ metadata:
   labels:
     mts-health-run: {{ health_uuid.stdout }}
 spec:
-  ipFamilyPolicy: SingleStack
-  ipFamilies: [IPv6]
+  ipFamilyPolicy: RequireDualStack
+  ipFamilies: [IPv6, IPv4]
   selector:
     mts-health: {{ health_uuid.stdout }}
   ports: [{port: 8080, targetPort: 8080}]

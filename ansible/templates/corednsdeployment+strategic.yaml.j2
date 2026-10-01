@@ -7,9 +7,3 @@ spec:
       containers:
         - name: coredns
           image: {{ 'registry.k8s.io/coredns/coredns:v1.12.1' | mvp_image(image_lock.images) | to_json }}
-          env:
-            - name: POD_IP
-              valueFrom:
-                fieldRef:
-                  apiVersion: v1
-                  fieldPath: status.podIP

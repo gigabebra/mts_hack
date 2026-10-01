@@ -11,3 +11,17 @@ spec:
   nodeSelector: all()
   allowedUses: [Workload, Tunnel]
   disableBGPExport: true
+---
+apiVersion: crd.projectcalico.org/v1
+kind: IPPool
+metadata:
+  name: mts-ipv4-pool
+spec:
+  cidr: {{ pod_cidr_ipv4 | to_json }}
+  blockSize: 26
+  vxlanMode: Always
+  ipipMode: Never
+  natOutgoing: true
+  nodeSelector: all()
+  allowedUses: [Workload, Tunnel]
+  disableBGPExport: true
