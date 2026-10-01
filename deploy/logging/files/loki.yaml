@@ -1,18 +1,17 @@
 auth_enabled: false
 server:
-  http_listen_network: tcp6
-  grpc_listen_network: tcp6
+  http_listen_network: tcp
+  grpc_listen_network: tcp
   http_listen_address: "::"
   grpc_listen_address: "::"
   http_listen_port: 3100
   grpc_listen_port: 9096
   log_level: info
 common:
-  instance_addr: "::1"
+  instance_addr: "127.0.0.1"
   path_prefix: /var/lib/loki
   replication_factor: 1
   ring:
-    instance_enable_ipv6: true
     kvstore:
       store: inmemory
   storage:

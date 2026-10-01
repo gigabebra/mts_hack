@@ -2,6 +2,7 @@
 """Check real Prometheus samples; never treat missing data as a zero counter."""
 
 import argparse
+from collections import Counter
 import datetime as dt
 import ipaddress
 import json
@@ -67,8 +68,8 @@ class API:
         if parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("prometheus-url must not contain credentials/query/fragment")
         address = ipaddress.ip_address(parsed.hostname)
-        if address.version != 6 or address.ipv4_mapped is not None:
-            raise ValueError("prometheus-url must use a native IPv6 literal in brackets")
+        if address.version == 6 and (address.ipv4_mapped is not None or address.scope_id is not None):
+            raise ValueError("prometheus-url must use a native IPv4 or bracketed IPv6 literal")
         _ = parsed.port
         self.base = base.rstrip("/")
         self.deadline = deadline
@@ -127,17 +128,36 @@ def target_matches(labels, expected):
     return (labels.get("namespace"), labels.get("service"), labels.get("endpoint")) == expected
 
 
-def target_is_ipv6(target):
+def target_address_family(target):
     try:
-        scrape = urllib.parse.urlsplit(target.get('scrapeUrl', ''))
-        address = ipaddress.ip_address(scrape.hostname or '')
-        instance = urllib.parse.urlsplit('http://' + target.get('labels', {}).get('instance', ''))
-        peer = ipaddress.ip_address(instance.hostname or '')
-        return (scrape.scheme in ('http', 'https') and scrape.port is not None and instance.port is not None
-                and all(a.version == 6 and a.ipv4_mapped is None and a.scope_id is None
-                        for a in (address, peer)))
-    except ValueError:
-        return False
+        scrape = urllib.parse.urlsplit(target.get("scrapeUrl", ""))
+        address = ipaddress.ip_address(scrape.hostname or "")
+        instance = urllib.parse.urlsplit("http://" + target.get("labels", {}).get("instance", ""))
+        peer = ipaddress.ip_address(instance.hostname or "")
+        native = all(a.version == 4 or (a.ipv4_mapped is None and a.scope_id is None)
+                     for a in (address, peer))
+        if (scrape.scheme in ("http", "https") and scrape.port is not None and instance.port is not None
+                and not scrape.username and not scrape.password and native and address == peer):
+            return "IPv" + str(address.version)
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
+def target_endpoint_identity(target):
+    """Identify a Pod listener independently of ServiceMonitor/job and IP family."""
+    labels = target.get("labels", {})
+    discovered = target.get("discoveredLabels", {})
+    namespace = discovered.get("__meta_kubernetes_namespace") or labels.get("namespace")
+    pod = (discovered.get("__meta_kubernetes_pod_name")
+           or discovered.get("__meta_kubernetes_endpointslice_endpoint_target_name") or labels.get("pod"))
+    try:
+        scrape = urllib.parse.urlsplit(target.get("scrapeUrl", ""))
+        if namespace and pod and scrape.port is not None:
+            return namespace, pod, scrape.port, scrape.path or "/"
+    except (ValueError, TypeError):
+        pass
+    return None
 
 
 def inspect_targets(api, now):
@@ -145,9 +165,10 @@ def inspect_targets(api, now):
     if not isinstance(targets, list):
         raise ValueError("missing activeTargets array")
     checks, saved, selected = [], [], []
-    checks.append(check('all_targets_ipv6', bool(targets) and all(target_is_ipv6(t) for t in targets),
-                        'Every active scrape target and instance uses native IPv6',
-                        {'count': len(targets), 'ipv6_count': sum(target_is_ipv6(t) for t in targets)}))
+    # Include optional/aliased jobs in duplicate detection: another monitor or
+    # Service for a required Pod listener must not silently scrape it again.
+    endpoint_counts = Counter(identity for target in targets
+                              if (identity := target_endpoint_identity(target)) is not None)
     for name, expected in REQUIRED.items():
         matched = [target for target in targets
                    if (target.get("labels", {}).get("namespace"),
@@ -156,16 +177,22 @@ def inspect_targets(api, now):
         evidence = []
         for target in matched:
             stamp = dt.datetime.fromisoformat(target["lastScrape"].replace("Z", "+00:00")).timestamp()
-            native_ipv6 = target_is_ipv6(target)
-            item = {"labels": target["labels"], "ipv6": native_ipv6, "health": target.get("health"),
+            family = target_address_family(target)
+            item = {"labels": target["labels"], "address_family": family, "health": target.get("health"),
                     "last_scrape": stamp, "has_error": bool(target.get("lastError")),
                     "fresh": fresh(stamp, now)}
             evidence.append(item)
             selected.append(target["labels"])
         passed = main_endpoint_present and bool(evidence) and all(
-            item["health"] == "up" and item["fresh"] and not item["has_error"] and item["ipv6"] for item in evidence
+            item["health"] == "up" and item["fresh"] and not item["has_error"] and item["address_family"] is not None for item in evidence
         )
-        checks.append(check("target_" + name, passed, "present, native IPv6 scrape URL, up, fresh, no scrape error", evidence))
+        checks.append(check("target_" + name, passed, "present, native IPv4/IPv6 scrape URL, up, fresh, no scrape error", evidence))
+        identities = [target_endpoint_identity(target) for target in matched]
+        unique = all(identity is not None and endpoint_counts[identity] == 1 for identity in identities)
+        checks.append(check("target_" + name + "_unique", bool(evidence) and unique,
+                            "one scrape per Pod/port/path across all jobs and IP families",
+                            {"targets": len(identities), "unique_endpoints": len(set(identities)),
+                             "scrapes_per_endpoint": [endpoint_counts[identity] for identity in identities]}))
         saved.extend(evidence)
     return checks, saved, selected
 

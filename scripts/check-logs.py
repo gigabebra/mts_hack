@@ -66,8 +66,8 @@ def cli(argv):
                     or parsed.username or parsed.password or parsed.query or parsed.fragment):
                 raise ValueError("URLs must be HTTP(S) without credentials, query or fragment")
             address = ipaddress.ip_address(parsed.hostname)
-            if address.version != 6 or address.ipv4_mapped is not None:
-                raise ValueError("URLs must use native IPv6 literals in brackets")
+            if address.version == 6 and (address.ipv4_mapped is not None or address.scope_id is not None):
+                raise ValueError("URLs must use native IPv4 or bracketed IPv6 literals")
             _ = parsed.port
     return args
 

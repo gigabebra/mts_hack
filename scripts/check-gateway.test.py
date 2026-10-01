@@ -169,6 +169,11 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(report["data"]["request_count"], 6)
         self.assertEqual(report["data"]["error_http"]["uri"], "/verify/missing/fixture-error")
 
+    def test_ipv4_traffic_origin_is_allowed(self):
+        code, result = self.run_fixture(args=self.args + ["--base-url", "http://192.0.2.10:30080"])
+        self.assertEqual(code, 0)
+        self.assertEqual(result["status"], "pass")
+
     def test_wrong_body_status_id_and_unrouted_success_are_rejected(self):
         for field, value in (("body_exact", False), ("status", 302), ("request_id", None)):
             def bad(base, path, request_id, deadline):
@@ -207,8 +212,7 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(report["status"], "fail")
 
     def test_bad_arguments_still_write_fail_report(self):
-        for extra in (["--base-url", "http://192.0.2.10:30080"],
-                      ["--base-url", "http://[::ffff:192.0.2.10]:30080"], ["--requests", "0"], ["--timeout", "nan"], ["--request-id", "bad id"],
+        for extra in (["--base-url", "http://[::ffff:192.0.2.10]:30080"], ["--requests", "0"], ["--timeout", "nan"], ["--request-id", "bad id"],
                       ["--kubeconfig", str(self.directory / "missing")], ["--base-url", "http://user:secret@example.invalid"]):
             with self.subTest(extra=extra):
                 code, report = self.run_fixture(args=self.args + extra)

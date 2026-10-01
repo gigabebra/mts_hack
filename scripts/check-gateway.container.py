@@ -43,15 +43,17 @@ def main():
         kubeconfig = directory / "unused-explicit-kubeconfig"
         kubeconfig.write_text("Traffic-only smoke: no kubectl invocation is made.")
         try:
-            docker("network", "create", "--ipv6", "--ipv4=false", "--subnet", f"fd7a:115c:{name[-8:-4]}:{name[-4:]}::/64", network)
+            docker("network", "create", "--ipv6", "--subnet", f"fd7a:115c:{name[-8:-4]}:{name[-4:]}::/64", network)
             docker("run", "--detach", "--name", name, "--network", network, "--read-only", "--user", "101:101",
                    "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
                    "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m,uid=101,gid=101",
                    "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=16m,uid=101,gid=101",
-                   "--publish", "[::1]::8080", "--volume", f"{config}:/etc/nginx/nginx.conf:ro",
+                   "--publish", "[::1]::8080", "--publish", "127.0.0.1::8080", "--volume", f"{config}:/etc/nginx/nginx.conf:ro",
                    "--volume", f"{page}:/usr/share/nginx/html:ro", "--entrypoint", "nginx",
                    args.image, "-g", "daemon off;")
-            endpoint = docker("port", name, "8080/tcp").stdout.strip()
+            endpoints = docker("port", name, "8080/tcp").stdout.splitlines()
+            endpoint = next(value for value in endpoints if value.startswith("[::1]:"))
+            ipv4_endpoint = next(value for value in endpoints if value.startswith("127.0.0.1:"))
             assert re.fullmatch(r"\[::1\]:\d+", endpoint), endpoint
             url = "http://" + endpoint
             deadline = time.monotonic() + 20
@@ -73,6 +75,15 @@ def main():
                 capture_output=True, text=True, timeout=25)
             report = json.loads(report_path.read_text())
             assert result.returncode == 0, report
+            ipv4_report_path = directory / "report-ipv4.json"
+            ipv4_result = subprocess.run([
+                "python3", str(ROOT / "scripts/check-gateway.py"), "--mode", "traffic",
+                "--kubeconfig", str(kubeconfig), "--base-url", "http://" + ipv4_endpoint,
+                "--run-id", "container-smoke-ipv4", "--request-id", "container-access-ipv4",
+                "--error-marker", "container-missing-ipv4", "--requests", "2", "--timeout", "20",
+                "--output", str(ipv4_report_path)], capture_output=True, text=True, timeout=25)
+            ipv4_report = json.loads(ipv4_report_path.read_text())
+            assert ipv4_result.returncode == 0, ipv4_report
             # Exercise JSON escaping with a quote in URI and the upper valid ID limit.
             extra = GATEWAY.request(url, '/verify?escape=%22', "A" * 64, time.monotonic() + 5)
             assert extra["status"] == 200 and extra["request_id"] == "A" * 64
@@ -98,10 +109,10 @@ def main():
             assert docker("exec", name, "test", "!", "-e",
                           "/var/run/secrets/kubernetes.io/serviceaccount/token").returncode == 0
             print(json.dumps({"status": "pass", "scope": "isolated Nginx container, not Gateway",
-                              "checks": ["HTTP body/Request-ID/fallbacks/404", "JSON stdout access",
+                              "checks": ["IPv6 and IPv4 HTTP body/Request-ID/fallbacks/404", "JSON stdout access",
                                          "real missing-file stderr", "UID 101", "zero effective capabilities",
                                          "no-new-privileges", "read-only root", "no service-account token"],
-                              "http_checks": len(report["checks"])}))
+                              "http_checks": {"IPv6": len(report["checks"]), "IPv4": len(ipv4_report["checks"])}}))
         finally:
             # The unique name also allows cleanup when docker run times out after creation.
             docker("rm", "--force", name, check=False)

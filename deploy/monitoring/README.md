@@ -47,22 +47,31 @@ python3 scripts/check-metrics.py --mode verify \
 Обязательны services `edge/traefik-metrics`,
 `monitoring/monitoring-prometheus-node-exporter`,
 `monitoring/monitoring-kube-state-metrics`, `monitoring/monitoring-prometheus`.
-Scrape discovery использует EndpointSlice. Service имеют `SingleStack` /
-`ipFamilies: [IPv6]`; Operator-created `prometheus-operated` получает IPv6
-из single-stack сети кластера. Prometheus слушает конкретные `[Pod_IPv6]:9090`
-и `[::1]:9090`: IPv4 loopback не принимается даже внутри Pod, поэтому
-CRI port-forward использует IPv6 после отказа начального tcp4 dial.
-kube-state-metrics — `::`. Общий post-renderer задает `[::]:8080` Operator
-и `HOST_IP=::` node-exporter: upstream charts явно задают IPv4 wildcard.
-Operator `--localhost=[::1]` направляет config-reloader к Prometheus по IPv6.
+Scrape discovery использует EndpointSlice. Helm Services имеют
+`RequireDualStack` / `ipFamilies: [IPv6, IPv4]`. Создаваемый Operator
+headless Service `prometheus-operated` может оставаться SingleStack IPv6.
+Prometheus слушает `[::]:9090` — обычный wildcard обеих семей на Linux.
+Специальные PodIP env и два отдельных IPv6 listener больше не нужны.
+Локальный config-reloader использует штатный `127.0.0.1`; HTTP port-forward
+может использовать любую loopback семью. kube-state-metrics слушает `::`,
+общий post-renderer задает `[::]:8080` Operator и `HOST_IP=::` node-exporter,
+чтобы primary IPv6 pod probes и scrape были доступны вместе с IPv4.
 
-У каждого требуется основной endpoint; все обнаруженные endpoints этих
-services должны быть здоровы, включая Prometheus config-reloader.
-`check-metrics.py` требует native IPv6 literal в обоих `scrapeUrl` и
-`labels.instance` каждого endpoint; IPv4, IPv4-mapped IPv6 и отсутствие URL
-дают fail. Дополнительно проверяются IPv6-адреса всех active targets,
-включая targets вне четырех обязательных groups.
-URL API принимается как IPv6 literal с квадратными скобками.
+В каждом ServiceMonitor endpoint, включая reloader, задан native relabel
+`keep` с `sourceLabels: [__meta_kubernetes_endpointslice_address_type]`
+и `regex: IPv6`. Так один Pod/порт не попадает в scrape дважды через IPv6
+и IPv4 EndpointSlices. Это фиксированный выбор IPv6 для мониторинга;
+автоматическое переключение scrape на IPv4 при отказе IPv6 не реализовано.
+
+У каждого обязательного service требуется основной endpoint; все
+обнаруженные endpoints этих services должны быть здоровы и свежи, включая
+Prometheus config-reloader. `check-metrics.py` принимает native IPv4 и
+IPv6 в `scrapeUrl`/`labels.instance`; необязательный IPv4 target не является
+ошибкой. Дополнительно обязательные Pod/порт/path должны встречаться
+ровно один раз среди всех active targets, независимо от IP, job и Service.
+Повторный scrape через другую семью либо другой ServiceMonitor дает fail.
+URL API допускает IPv4 или IPv6 literal с квадратными скобками. Проверки
+сохраняют прямое соединение без HTTP proxy и не следуют redirect.
 
 Фиксированный scope HTTP:
 `traefik_entrypoint_requests_total{namespace="edge",service="traefik-metrics",endpoint="metrics",entrypoint="web",code="200",method="GET"}`.
@@ -90,6 +99,6 @@ Fixtures запускаются командой:
 python3 -m unittest discover -s deploy/monitoring/tests -v
 ```
 
-Это HTTP сервер на `::1` с `IPV6_V6ONLY=1` и синтетическими ответами. Его pass не подтверждает
+Это HTTP серверы на `::1` и `127.0.0.1` с синтетическими ответами. Их pass не подтверждает
 живые scrape, совместимость CRDs/Operator или сохранение истории после
 рестарта Prometheus. Эти проверки выполняет интегратор на выделенной VM.

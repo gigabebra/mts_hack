@@ -104,8 +104,8 @@ metadata:
     app.kubernetes.io/name: loki
 spec:
   type: ClusterIP
-  ipFamilyPolicy: SingleStack
-  ipFamilies: [IPv6]
+  ipFamilyPolicy: RequireDualStack
+  ipFamilies: [IPv6, IPv4]
   selector:
     app.kubernetes.io/name: loki
   ports:

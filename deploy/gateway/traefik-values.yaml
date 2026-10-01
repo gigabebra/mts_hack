@@ -35,8 +35,8 @@ providers:
         enabled: false
 service:
   type: NodePort
-  ipFamilyPolicy: SingleStack
-  ipFamilies: [IPv6]
+  ipFamilyPolicy: RequireDualStack
+  ipFamilies: [IPv6, IPv4]
 ports:
   traefik:
     expose:

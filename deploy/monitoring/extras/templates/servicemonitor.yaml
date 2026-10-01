@@ -20,3 +20,7 @@ spec:
       path: /metrics
       interval: {{ .Values.interval | quote }}
       scrapeTimeout: {{ .Values.scrapeTimeout | quote }}
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_endpointslice_address_type]
+          action: keep
+          regex: IPv6

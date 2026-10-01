@@ -97,17 +97,19 @@ def main():
                 "-v", str(directory / "loki.yaml") + ":/etc/loki/config.yaml:ro", LOKI,
                 "-config.file=/etc/loki/config.yaml", "-verify-config=true")
         print("PASS actual Loki 3.6.2 config validation", flush=True)
-        command("docker", "network", "create", "--ipv6", "--ipv4=false",
+        command("docker", "network", "create", "--ipv6",
                 "--subnet", f"fd7a:115c:{suffix[:4]}:{suffix[4:8]}::/64", network)
         names.append(loki)
         command("docker", "run", "-d", "--name", loki, "--network", network,
                 "--network-alias", "loki.logging.svc.cluster.local", "--read-only", "--cap-drop", "ALL",
                 "--user", "10001:10001", "--security-opt", "no-new-privileges", "--tmpfs", "/tmp",
-                "-p", "[::1]::3100", "-v", str(directory / "loki.yaml") + ":/etc/loki/config.yaml:ro",
+                "-p", "[::1]::3100", "-p", "127.0.0.1::3100", "-v", str(directory / "loki.yaml") + ":/etc/loki/config.yaml:ro",
                 "-v", str(directory / "loki") + ":/var/lib/loki", LOKI, "-config.file=/etc/loki/config.yaml")
-        port = command("docker", "port", loki, "3100/tcp").split(":")[-1]
-        url = "http://[::1]:" + port
+        endpoints = command("docker", "port", loki, "3100/tcp").splitlines()
+        url = "http://" + next(value for value in endpoints if value.startswith("[::1]:"))
+        ipv4_url = "http://" + next(value for value in endpoints if value.startswith("127.0.0.1:"))
         wait_ready(url)
+        wait_ready(ipv4_url)
         names.append(fluent)
         command("docker", "run", "-d", "--name", fluent, "--network", network,
                 "--read-only", "--cap-drop", "ALL", "--user", "0:0", "--security-opt", "no-new-privileges",
@@ -120,11 +122,26 @@ def main():
         resolved = json.loads(command("docker", "exec", fluent, "ruby", "-rsocket", "-rjson", "-e",
                               'puts Addrinfo.getaddrinfo("loki.logging.svc.cluster.local", 3100, nil, :STREAM).map { |a| a.ip_address }.uniq.to_json'))
         import ipaddress
-        assert resolved and all(ipaddress.ip_address(address).version == 6 for address in resolved), resolved
-        print("PASS Fluentd service DNS resolves only IPv6 addresses", flush=True)
+        assert {ipaddress.ip_address(address).version for address in resolved} == {4, 6}, resolved
+        print("PASS Fluentd service DNS resolves IPv6 and IPv4 addresses", flush=True)
+        # A wildcard monitor listener must answer kubelet probes on primary IPv6,
+        # while ordinary local IPv4 diagnostics remain supported.
+        deadline = time.monotonic() + 20
+        while True:
+            try:
+                command("docker", "exec", fluent, "ruby", "-rnet/http", "-e",
+                        'ARGV.each { |u| r=Net::HTTP.get_response(URI(u)); abort r.code unless r.code == "200" }',
+                        "http://[::1]:24220/api/plugins.json", "http://127.0.0.1:24220/api/plugins.json")
+                break
+            except subprocess.CalledProcessError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.2)
+        print("PASS Fluentd monitor responds on IPv6 and IPv4 loopback", flush=True)
         marker = "fixture-" + suffix
         start = fixture(logfile, marker)
         verify(url, marker, start, directory / "first.json")
+        verify(ipv4_url, marker, start, directory / "first-ipv4.json")
         print("PASS CRI symlink → Fluentd JSON/stdout + text/stderr → real Loki API; exact labels and nanoseconds", flush=True)
         before = command("docker", "exec", fluent, "cat", "/var/lib/fluentd/nginx.pos")
         command("docker", "stop", "-t", "5", loki)
@@ -141,9 +158,11 @@ def main():
         command("docker", "restart", "-t", "5", fluent)
         command("docker", "start", loki)
         # Docker may allocate a different ephemeral published port at restart.
-        port = command("docker", "port", loki, "3100/tcp").split(":")[-1]
-        url = "http://[::1]:" + port
+        endpoints = command("docker", "port", loki, "3100/tcp").splitlines()
+        url = "http://" + next(value for value in endpoints if value.startswith("[::1]:"))
+        ipv4_url = "http://" + next(value for value in endpoints if value.startswith("127.0.0.1:"))
         wait_ready(url)
+        wait_ready(ipv4_url)
         verify(url, recovery, recovery_start, directory / "recovery.json")
         verify(url, marker, start, directory / "history.json")
         print("PASS buffered records survive collector restart during Loki outage; prior Loki records persist", flush=True)

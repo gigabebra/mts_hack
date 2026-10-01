@@ -111,7 +111,7 @@ def remaining(deadline):
 
 def wait_conditions(args, deadline):
     # kubectl uses Go's proxy environment independently of urllib's ProxyHandler.
-    # Keep standalone checks on the direct IPv6 API transport too.
+    # Keep standalone checks on direct API transport for either IP family.
     kubectl_env = {key: value for key, value in os.environ.items()
                    if key.lower() not in {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}}
     last_checks = []
@@ -256,8 +256,8 @@ def parse_args(argv):
         # Accessing port also validates malformed/out-of-range values before requests start.
         _ = url.port
         address = ipaddress.ip_address(url.hostname)
-        if address.version != 6 or address.ipv4_mapped is not None:
-            raise ValueError("--base-url must use a native IPv6 literal in brackets")
+        if address.version == 6 and (address.ipv4_mapped is not None or address.scope_id is not None):
+            raise ValueError("--base-url must use a native IPv4 or bracketed IPv6 literal")
     return args
 
 

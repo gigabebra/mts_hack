@@ -53,18 +53,16 @@ def main():
             assert all(isinstance(arg, str) for arg in container.get("args", [])), container["args"]
             assert container["resources"]["requests"] and container["resources"]["limits"]
     services = [obj for obj in objects if obj["kind"] == "Service"]
-    assert services and all(obj["spec"].get("ipFamilies") == ["IPv6"]
-                            and obj["spec"].get("ipFamilyPolicy") == "SingleStack" for obj in services)
-    assert "--localhost=[::1]" in args
+    assert services and all(obj["spec"].get("ipFamilies") == ["IPv6", "IPv4"]
+                            and obj["spec"].get("ipFamilyPolicy") == "RequireDualStack" for obj in services)
+    assert [arg for arg in args if arg.startswith("--localhost=")] == ["--localhost=127.0.0.1"]
     ksm = next(obj for obj in workloads if obj["metadata"]["name"] == "monitoring-kube-state-metrics")
     ksm_args = ksm["spec"]["template"]["spec"]["containers"][0]["args"]
     assert "--host=::" in ksm_args and "--telemetry-host=::" in ksm_args
     prometheus = next(obj for obj in objects if obj["kind"] == "Prometheus")["spec"]
     assert prometheus["serviceDiscoveryRole"] == "EndpointSlice"
-    assert [arg['value'] for arg in prometheus['additionalArgs'] if arg['name'] == 'web.listen-address'] == [
-        '[$(POD_IP)]:9090', '[::1]:9090']
-    assert prometheus['containers'] == [{'name': 'prometheus', 'env': [
-        {'name': 'POD_IP', 'valueFrom': {'fieldRef': {'fieldPath': 'status.podIP'}}}]}]
+    assert [arg['value'] for arg in prometheus['additionalArgs'] if arg['name'] == 'web.listen-address'] == ['[::]:9090']
+    assert not prometheus.get('containers')
     assert prometheus["scrapeInterval"] == "15s" and prometheus["scrapeTimeout"] == "10s"
     assert prometheus["retention"] == "24h" and prometheus["retentionSize"] == "4GB"
     assert prometheus["serviceMonitorSelector"] == {"matchLabels": {"release": "monitoring"}}
@@ -83,8 +81,14 @@ def main():
     assert monitor["metadata"]["labels"]["release"] == "monitoring"
     assert monitor["spec"]["selector"]["matchLabels"] == {
         "app.kubernetes.io/name": "traefik", "app.kubernetes.io/instance": "traefik-edge"}
+    family_filter = {"sourceLabels": ["__meta_kubernetes_endpointslice_address_type"],
+                     "action": "keep", "regex": "IPv6"}
     assert monitor["spec"]["endpoints"] == [
-        {"port": "metrics", "path": "/metrics", "interval": "15s", "scrapeTimeout": "10s"}]
+        {"port": "metrics", "path": "/metrics", "interval": "15s", "scrapeTimeout": "10s",
+         "relabelings": [family_filter]}]
+    for item in monitors + extras:
+        for endpoint in item["spec"]["endpoints"]:
+            assert endpoint.get("relabelings") == [family_filter], (item["metadata"]["name"], endpoint)
     print("PASS: Helm render contracts, image lock coverage, dynamic reloader digest, storage and monitors")
 
 

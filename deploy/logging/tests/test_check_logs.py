@@ -76,7 +76,7 @@ class CheckLogs(unittest.TestCase):
         self.assertIsNone(LOGS.error_match(fixture, "fixture", self.start, self.end))
 
     def test_supplied_ids_never_generate_http_probes(self):
-        args = LOGS.cli(["--loki-url", "http://[::1]", "--base-url", "http://[2001:db8::10]",
+        args = LOGS.cli(["--loki-url", "http://127.0.0.1:3100", "--base-url", "http://192.0.2.10:30080",
                          "--run-id", "fixture", "--request-id", "fixture", "--error-marker", "fixture",
                          "--start-time", "0", "--timeout", "1", "--output", "unused"])
         with patch.object(LOGS, "standalone_probe", side_effect=AssertionError("unexpected probe")), \
@@ -104,8 +104,7 @@ class CheckLogs(unittest.TestCase):
             path = Path(temp) / "result.json"
             common = [sys.executable, str(SCRIPT), "--output", str(path), "--run-id", "fixture",
                       "--loki-url", "http://[::1]:1", "--request-id", "fixture", "--error-marker", "fixture"]
-            for extra in (["--loki-url", "http://127.0.0.1:3100"],
-                          ["--loki-url", "http://[::ffff:192.0.2.10]:3100"], ["--timeout", "nan"], ["--timeout", "0.05"], ["--start-time", "nan"]):
+            for extra in (["--loki-url", "http://[::ffff:192.0.2.10]:3100"], ["--timeout", "nan"], ["--timeout", "0.05"], ["--start-time", "nan"]):
                 started = time.monotonic()
                 result = subprocess.run(common + extra, capture_output=True, timeout=3)
                 self.assertEqual(result.returncode, 1)

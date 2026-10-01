@@ -23,8 +23,8 @@ SERVICES = [
 ]
 
 
-def labels(target):
-    return dict(zip(("namespace", "service", "endpoint"), target), job=target[1], instance="[2001:db8::10]:9100")
+def labels(target, instance="[2001:db8::10]:9100"):
+    return dict(zip(("namespace", "service", "endpoint"), target), job=target[1], instance=instance, pod=target[1] + "-fixture")
 
 
 def matrix_row(metric, points):
@@ -40,6 +40,9 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         parsed = urllib.parse.urlsplit(self.path)
         now = time.time()
         mode = state["failure"]
+        instance = "192.0.2.10:9100" if mode == "required_ipv4" else "[2001:db8::10]:9100"
+        def target_labels(target):
+            return labels(target, instance)
         if mode == "http_503":
             self.send_error(503)
             return
@@ -47,14 +50,21 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             targets = []
             for target in SERVICES:
                 stamp = now - (100 if mode == "stale_target" else 0.1)
-                targets.append({"labels": labels(target), "health": "down" if mode == "down" else "up",
+                targets.append({"labels": target_labels(target), "health": "down" if mode == "down" else "up",
                                 "lastScrape": dt.datetime.fromtimestamp(stamp, dt.timezone.utc).isoformat(),
-                                "lastError": "", "scrapeUrl": "http://[2001:db8::10]:9100/metrics"})
+                                "lastError": "", "scrapeUrl": "http://" + instance + "/metrics"})
             if mode == "ipv4_target":
                 targets[0]["scrapeUrl"] = "http://192.0.2.10:9100/metrics"
             if mode == 'extra_ipv4_target':
                 targets.append(dict(targets[0], labels={'job': 'legacy', 'instance': '127.0.0.1:9090'},
                                     scrapeUrl='http://127.0.0.1:9090/metrics'))
+            if mode == "duplicate_family_target":
+                duplicate = dict(targets[0], labels=dict(targets[0]["labels"], instance="192.0.2.10:9100"),
+                                 scrapeUrl="http://192.0.2.10:9100/metrics")
+                targets.append(duplicate)
+            if mode == "duplicate_monitor_target":
+                targets.append(dict(targets[0], labels=dict(targets[0]["labels"],
+                                    job="alternate-monitor", service="alternate-service", endpoint="alias-port")))
             if mode == "mapped_target":
                 targets[0]["scrapeUrl"] = "http://[::ffff:192.0.2.10]:9100/metrics"
             if mode == "missing_scrape_url":
@@ -71,7 +81,7 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             query = urllib.parse.parse_qs(parsed.query)["query"][0]
             state["queries"].append(query)
             if query.startswith("traefik_entrypoint"):
-                metric = dict(labels(SERVICES[0]), __name__="traefik_entrypoint_requests_total",
+                metric = dict(target_labels(SERVICES[0]), __name__="traefik_entrypoint_requests_total",
                               entrypoint="web", code="200", method="GET")
                 points = [(state["sample_at"], 100)]
                 if state["verify"]:
@@ -93,12 +103,12 @@ class Fixture(http.server.BaseHTTPRequestHandler):
                 if mode == "vector":
                     data["resultType"] = "vector"
             else:
-                rows = [matrix_row(dict(labels(t), __name__="up"), [(now - 0.1, 0 if mode == "up_zero" else 1)])
+                rows = [matrix_row(dict(target_labels(t), __name__="up"), [(now - 0.1, 0 if mode == "up_zero" else 1)])
                         for t in SERVICES]
                 if mode != "missing_infrastructure":
-                    rows += [matrix_row(dict(labels(SERVICES[1]), __name__="node_memory_MemAvailable_bytes"),
+                    rows += [matrix_row(dict(target_labels(SERVICES[1]), __name__="node_memory_MemAvailable_bytes"),
                                         [(now - 0.1, 1024)]),
-                             matrix_row(dict(labels(SERVICES[2]), __name__="kube_node_info", node="fixture"),
+                             matrix_row(dict(target_labels(SERVICES[2]), __name__="kube_node_info", node="fixture"),
                                         [(now - 0.1, 1)])]
                 data = {"resultType": "matrix", "result": rows}
         payload = {"status": "success", "data": data}
@@ -126,18 +136,25 @@ class MetricsFixtures(unittest.TestCase):
         cls.server = IPv6HTTPServer(("::1", 0), Fixture)
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
+        cls.ipv4_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
+        cls.ipv4_thread = threading.Thread(target=cls.ipv4_server.serve_forever, daemon=True)
+        cls.ipv4_thread.start()
 
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
         cls.server.server_close()
         cls.thread.join()
+        cls.ipv4_server.shutdown()
+        cls.ipv4_server.server_close()
+        cls.ipv4_thread.join()
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.baseline = Path(self.temp.name) / "baseline.json"
         self.server.state = {"failure": None, "verify": False, "sample_at": time.time() - 1, "queries": []}
+        self.ipv4_server.state = self.server.state
 
     def invoke(self, mode, *extra):
         output = self.baseline if mode == "snapshot" else Path(self.temp.name) / "result.json"
@@ -166,8 +183,24 @@ class MetricsFixtures(unittest.TestCase):
                 for selector in ('namespace="edge"', 'service="traefik-metrics"', 'endpoint="metrics"'):
                     self.assertIn(selector, query)
 
+    def test_ipv4_api_origin_is_allowed(self):
+        result = self.invoke("snapshot", "--prometheus-url", f"http://127.0.0.1:{self.ipv4_server.server_port}")
+        self.assertEqual(result["status"], "pass", result)
+
+    def test_ipv4_required_and_optional_targets_are_allowed(self):
+        for mode in ("required_ipv4", "extra_ipv4_target"):
+            with self.subTest(mode=mode):
+                self.server.state["failure"] = mode
+                result = self.invoke("snapshot")
+                self.assertEqual(result["status"], "pass", result)
+        for mode in ("duplicate_family_target", "duplicate_monitor_target"):
+            self.server.state["failure"] = mode
+            result = self.invoke("snapshot")
+            self.assertEqual(result["status"], "fail")
+            self.assertIn("target_traefik_unique", [item["name"] for item in result["checks"] if item["status"] == "fail"])
+
     def test_snapshot_rejects_invalid_or_missing_data(self):
-        for failure in ('extra_ipv4_target', "ipv4_target", "mapped_target", "missing_scrape_url", "ipv4_instance", "http_503", "down", "reloader_down", "missing_target", "stale_target", "empty", "vector",
+        for failure in ("duplicate_family_target", "ipv4_target", "mapped_target", "missing_scrape_url", "ipv4_instance", "http_503", "down", "reloader_down", "missing_target", "stale_target", "empty", "vector",
                         "stale_sample", "nan", "up_zero", "missing_infrastructure", "warning", "invalid_json"):
             with self.subTest(failure=failure):
                 self.server.state["failure"] = failure
@@ -196,7 +229,7 @@ class MetricsFixtures(unittest.TestCase):
         self.assertEqual(self.invoke("verify", "--run-id", "different-run")["status"], "fail")
         self.assertEqual(self.invoke("verify", "--min-increase", "0")["status"], "fail")
         self.assertEqual(self.invoke("verify", "--timeout", "-1")["status"], "fail")
-        self.assertEqual(self.invoke("snapshot", "--prometheus-url", "http://127.0.0.1:9090")["status"], "fail")
+        self.assertEqual(self.invoke("snapshot", "--prometheus-url", "http://[::ffff:192.0.2.10]:9090")["status"], "fail")
         self.baseline.write_text("{}")
         self.assertEqual(self.invoke("verify")["status"], "fail")
 

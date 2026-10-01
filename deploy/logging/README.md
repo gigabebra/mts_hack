@@ -11,12 +11,12 @@ Loki использует один Deployment, PVC `loki` 12Gi, TSDB/v13, filesy
 WAL и compactor на одном volume. Retention 24h применяется compactor
 асинхронно; это не жесткая дисковая квота. Удаление chunk после retention
 отложено еще на 2h. Нужен контроль свободного места; резервирования и HA нет.
-Service Loki имеет `SingleStack` / `ipFamilies: [IPv6]`; ClusterIP 3100
-предназначен для внутренней IPv6 сети, authentication отключена. HTTP/gRPC
-используют `tcp6`, исключая прием IPv4-mapped loopback при CRI port-forward;
-слушают `::`, single-process ring использует `::1` с
-`common.ring.instance_enable_ipv6: true`. Fluentd обращается к
-`loki.logging.svc.cluster.local`: в IPv6-only кластере имя возвращает AAAA.
+Service Loki имеет `RequireDualStack` / `ipFamilies: [IPv6, IPv4]`;
+ClusterIP 3100 предназначен для внутренней сети, authentication отключена.
+HTTP/gRPC используют обычный `tcp` и wildcard `::`, принимающий обе семьи
+на Linux; single-process ring использует штатный `127.0.0.1`. Fluentd
+обращается к `loki.logging.svc.cluster.local`, который в dual-stack сети
+возвращает AAAA и A. Необязательный analytics reporting остается выключен.
 
 Fluentd 1.19.0 с Loki plugin из закрепленного image запускается с
 `-p /fluentd/plugins`. Читает только `hello-*_demo_nginx-*.log` из
@@ -34,7 +34,10 @@ Root filesystem read-only, capabilities сняты, privilege escalation
 запрещен. Monitor endpoint 24220 показывает состояние процесса collector.
 Он слушает `bind "[::]"`: именно bracketed значение необходимо HTTP helper
 Fluentd 1.19, который формирует URI из `bind`. `bind ::` дает invalid URI
-при старте. Endpoint сам по себе не подтверждает доставку в Loki — это проверяет CLI.
+при старте. Wildcard принимает IPv6 и IPv4: monitor доступен по
+`http://[::1]:24220/api/plugins.json` и
+`http://127.0.0.1:24220/api/plugins.json`. Primary IPv6 pod probes также
+работают. Endpoint сам по себе не подтверждает доставку в Loki — это проверяет CLI.
 
 Positions `/var/lib/fluentd/nginx.pos` и file buffer
 `/var/lib/fluentd/buffer/loki` сохраняются на hostPath после замены pod.
@@ -55,13 +58,12 @@ python3 -m unittest discover -s deploy/logging/tests -p 'test_*.py' -v
 .venv/bin/python deploy/logging/tests/docker_smoke.py --helm .cache/tools/helm
 ```
 
-Docker smoke требует Docker с `docker network create --ipv4=false --ipv6`
-(проверен 29.8.0) и IPv6 на хосте. Создает уникальные временные
-containers/network без IPv4-адресов, IPv6 loopback
-порт `[::1]` Loki и synthetic CRI fixtures в `/tmp`. Он проверяет настоящий parser,
-plugin, Loki config/API, DNS-резолвинг Loki только в IPv6, persistent buffer
-и restart при коротком outage.
-Это отдельная проверка реализации с fixtures, не приемка Kubernetes.
+Docker smoke требует IPv6 на Docker host (проверен 29.8.0). Создает
+уникальные временные containers в dual-stack сети, публикует порты Loki
+только на `::1` и `127.0.0.1`, пишет synthetic CRI fixtures в `/tmp`.
+Проверяет настоящий parser, plugin, Loki config/API по обеим семьям,
+DNS A/AAAA из Fluentd, monitor обеих loopback семей, persistent buffer
+и restart при коротком outage. Это проверка с fixtures, не приемка Kubernetes.
 
 Проверка общего прогона только читает Loki, не создает новый HTTP запрос:
 
@@ -74,8 +76,8 @@ python3 scripts/check-logs.py --loki-url 'http://[::1]:13100' \
 Самостоятельная проверка принимает `--base-url 'http://[2001:db8::10]:30080'` вместо
 пары `--request-id`/`--error-marker`; создает ровно access GET `/` и error
 GET `/verify/missing/<marker>`. Переданные IDs никогда не заменяются.
-CLI принимает URL с native IPv6 literal в скобках; IPv4 и IPv4-mapped
-адреса отклоняет. CLI проверяет exact ID/method/URI/numeric status, оригинальный JSON message,
+CLI принимает URL с native IPv4 или bracketed IPv6 literal; IPv4-mapped
+и scoped IPv6 адреса отклоняет. CLI проверяет exact ID/method/URI/numeric status, оригинальный JSON message,
 реальный missing-file stderr, labels, source path и CRI timestamp. Report
 создается также при timeout/ошибке и не содержит сырого stderr с адресами.
 

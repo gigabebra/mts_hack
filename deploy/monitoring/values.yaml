@@ -31,13 +31,11 @@ kubeDns:
   enabled: false
 prometheusOperator:
   enabled: true
-  extraArgs:
-    - --localhost=[::1]
   service:
     ipDualStack:
       enabled: true
-      ipFamilies: [IPv6]
-      ipFamilyPolicy: SingleStack
+      ipFamilies: [IPv6, IPv4]
+      ipFamilyPolicy: RequireDualStack
   image:
     registry: quay.io
     repository: prometheus-operator/prometheus-operator
@@ -73,27 +71,20 @@ prometheus:
     type: ClusterIP
     ipDualStack:
       enabled: true
-      ipFamilies: [IPv6]
-      ipFamilyPolicy: SingleStack
+      ipFamilies: [IPv6, IPv4]
+      ipFamilyPolicy: RequireDualStack
   serviceMonitor:
     selfMonitor: true
     interval: 15s
+    relabelings:
+      - sourceLabels: [__meta_kubernetes_endpointslice_address_type]
+        action: keep
+        regex: IPv6
   prometheusSpec:
     serviceDiscoveryRole: EndpointSlice
     additionalArgs:
       - name: web.listen-address
-        value: "[$(POD_IP)]:9090"
-      - name: web.listen-address
-        value: "[::1]:9090"
-    # Specific IPv6 addresses prevent CRI port-forward's tcp4-first dial from
-    # succeeding through an IPv4-mapped wildcard listener inside the Pod.
-    containers:
-      - name: prometheus
-        env:
-          - name: POD_IP
-            valueFrom:
-              fieldRef:
-                fieldPath: status.podIP
+        value: "[::]:9090"
     image:
       registry: quay.io
       repository: prometheus/prometheus
@@ -155,8 +146,8 @@ prometheus-node-exporter:
   service:
     ipDualStack:
       enabled: true
-      ipFamilies: [IPv6]
-      ipFamilyPolicy: SingleStack
+      ipFamilies: [IPv6, IPv4]
+      ipFamilyPolicy: RequireDualStack
   resources:
     requests: {cpu: 25m, memory: 32Mi}
     limits: {cpu: 200m, memory: 128Mi}
@@ -165,6 +156,10 @@ prometheus-node-exporter:
       enabled: true
       interval: 15s
       scrapeTimeout: 10s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_endpointslice_address_type]
+          action: keep
+          regex: IPv6
 kubeStateMetrics:
   enabled: true
 kube-state-metrics:
@@ -174,8 +169,8 @@ kube-state-metrics:
   service:
     ipDualStack:
       enabled: true
-      ipFamilies: [IPv6]
-      ipFamilyPolicy: SingleStack
+      ipFamilies: [IPv6, IPv4]
+      ipFamilyPolicy: RequireDualStack
   fullnameOverride: monitoring-kube-state-metrics
   image:
     registry: registry.k8s.io
@@ -189,3 +184,7 @@ kube-state-metrics:
       enabled: true
       interval: 15s
       scrapeTimeout: 10s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_endpointslice_address_type]
+          action: keep
+          regex: IPv6

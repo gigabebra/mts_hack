@@ -1,29 +1,35 @@
-# IPv6 Gateway MVP
+# Dual-stack Gateway MVP
 
-Traefik обслуживает HTTP NodePort по IPv6; `hello` и Traefik Service имеют
-`SingleStack` / `ipFamilies: [IPv6]`. Nginx слушает только
-`[::]:8080 ipv6only=on`; backend-трафик идет на IPv6 Pod через Service.
-Gateway status получает IPv6 node address от общей установки.
+Traefik обслуживает HTTP NodePort по IPv6 и IPv4. `hello` и Traefik
+Services имеют `RequireDualStack` / `ipFamilies: [IPv6, IPv4]`.
+Nginx слушает `0.0.0.0:8080` и `[::]:8080 ipv6only=on`; приложение
+принимает обе семьи. Gateway status объявляет основной IPv6 node address.
 
 Upstream Traefik chart 37.4.0 не умеет корректно подставить IPv6 `hostIP`
 в CLI address: этот же параметр попадает в Kubernetes container port.
-Поэтому общий post-renderer заменяет wildcard entrypoint addresses
-на `[::]:PORT/tcp` для web, metrics и health. Metrics Service остается
-внутренним IPv6 ClusterIP.
+Общий post-renderer задает wildcard `[::]:PORT/tcp` для web, metrics и
+health. Go listener на Linux принимает обе семьи. Metrics Service остается
+внутренним dual-stack ClusterIP. `global.checkNewVersion` и
+`global.sendAnonymousUsage` выключены, чтобы не запускать необязательные
+внешние проверки и отчеты.
 
-`check-gateway.py` требует native IPv6 Gateway status и IPv6 literal URL,
-например `--base-url 'http://[2001:db8::10]:30080'`. IPv4 и IPv4-mapped
-IPv6 не проходят проверку. Адрес здесь из документационного диапазона;
-реальный передается только в локальном environment.
+`check-gateway.py` требует native IPv6 Gateway status, но HTTP origin
+принимает native IPv6 или IPv4, например
+`--base-url 'http://[2001:db8::10]:30080'` и
+`--base-url 'http://192.0.2.10:30080'`. IPv4-mapped и scoped IPv6 URL
+отклоняются; реальные адреса хранятся только в локальном environment.
+HTTP и kubectl обращаются к указанному стенду без унаследованных proxies.
 
 ```sh
 python3 scripts/check-gateway.test.py
+.venv/bin/python deploy/gateway/tests/test_render.py
 python3 scripts/check-gateway.container.py --image "$LOCKED_NGINX_IMAGE"
 ```
 
-Первый тест включает настоящий HTTP на `::1` с `IPV6_V6ONLY=1` и fixtures
-условий Gateway/ошибок HTTP. Docker smoke создает уникальную одноразовую
-IPv6-only сеть (`--ipv6 --ipv4=false`) и публикует порт только на `[::1]`.
-Нужны IPv6 на хосте и Docker с этими флагами (проверен 29.8.0). Smoke
-проверяет реальный Nginx, Request-ID, stdout/stderr и runtime security;
-Kubernetes/Gateway приемку выполняет интегратор отдельно.
+Fixtures проверяют настоящий HTTP на `::1`, условия Gateway, IPv4 HTTP
+origin и ошибки HTTP/proxy environment. Render test подтверждает
+эффективные настройки telemetry/version checks. Docker smoke создает
+уникальную одноразовую dual-stack сеть и публикует порты только на `::1`
+и `127.0.0.1`. Нужен IPv6 на Docker host (проверен Docker 29.8.0).
+Smoke проверяет реальный Nginx по обеим семьям, Request-ID, stdout/stderr
+и runtime security. Kubernetes/Gateway приемка выполняется отдельно.
