@@ -50,7 +50,7 @@ def tool(name):
 def environment(name):
     path = ROOT / 'config/environments' / (name + '.local.yaml')
     env = yaml.safe_load(path.read_text())
-    for key in ('node_name', 'node_ip', 'ssh_host', 'ssh_user', 'kubeconfig'):
+    for key in ('node_name', 'node_ip', 'node_ipv4', 'ssh_host', 'ssh_user', 'kubeconfig'):
         if not env.get(key):
             raise ValueError(f'{path}: missing {key}')
     env.setdefault('node_port', 30080)
@@ -58,13 +58,19 @@ def environment(name):
     env.setdefault('ssh_port', 22)
     env.setdefault('pod_cidr', 'fd4d:5453:1000:100::/56')
     env.setdefault('service_cidr', 'fd4d:5453:1000:200::/112')
+    env.setdefault('pod_cidr_ipv4', '10.244.0.0/16')
+    env.setdefault('service_cidr_ipv4', '10.96.0.0/16')
     ipv6_host(env['node_ip'])
     if ipaddress.IPv6Address(env['node_ip']).is_loopback:
         raise ValueError('node_ip must be reachable outside the node, not loopback')
-    ipv6_host(env['ssh_host'])
-    for key in ('pod_cidr', 'service_cidr'):
-        if ipaddress.ip_network(env[key]).version != 6:
-            raise ValueError(f'{key} must be an IPv6 network; existing IPv4 clusters require a separate new VM')
+    node4 = ipaddress.ip_address(native_host(env['node_ipv4']))
+    if node4.version != 4 or node4.is_loopback:
+        raise ValueError('node_ipv4 must be a reachable native IPv4 address')
+    native_host(env['ssh_host'])
+    for key, family in [('pod_cidr', 6), ('service_cidr', 6),
+                        ('pod_cidr_ipv4', 4), ('service_cidr_ipv4', 4)]:
+        if ipaddress.ip_network(env[key]).version != family:
+            raise ValueError(f'{key} must be an IPv{family} network')
     for key in ('kubeconfig', 'ssh_private_key_file'):
         if env.get(key):
             p = Path(os.path.expanduser(env[key]))
@@ -81,7 +87,17 @@ def ipv6_host(value):
 
 
 def http_url(host, port):
-    return f'http://[{ipv6_host(host)}]:{int(port)}'
+    host = native_host(host)
+    return f'http://[{host}]:{int(port)}' if ':' in host else f'http://{host}:{int(port)}'
+
+
+def native_host(value):
+    address = ipaddress.ip_address(value)
+    if address.version == 6:
+        return ipv6_host(value)
+    if address.is_unspecified or address.is_multicast or address.is_link_local:
+        raise ValueError('Expected a native unicast IP address')
+    return str(address)
 
 
 def kubectl(env, *args, capture=False, timeout=300, **kwargs):
@@ -127,7 +143,6 @@ def lock_document(node):
                             for arg in node.get('args', [])]
         if node.get('name') == 'kube-prometheus-stack' and 'image' in node:
             node['args'] = list(dict.fromkeys(
-                '--localhost=[::1]' if arg.startswith('--localhost=') else
                 arg.replace('--web.listen-address=:', '--web.listen-address=[::]:')
                 for arg in node.get('args', [])))
         if node.get('name') == 'node-exporter' and 'image' in node:
@@ -137,10 +152,10 @@ def lock_document(node):
         if node.get('kind') == 'Service' and node.get('apiVersion') == 'v1':
             spec = node.setdefault('spec', {})
             if spec.get('type') != 'ExternalName':
-                if spec.get('ipFamilies', ['IPv6']) != ['IPv6']:
-                    raise ValueError('IPv4 or dual-stack Service is forbidden in the IPv6-only profile')
-                spec['ipFamilies'] = ['IPv6']
-                spec['ipFamilyPolicy'] = 'SingleStack'
+                if spec.get('ipFamilies', ['IPv6', 'IPv4']) != ['IPv6', 'IPv4']:
+                    raise ValueError('Services require IPv6-primary dual-stack')
+                spec['ipFamilies'] = ['IPv6', 'IPv4']
+                spec['ipFamilyPolicy'] = 'RequireDualStack'
         for key, value in node.items():
             if key == 'image' and isinstance(value, str):
                 node[key] = locked_image(value)

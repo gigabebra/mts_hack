@@ -12,8 +12,7 @@ import urllib.request
 import uuid
 
 from stacklib import ROOT, VERSIONS, command, direct_api_env, environment, forward, http_url, internal_http, kubectl, resource, write_json
-from ipv6_checks import network_evidence
-from ipv6_transport import transport_evidence
+from network_checks import network_evidence
 
 HTTP = internal_http()
 
@@ -131,10 +130,12 @@ def main():
         report['environment'] = {'name': args.env, 'node_name': env['node_name']}
         base = http_url(env['node_ip'], env['node_port'])
         check(report, 'readiness', 'Expected node, workloads Ready, PVC Bound', lambda: readiness(env))
-        check(report, 'ipv6_network', 'IPv6 API, node, Pod/Service/EndpointSlice addresses and Calico pool',
+        check(report, 'dual_stack_network', 'IPv6-primary API and dual-stack Node, Pods, Services, EndpointSlices and Calico pools',
               lambda: network_evidence(env))
         common = ['--kubeconfig', env['kubeconfig'], '--base-url', base, '--run-id', run_id,
                   '--request-id', run_id, '--error-marker', run_id + '-err', '--timeout', '90']
+        common4 = ['--kubeconfig', env['kubeconfig'], '--base-url', http_url(env['node_ipv4'], env['node_port']),
+                   '--run-id', run_id, '--request-id', run_id + '-v4', '--error-marker', run_id + '-v4-err', '--timeout', '90']
         check(report, 'gateway_conditions', 'Current Accepted/Programmed/ResolvedRefs',
               lambda: component('check-gateway.py', directory / 'gateway-conditions.json', '--mode', 'conditions', *common))
         with contextlib.ExitStack() as stack:
@@ -155,8 +156,11 @@ def main():
             traffic = directory / 'gateway-traffic.json'
             traffic_ok = check(report, 'http', 'Exact response, Request-ID, traffic, true missing-file 404, unmatched route',
                                lambda: component('check-gateway.py', traffic, '--mode', 'traffic', '--requests', '20', *common))
-            if snap and traffic_ok:
-                count = json.loads(traffic.read_text())['data']['request_count']
+            traffic4 = directory / 'gateway-traffic-ipv4.json'
+            traffic4_ok = check(report, 'http_ipv4', 'Same application behavior over native IPv4',
+                                lambda: component('check-gateway.py', traffic4, '--mode', 'traffic', '--requests', '20', *common4))
+            if snap and traffic_ok and traffic4_ok:
+                count = sum(json.loads(p.read_text())['data']['request_count'] for p in (traffic, traffic4))
                 check(report, 'metrics_delta', 'Fresh scoped counter increases by generated requests without reset',
                       lambda: component('check-metrics.py', directory / 'metrics-verify.json', '--mode', 'verify',
                                         '--prometheus-url', prometheus, '--run-id', run_id, '--baseline', baseline,
@@ -168,13 +172,16 @@ def main():
                   lambda: component('check-logs.py', directory / 'logs.json', '--loki-url', loki,
                                     '--run-id', run_id, '--request-id', run_id, '--error-marker', run_id + '-err',
                                     '--start-time', start, '--timeout', '120'))
+            check(report, 'logs_ipv4', 'IPv4 HTTP Request-ID and independent stderr marker in Loki',
+                  lambda: component('check-logs.py', directory / 'logs-ipv4.json', '--loki-url', loki,
+                                    '--run-id', run_id, '--request-id', run_id + '-v4', '--error-marker', run_id + '-v4-err',
+                                    '--start-time', start, '--timeout', '120'))
         check(report, 'runtime_security', 'Non-root PID1, zero capabilities, root mount ro, API token absent', lambda: runtime(env))
-        check(report, 'ipv6_transport', 'No IPv4 runtime flows, including Pod loopback and CRI forwarding',
-              lambda: transport_evidence(env, directory))
     except Exception as error:
         report['checks'].append({'name': 'orchestration', 'status': 'fail', 'expected': 'All required checks execute', 'actual': str(error)})
     finally:
-        required = {'readiness', 'ipv6_network', 'ipv6_transport', 'gateway_conditions', 'metrics_baseline', 'http', 'metrics_delta', 'logs', 'runtime_security'}
+        required = {'readiness', 'dual_stack_network', 'gateway_conditions', 'metrics_warmup', 'metrics_baseline',
+                    'http', 'http_ipv4', 'metrics_delta', 'logs', 'logs_ipv4', 'runtime_security'}
         missing = required - {c['name'] for c in report['checks']}
         for name in sorted(missing):
             report['checks'].append({'name': name, 'status': 'fail', 'expected': 'Required MVP check', 'actual': 'Not executed because prerequisite failed'})

@@ -7,8 +7,8 @@ Prometheus измеряет HTTP и состояние узла, Fluentd дос�
 
 Первоначальный MVP принят на чистой Ubuntu 24.04.5, кодовая ревизия
 `337d0c671617929ebf162e1216099524fe8d611d`. Сейчас выполняется назначенный
-переход на IPv6-only для внешнего доступа и внутреннего обмена.
-[Сетевой контракт, диагностика и переход с IPv4](docs/networking-ipv6.md).
+переход на полноценный dual-stack Kubernetes: IPv6 основной, IPv4 также доступен приложению и компонентам.
+[Сетевой контракт, диагностика и переход](docs/networking.md).
 [Протокол и матрица требований](docs/acceptance/mvp-acceptance.md),
 [реестр](docs/status.md), [черновик паспорта](docs/passport/mvp-draft.md).
 Этап FINAL не начат.
@@ -60,15 +60,15 @@ PyPI/files.pythonhosted.org, get.helm.sh, dl.k8s.io и Helm chart repositories.
 Этот размер проверен чистой приемкой; минимальная конфигурация не определялась.
 На VM не должно быть другого
 Kubernetes/CNI. Примерные CIDR `fd4d:5453:1000:100::/56` и
-`fd4d:5453:1000:200::/112` должны
+`fd4d:5453:1000:200::/112`, `10.244.0.0/16` и `10.96.0.0/16` должны
 не пересекаться с вашими сетями/VPN.
 
 Можно установить обычный Ubuntu Server 24.04 из ISO или использовать
 официальный Ubuntu 24.04 cloud image. Подготовка VM не требует Kubernetes
-ресурсов. Задайте стабильный IP/hostname и SSH public key; приватный ключ
+ресурсов. Задайте стабильные IPv6/IPv4 и hostname и SSH public key; приватный ключ
 остается на управляющей машине. Нужны маршрутизируемый IPv6 узла (ULA или
-GUA), рабочие IPv6 DNS/NTP и IPv6 на управляющей машине, включая `::1`.
-IPv4 у ОС допускается только для внешней загрузки пакетов/образов.
+GUA), IPv4 того же узла, рабочие DNS/NTP и обе семьи на управляющей машине, включая `::1`.
+DNS/NTP могут использовать любую рабочую семью. IPv4 разрешен и для внутренних соединений.
 Не открывайте NodePort в Internet для MVP.
 
 На управляющей Ubuntu 24.04 (это может быть та же VM при доступном SSH):
@@ -81,9 +81,9 @@ make tools
 cp config/environments/ubuntu.example.yaml config/environments/ubuntu.local.yaml
 ```
 
-Отредактируйте только локальный environment: имя/IP узла, SSH host/user/port,
-путь к вашему ключу, kubeconfig, IPv6 DNS/NTP и непересекающиеся IPv6 CIDR.
-`node_ip` и `ssh_host` задавайте без скобок; URL содержит IPv6 в `[скобках]`.
+Отредактируйте только локальный environment: имя узла, `node_ip` (основной IPv6), `node_ipv4`, SSH host/user/port,
+путь к вашему ключу, kubeconfig, DNS/NTP и непересекающиеся CIDR обеих семей.
+IP задавайте без скобок; URL содержит IPv6 в `[скобках]`.
 Этот файл игнорируется
 Git. Все команды запускайте из корня репозитория. SSH host key нужно проверить
 и принять до bootstrap обычным SSH-подключением. `make tools` устанавливает
@@ -91,7 +91,7 @@ Git. Все команды запускайте из корня репозито
 
 До установки должен проходить `ssh <user>@<VM> sudo -n true`. На VM необходимы
 исходящий HTTPS/DNS/NTP; с управляющей машины — SSH, Kubernetes API TCP 6443
-и HTTP TCP 30080 по IPv6. Для одноузлового стенда сетевой overlay остается внутри VM;
+и HTTP TCP 30080 по IPv6 и IPv4. Для одноузлового стенда сетевой overlay остается внутри VM;
 дополнительные узлы в MVP не поддерживаются.
 
 В первоначальной IPv4-приемке путь от `make tools` до первого успешного `make verify`
@@ -125,13 +125,15 @@ loopback port-forward к Prometheus/Loki и закрывает их при за�
 числе при отказе. Код 0 означает успех всех обязательных проверок:
 
 - Ready node/workloads и Bound PVC; актуальные Gateway/HTTPRoute conditions.
-- Фактические IPv6 API/InternalIP/Pod/Service/EndpointSlice и единственный
-  Calico IPv6 pool; IPv4/mapped IPv4/dual-stack не проходят проверку.
-- HTTP 200 и ровно 12 bytes `Hello World!`, совпадающий Request-ID; fallback
+- Основной IPv6 API, обе семьи Node/Pod и Calico pools; собственные Services
+  RequireDualStack с IPv6 первым. У каждого Service проверяются Ready EndpointSlices
+  обеих семей, связанные с теми же Pod UID. Точные системные исключения описаны в сетевом контракте.
+- По обеим семьям HTTP 200 и ровно 12 bytes `Hello World!`, совпадающий Request-ID; fallback
   для невалидного ID, отрицательный маршрут и настоящий missing-file 404.
 - Живые targets Traefik/node exporter/kube state metrics/Prometheus, свежие
-  samples, рост scoped counter после нагрузки без наблюдаемого уменьшения counter.
-- Точная запись access с тем же Request-ID и независимая stderr error-запись
+  samples, отсутствие повторного scrape одного Pod/port/path через разные адреса или jobs,
+  рост scoped counter после суммарной нагрузки по обеим семьям без уменьшения counter.
+- Для каждого семейства точная запись access с тем же Request-ID и независимая stderr error-запись
   через Loki API, правильные stream и source labels.
 - Реальные UID PID1, отсутствие capabilities/API token и read-only root mount.
 
@@ -164,6 +166,7 @@ kubectl get pods -A
 kubectl get gatewayclass
 kubectl -n demo get gateway,httproute
 curl -6 --noproxy '*' -g -i -H 'X-Request-ID: manual-check-01' 'http://[<VM_IPv6>]:30080/'
+curl -4 --noproxy '*' -i -H 'X-Request-ID: manual-check-v4' 'http://<VM_IPv4>:30080/'
 ```
 
 Метрики (отдельный терминал для port-forward):
