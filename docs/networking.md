@@ -3,6 +3,9 @@
 Статус: режим принят на `cc3afc6cab06a4cb441c3f0c705e79cc04910a0f`.
 [Независимый протокол](acceptance/dual-stack-acceptance.md) и
 [измерения/evidence](acceptance/dual-stack-evidence.json).
+Последующий [аудит кода `8ed0e70`](reports/MVP-AUDIT.md) повторно подтвердил
+обе сети на рабочем стенде и усилил проверку Gateway status: теперь адрес
+должен точно совпадать с основным `node_ip` выбранного environment.
 Текущий контракт — [версия 3](contracts.md). Строгая IPv6-only приемка остановлена
 по изменению требования; ее промежуточные отчеты не являются приемкой dual-stack.
 
@@ -64,7 +67,7 @@ ServiceMonitor выбирает IPv6 EndpointSlices. Это исключает �
 ## Подтвержденный результат
 
 Чистая установка, повтор bootstrap/deploy, recovery и полный verify после
-выключения/включения VM прошли на той же кодовой ревизии. SSH/API/HTTP
+выключения/включения VM прошли на `cc3afc6`. SSH/API/HTTP
 проверены по IPv6 и IPv4; API использует нормальную CA/SAN verification.
 Все восемь собственных Services отвечают по обеим семьям (16 внутренних
 HTTP probes), их DNS A/AAAA точно соответствуют ClusterIPs. Проверены также

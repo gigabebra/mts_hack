@@ -7,6 +7,10 @@ Prometheus измеряет HTTP и состояние узла, Fluentd дос�
 
 MVP с полноценным dual-stack Kubernetes принят на чистой Ubuntu 24.04.5,
 кодовая ревизия `cc3afc6cab06a4cb441c3f0c705e79cc04910a0f`.
+После дополнительного аудита две проверки усилены; код `8ed0e70`
+повторно проверен на рабочем стенде: lint, deploy/verify, recovery и обе сети
+прошли. [Результаты аудита](docs/reports/MVP-AUDIT.md) отделены от прежней
+чистой установки и ее измерений.
 IPv6 — основной; приложение и компоненты доступны также по IPv4.
 [Сетевой контракт и диагностика](docs/networking.md),
 [независимая приемка](docs/acceptance/dual-stack-acceptance.md),
@@ -162,7 +166,9 @@ PVC bindings и содержимое существующих прикладны
 `environment("ubuntu")`. Путь разрешается относительно корня репозитория:
 
 ```bash
-export KUBECONFIG="$(.venv/bin/python -c 'import sys; sys.path.insert(0, "scripts"); from stacklib import environment; print(environment("ubuntu")["kubeconfig"])')"
+KUBECONFIG="$(.venv/bin/python -c 'import sys; sys.path.insert(0, "scripts"); from stacklib import environment; print(environment("ubuntu")["kubeconfig"])')" || exit 1
+test -s "$KUBECONFIG" || exit 1
+export KUBECONFIG
 export PATH="$PWD/.cache/tools:$PATH"
 kubectl get nodes
 kubectl get pods -A
