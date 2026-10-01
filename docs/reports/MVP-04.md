@@ -78,3 +78,8 @@ Port Loki3100, Fluentd health24220. Images renderer передает через 
 Следующий шаг: интегратор применяет ветку, выполняет общий deploy/verify,
 останавливает Loki на короткий срок, делает пробы, заменяет Fluentd pod,
 восстанавливает Loki и находит исходные markers, затем повторяет deploy.
+
+## Итог интегратора
+
+Статус: done, 2026-10-01. На kubeadm VM найдены exact access-ID и настоящий stderr missing-file error в Loki. История пережила замену Loki pod. При коротком outage пять маркеров сохранились в буфере через замену Fluentd pod и найдены после восстановления. Tail offsets до/после равны; новый input emit_records=0 до следующего трафика: старые логи не перечитаны. Прогон recovery-162280d8e552 завершен зеленым verify. Полное заполнение 256MiB не проверялось и не заявляется.
+Сводка без адресов и credentials: [mvp-integration.json](../acceptance/mvp-integration.json).

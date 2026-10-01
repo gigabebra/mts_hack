@@ -113,3 +113,8 @@ kubectl --kubeconfig "$KUBECONFIG" -n monitoring rollout status \
 не отразился в samples, обнаружить нельзя. Требуется синхронизация времени
 машины проверки и Prometheus. Сетевые проверки, dashboards и alerting не
 входят в эту карточку.
+
+## Итог интегратора
+
+Статус: done, 2026-10-01. Все четыре required targets, свежие raw samples и scoped HTTP counter проверены: 1→25 после 24 HTTP200. Исторический range vector сохранился после пересоздания Prometheus pod на PVC. Сквозные и recovery отчеты зеленые.
+Сводка без адресов и credentials: [mvp-integration.json](../acceptance/mvp-integration.json).

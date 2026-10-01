@@ -3,11 +3,11 @@
 | ID | Статус | Владелец | Результат |
 | --- | --- | --- | --- |
 | MVP-00 | done | интегратор | Контракт, 20 image digests, checksum downloads, доступ к отдельным VM определен |
-| MVP-01 | ready_for_integration | инфраструктура | Первый/повтор bootstrap и reboot pass; ожидается PVC binding |
-| MVP-02 | ready_for_integration | Gateway | Ветка объединена; Helm/контейнерные проверки pass |
-| MVP-03 | ready_for_integration | метрики | Ветка объединена; render/API failure fixtures pass |
-| MVP-04 | ready_for_integration | логирование | Ветка объединена; реальный Docker ingestion/recovery pass |
-| MVP-05 | in_progress | интегратор | Общие deploy/verify/evidence и README; live проверка продолжается |
-| MVP-06 | todo | независимая приемка | — |
+| MVP-01 | done | инфраструктура | Live integration pass; см. docs/reports/MVP-01.md |
+| MVP-02 | done | Gateway | Live integration pass; см. docs/reports/MVP-02.md |
+| MVP-03 | done | метрики | Live integration pass; см. docs/reports/MVP-03.md |
+| MVP-04 | done | логирование | Live integration pass; см. docs/reports/MVP-04.md |
+| MVP-05 | done | интегратор | Live integration pass; см. docs/reports/MVP-05.md |
+| MVP-06 | in_progress | независимая приемка | Проверяющий и чистая Ubuntu VM со свежим checkout |
 
 FINAL не назначен. Live-проверки и изменения общей VM выполняет интегратор.

@@ -91,3 +91,8 @@ unreachable=0; повторный запуск: failed=0, unreachable=0. Node Re
 штатным health job. Контролируемый reboot выполнен Ansible reboot;
 перезапуск и восстановление SSH заняли 28 секунд, последующий make health
 прошел. Привязка PVC будет проверена общим deploy MVP-05.
+
+## Итог интегратора
+
+Статус: done, 2026-10-01. Оба PV mts-prometheus и mts-loki Bound после штатного deploy; PVC привязаны к ожидаемым volumeName. Все проверки MVP-01 теперь pass.
+Сводка без адресов и credentials: [mvp-integration.json](../acceptance/mvp-integration.json).

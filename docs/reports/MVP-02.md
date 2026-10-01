@@ -111,3 +111,8 @@ marker следует передать неизменными в общий chec
 [реализация conditions в Traefik v3.6.2](https://github.com/traefik/traefik/blob/v3.6.2/pkg/provider/kubernetes/gateway/kubernetes.go),
 [Nginx map](https://nginx.org/en/docs/http/ngx_http_map_module.html) и
 [Nginx JSON log escaping](https://nginx.org/en/docs/http/ngx_http_log_module.html).
+
+## Итог интегратора
+
+Статус: done, 2026-10-01. Live GatewayClass/Gateway/HTTPRoute conditions с observedGeneration pass. Внешний NodePort дал точное тело и ID; negative route и missing-file checks pass. Сквозной verify 20261001T112242Z-c174a32b и повторные прогоны зеленые.
+Сводка без адресов и credentials: [mvp-integration.json](../acceptance/mvp-integration.json).

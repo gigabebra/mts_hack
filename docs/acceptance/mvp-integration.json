@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "purpose": "Sanitized integration evidence; full raw reports remain in ignored artifacts/",
+  "reports": [
+    {
+      "source": "artifacts/verify/20261001T112242Z-c174a32b/report.json",
+      "sha256": "55e8a2f9ac4e28c32a8d1f0a69b688d15964df62e913103d600baadcef595015",
+      "revision": "98d1c8931c3a961e20c620e7248ddcab63073735",
+      "run_id": "20261001T112242Z-c174a32b",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "readiness",
+          "status": "pass"
+        },
+        {
+          "name": "gateway_conditions",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_warmup",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_baseline",
+          "status": "pass"
+        },
+        {
+          "name": "http",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_delta",
+          "status": "pass"
+        },
+        {
+          "name": "logs",
+          "status": "pass"
+        },
+        {
+          "name": "runtime_security",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "source": "artifacts/idempotency/20261001T112340Z-bd51041c/report.json",
+      "sha256": "72a528c4750ae06df968707c2a6983fde04f1adbd04397776046ca1d3f037de3",
+      "revision": "98d1c8931c3a961e20c620e7248ddcab63073735",
+      "run_id": "20261001T112340Z-bd51041c",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "deploy_1",
+          "status": "pass"
+        },
+        {
+          "name": "deploy_2",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "source": "artifacts/recovery/recovery-162280d8e552/report.json",
+      "sha256": "b7d9dda13e549a8684654da84eae6e84c9dc1efe28a7e8a592c952542b85d1d5",
+      "revision": "ad27c75b3b4520118185c022448b6aef89b0a966",
+      "run_id": "recovery-162280d8e552",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "prometheus_history",
+          "status": "pass"
+        },
+        {
+          "name": "loki_history",
+          "status": "pass"
+        },
+        {
+          "name": "collector_positions",
+          "status": "pass"
+        },
+        {
+          "name": "collector_buffer_restart",
+          "status": "pass"
+        },
+        {
+          "name": "after_recovery_verify",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "source": "artifacts/verify/recovery-162280d8e552-after/report.json",
+      "sha256": "2523f5f281efc889b9948e64cde8f3ca1e5ab6765cf0153ed783ff4b53bf3ded",
+      "revision": "ad27c75b3b4520118185c022448b6aef89b0a966",
+      "run_id": "recovery-162280d8e552-after",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "readiness",
+          "status": "pass"
+        },
+        {
+          "name": "gateway_conditions",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_warmup",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_baseline",
+          "status": "pass"
+        },
+        {
+          "name": "http",
+          "status": "pass"
+        },
+        {
+          "name": "metrics_delta",
+          "status": "pass"
+        },
+        {
+          "name": "logs",
+          "status": "pass"
+        },
+        {
+          "name": "runtime_security",
+          "status": "pass"
+        }
+      ]
+    }
+  ],
+  "http_counter": {
+    "query": "traefik_entrypoint_requests_total{entrypoint=\"web\",code=\"200\",method=\"GET\"}",
+    "before": 1.0,
+    "after": 25.0,
+    "increase": 24.0,
+    "min_increase": 24.0,
+    "window_start": 1790853776.244,
+    "window_end": 1790853791.9820857
+  },
+  "collector": [
+    {
+      "name": "collector_positions",
+      "status": "pass",
+      "position_files": 1,
+      "records_replayed_after_restart": 0
+    },
+    {
+      "name": "collector_buffer_restart",
+      "status": "pass",
+      "request_ids": [
+        "recovery-162280d8e552-buffer-0",
+        "recovery-162280d8e552-buffer-1",
+        "recovery-162280d8e552-buffer-2",
+        "recovery-162280d8e552-buffer-3",
+        "recovery-162280d8e552-buffer-4"
+      ],
+      "matches": {
+        "recovery-162280d8e552-buffer-0": 1,
+        "recovery-162280d8e552-buffer-1": 1,
+        "recovery-162280d8e552-buffer-2": 1,
+        "recovery-162280d8e552-buffer-3": 1,
+        "recovery-162280d8e552-buffer-4": 1
+      },
+      "elapsed_seconds": 70.25,
+      "guarantee": "Only this bounded outage tested; duplicates permitted"
+    }
+  ]
+}

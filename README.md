@@ -179,6 +179,7 @@ Request-ID хранится в записи, а не в metric/Loki labels.
 
 Single-node без HA. Local PV с Retain сохраняют данные при пересоздании pod,
 но не защищают от потери диска/VM; резервное копирование не реализовано.
+Емкость local PV не устанавливает filesystem-квоту на каталог узла.
 Retention Prometheus 24h/4GB, Loki 24h, два PV по 12Gi. Fluentd имеет
 persistent positions и ограниченный буфер, допускает дубли; отсутствие
 потерь при произвольной длительности outage не обещается. HTTP без TLS,
