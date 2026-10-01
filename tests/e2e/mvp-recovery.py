@@ -54,6 +54,19 @@ def selected_pods(env, namespace, selector):
     return resource(env, 'pods', '-n', namespace, '-l', selector)['items']
 
 
+def collector_state(env):
+    position_text = kubectl(env, '-n', 'logging', 'exec', 'daemonset/fluentd', '-c', 'fluentd',
+                           '--', 'cat', '/var/lib/fluentd/nginx.pos', capture=True).stdout
+    positions = {}
+    for line in position_text.splitlines():
+        path, offset, inode = line.split('\t')
+        positions[(path, inode)] = int(offset, 16)
+    ruby = 'j=JSON.parse(Net::HTTP.get(URI("http://127.0.0.1:24220/api/plugins.json"))); puts JSON.generate(j["plugins"].find{|p| p["plugin_id"]=="nginx_cri"})'
+    metrics = json.loads(kubectl(env, '-n', 'logging', 'exec', 'daemonset/fluentd', '-c', 'fluentd',
+                                '--', 'ruby', '-rnet/http', '-rjson', '-e', ruby, capture=True).stdout)
+    return positions, metrics['emit_records']
+
+
 def replace_pod(env, namespace, selector, workload):
     pods = selected_pods(env, namespace, selector)
     if len(pods) != 1:
@@ -120,11 +133,23 @@ def main():
             try:
                 kubectl(env, '-n', 'logging', 'scale', 'deployment/loki', '--replicas=0')
                 poll(lambda: not selected_pods(env, 'logging', 'app.kubernetes.io/name=loki'), 90)
+                old_positions, old_emitted = collector_state(env)
                 for item in markers:
                     http(base, item)
-                # Allow tail interval/flush attempt, then restart only the collector pod.
-                time.sleep(5)
+                # Require successful tail consumption before testing persistent buffer/positions.
+                def consumed():
+                    positions, emitted = collector_state(env)
+                    return (positions, emitted) if emitted >= old_emitted + len(markers) else None
+                saved_positions, _ = poll(consumed, 30)
+                if not saved_positions or saved_positions == old_positions:
+                    raise ValueError('Tail positions did not advance during the Loki outage')
                 replace_pod(env, 'logging', 'app.kubernetes.io/name=fluentd', 'daemonset/fluentd')
+                time.sleep(6)  # One tail refresh interval; no new application traffic here.
+                restored_positions, new_emitted = collector_state(env)
+                if restored_positions != saved_positions or new_emitted != 0:
+                    raise ValueError('Collector replayed old source records or lost saved tail positions')
+                report['checks'].append({'name': 'collector_positions', 'status': 'pass',
+                                         'position_files': len(saved_positions), 'records_replayed_after_restart': new_emitted})
             finally:
                 kubectl(env, '-n', 'logging', 'scale', 'deployment/loki', '--replicas=1')
                 kubectl(env, '-n', 'logging', 'rollout', 'status', 'deployment/loki', '--timeout=180s')
