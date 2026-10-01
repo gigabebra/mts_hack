@@ -69,6 +69,14 @@ def collector_state(env):
     return positions, metrics['emit_records']
 
 
+def collector_consumed(before, after, expected_records):
+    # The position file and monitor counters are read in separate exec calls.
+    # A newer counter can arrive alongside an older position-file observation.
+    old_positions, old_emitted = before
+    positions, emitted = after
+    return bool(positions) and positions != old_positions and emitted >= old_emitted + expected_records
+
+
 def replace_pod(env, namespace, selector, workload):
     pods = selected_pods(env, namespace, selector)
     if len(pods) != 1:
@@ -141,7 +149,8 @@ def main():
                 # Require successful tail consumption before testing persistent buffer/positions.
                 def consumed():
                     positions, emitted = collector_state(env)
-                    return (positions, emitted) if emitted >= old_emitted + len(markers) else None
+                    return (positions, emitted) if collector_consumed(
+                        (old_positions, old_emitted), (positions, emitted), len(markers)) else None
                 saved_positions, _ = poll(consumed, 30)
                 if not saved_positions or saved_positions == old_positions:
                     raise ValueError('Tail positions did not advance during the Loki outage')
