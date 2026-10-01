@@ -94,12 +94,24 @@
     content: |
       [Time]
       NTP={{ ntp_servers | default(['2606:4700:f1::123']) | mvp_ipv6_servers | join(' ') }}
-      FallbackNTP=
+      FallbackNTP={{ ntp_servers | default(['2606:4700:f1::123']) | mvp_ipv6_servers | join(' ') }}
   register: ntp_ipv6_config
+- name: Create an override directory for the time synchronization service
+  ansible.builtin.file:
+    path: /etc/systemd/system/systemd-timesyncd.service.d
+    state: directory
+    mode: '0755'
+- name: Enforce IPv6 for timesyncd even if DHCP advertises an IPv4 NTP peer
+  ansible.builtin.copy:
+    src: timesyncd-ipv6.conf
+    dest: /etc/systemd/system/systemd-timesyncd.service.d/99-mts-ipv6.conf
+    mode: '0644'
+  register: ntp_ipv6_filter
 - name: Enable IPv6 network time synchronization
   ansible.builtin.systemd_service:
     name: systemd-timesyncd
-    state: "{{ ntp_ipv6_config.changed | ternary('restarted', 'started') }}"
+    daemon_reload: "{{ ntp_ipv6_filter.changed }}"
+    state: "{{ (ntp_ipv6_config.changed or ntp_ipv6_filter.changed) | ternary('restarted', 'started') }}"
     enabled: true
 - name: Create the resolver override directory
   ansible.builtin.file:

@@ -1,0 +1,15 @@
+spec:
+  template:
+    metadata:
+      annotations:
+        mts-stack.io/coredns-corefile-sha256: {{ (coredns_corefile | hash('sha256')) | to_json }}
+    spec:
+      containers:
+        - name: coredns
+          image: {{ 'registry.k8s.io/coredns/coredns:v1.12.1' | mvp_image(image_lock.images) | to_json }}
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.podIP

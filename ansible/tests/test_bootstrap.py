@@ -3,6 +3,8 @@ import importlib.util
 import pathlib
 import json
 import copy
+import hashlib
+import ipaddress
 import sys
 import unittest
 
@@ -95,6 +97,57 @@ class NetworkGuards(unittest.TestCase):
 
 
 class IPv6Render(unittest.TestCase):
+    def test_coredns_initial_and_repeat_patch_keep_ipv6_self_health(self):
+        import jinja2
+        import yaml
+        corefile = (ROOT / "files/coredns.Corefile").read_text()
+        env = jinja2.Environment(loader=jinja2.FileSystemLoader(ROOT / "templates"), undefined=jinja2.StrictUndefined)
+        env.filters.update(to_json=json.dumps, mvp_image=image,
+                           hash=lambda value, kind: hashlib.new(kind, value.encode()).hexdigest())
+        variables = {"coredns_corefile": corefile,
+                     "image_lock": yaml.safe_load((ROOT.parent / "config/images.lock.yaml").read_text())}
+        template = env.get_template("corednsdeployment+strategic.yaml.j2")
+        patch = yaml.safe_load(template.render(**variables))
+        self.assertEqual(patch, yaml.safe_load(template.render(**variables)))
+        pod = patch["spec"]["template"]
+        container = pod["spec"]["containers"][0]
+        self.assertIn("@sha256:", container["image"])
+        self.assertEqual(container["env"], [{"name": "POD_IP", "valueFrom": {
+            "fieldRef": {"apiVersion": "v1", "fieldPath": "status.podIP"}}}])
+        rendered = corefile.replace("{$POD_IP}", NODE)
+        directives = {line.strip().split()[0]: line.strip().split()[1:]
+                      for line in rendered.splitlines() if line.strip() and line.strip() != "}"}
+        self.assertEqual(directives["bind"], [NODE])
+        self.assertEqual(directives["health"], [f"[{NODE}]:8080", "{"])
+        self.assertEqual(directives["ready"], [f"[{NODE}]:8181"])
+        self.assertEqual(directives["prometheus"], [f"[{NODE}]:9153"])
+        self.assertIn("loop", directives)
+        self.assertNotIn("127.0.0.1", corefile)
+        changed = yaml.safe_load(template.render(**{**variables, "coredns_corefile": corefile + "# changed\n"}))
+        self.assertNotEqual(pod["metadata"]["annotations"], changed["spec"]["template"]["metadata"]["annotations"])
+
+    def test_ntp_fallback_and_service_filter_cannot_select_ipv4(self):
+        import jinja2
+        import yaml
+        tasks = yaml.safe_load((ROOT / "tasks/os.yaml").read_text())
+        source = next(task["ansible.builtin.copy"]["content"] for task in tasks
+                      if task["name"] == "Configure NTP traffic to explicit IPv6 servers")
+        env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+        env.filters["mvp_ipv6_servers"] = ipv6_servers
+        config = env.from_string(source).render(ntp_servers=[NODE])
+        entries = dict(line.split("=", 1) for line in config.splitlines() if "=" in line)
+        self.assertEqual(entries, {"NTP": NODE, "FallbackNTP": NODE})
+        with self.assertRaises(ValueError):
+            env.from_string(source).render(ntp_servers=["192.0.2.1"])
+        filters = (ROOT / "files/timesyncd-ipv6.conf").read_text().splitlines()
+        self.assertEqual([line for line in filters if line.startswith("IPAddressDeny=")],
+                         ["IPAddressDeny=", "IPAddressDeny=any"])
+        self.assertEqual([line for line in filters if line.startswith("IPAddressAllow=")],
+                         ["IPAddressAllow=", "IPAddressAllow=::/0"])
+        allow = ipaddress.ip_network("::/0")
+        self.assertIn(ipaddress.ip_address(NODE), allow)
+        self.assertNotIn(ipaddress.ip_address("192.0.2.1"), allow)
+
     def test_calico_assigns_ipv6_only_without_unintended_default_pool(self):
         original = [
             {"kind": "ConfigMap", "metadata": {"name": "calico-config"}, "data": {

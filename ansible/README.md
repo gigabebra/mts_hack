@@ -46,6 +46,14 @@ pull выполняется по digest. Локальные tag aliases нужн
 `imagePullPolicy: Never` запрещает ему заново разрешать tag. Static Pods и
 CoreDNS получают patches с digest до запуска; kube-proxy генерируется
 `kubeadm init phase addon kube-proxy --print-manifest`, затем pin/apply.
+CoreDNS получает `POD_IP` через downward API. Управляемый
+`ansible/files/coredns.Corefile` привязывает DNS, health, readiness и metrics
+к этому IPv6; `bind` также задает IPv6 для startup loop-check. Это исключает
+IPv4 loopback self-health, который CoreDNS по умолчанию выполняет каждую
+секунду. Bootstrap обновляет только Corefile в ConfigMap и собственный
+Deployment patch при каждом запуске, включая уже инициализированный кластер.
+Checksum Corefile в Pod template вызывает rollout только при изменении
+конфигурации; image остается закрепленным digest, reset не нужен.
 Calico YAML структурно переводится в IPv6 VXLAN без BGP; все images закрепляются.
 CNI назначает только IPv6 (`assign_ipv4=false`, `assign_ipv6=true`), Calico
 не ищет IPv4 узла (`IP=none`, `IP6=<node_ip>`). `NO_DEFAULT_POOLS=true`
@@ -103,7 +111,15 @@ forwarding, чтобы SLAAC и default route не потерялись посл
 процессы загрузки; кластерный DNS обращается к IPv6 servers напрямую.
 `ntp_servers` — 1–3 IPv6 NTP, по умолчанию `2606:4700:f1::123` из
 [документации Cloudflare Time Services](https://developers.cloudflare.com/time-services/ntp/usage/),
-FallbackNTP выключен. IPv4 адрес ОС допустим только для внешних загрузок
+FallbackNTP явно содержит тот же список IPv6: пустое значение в systemd 255
+снова включает compiled-in hostname fallback. Дополнительный override только
+для `systemd-timesyncd.service` устанавливает `IPAddressDeny=any` и
+`IPAddressAllow=::/0`, сбросив предыдущие service-level значения. На целевой
+Ubuntu 24.04 с cgroup BPF это запрещает входящие/исходящие IPv4 NTP пакеты,
+даже если DHCP продолжает показывать IPv4 peer в LinkNTPServers. DHCP,
+сетевые интерфейсы, DNS и SSH этим фильтром не изменяются. В live приемке
+проверяются активный IPv6 peer и установленный BPF filter.
+IPv4 адрес ОС допустим только для внешних загрузок
 пакетов и образов из Internet; runtime Node/API/Pod/Service/SSH работает по
 IPv6. Bootstrap не отключает DHCP IPv4 и не меняет netplan.
 
@@ -143,6 +159,9 @@ helm template storage deploy/storage --set nodeName=mts-acceptance
 [Calico IPv6 VXLAN](https://docs.tigera.io/calico/latest/networking/configuring/vxlan-ipip),
 [официальным kubeadm networking](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/dual-stack-support/)
 и исходниками закрепленного [kubeadm 1.34.3](https://github.com/kubernetes/kubernetes/blob/v1.34.3/cmd/kubeadm/app/phases/controlplane/manifests.go).
+IPv6 self-health CoreDNS следует официальным [health](https://coredns.io/plugins/health/)
+и [bind](https://coredns.io/plugins/bind/). Ограничение только NTP service
+соответствует [systemd IPAddressAllow/IPAddressDeny](https://www.freedesktop.org/software/systemd/man/255/systemd.resource-control.html).
 Наличие IPv6 default route не доказывает достижимость выбранных внешних
 DNS/NTP; их работоспособность, сохранение маршрута после reboot и полный
 IPv6 verify должен подтвердить интегратор на чистом стенде.
