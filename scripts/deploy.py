@@ -13,7 +13,7 @@ def install(env, release, namespace, chart, values=None, overrides=None):
     argv = [tool('helm'), 'upgrade', '--install', release, chart,
             '--namespace', namespace, '--kubeconfig', env['kubeconfig'],
             '--skip-crds', '--post-renderer', ROOT / 'scripts/post-render.py',
-            '--wait', '--timeout', '10m', '--history-max', '5']
+            '--wait', '--timeout', '10m', '--history-max', '5', '--hide-notes']
     if values:
         argv += ['-f', ROOT / values]
     if overrides:
