@@ -1,0 +1,22 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: traefik
+  namespace: {{ .Values.traefik.namespace | quote }}
+  labels:
+    app.kubernetes.io/name: monitoring-extras
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    release: {{ .Values.prometheusRelease | quote }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.traefik.namespace | quote }}
+  selector:
+    matchLabels:
+      {{- toYaml .Values.traefik.serviceLabels | nindent 6 }}
+  endpoints:
+    - port: {{ .Values.traefik.port | quote }}
+      path: /metrics
+      interval: {{ .Values.interval | quote }}
+      scrapeTimeout: {{ .Values.scrapeTimeout | quote }}

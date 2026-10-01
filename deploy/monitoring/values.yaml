@@ -1,0 +1,152 @@
+# kube-prometheus-stack 80.6.0 from the checksum-verified archive in versions.yaml.
+# Ordinary image fields are converted to lock digests by the deploy post-renderer.
+fullnameOverride: monitoring
+crds:
+  enabled: true
+  upgradeJob:
+    enabled: false
+defaultRules:
+  create: false
+grafana:
+  enabled: false
+alertmanager:
+  enabled: false
+windowsMonitoring:
+  enabled: false
+kubeApiServer:
+  enabled: false
+kubelet:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+coreDns:
+  enabled: false
+kubeDns:
+  enabled: false
+prometheusOperator:
+  enabled: true
+  image:
+    registry: quay.io
+    repository: prometheus-operator/prometheus-operator
+    tag: v0.87.1
+  admissionWebhooks:
+    enabled: false
+    patch:
+      enabled: false
+    deployment:
+      enabled: false
+  tls:
+    enabled: false
+  serviceMonitor:
+    selfMonitor: false
+  kubeletService:
+    enabled: false
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+  prometheusConfigReloader:
+    image:
+      registry: quay.io
+      repository: prometheus-operator/prometheus-config-reloader
+      tag: v0.87.1
+      # Embedded in operator args, so it cannot rely on an image-field renderer.
+      sha: 257ce3543e8f45c059dab488bcf897d8cc598cabd78afba12f41d6dbe36e22d2
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {cpu: 100m, memory: 64Mi}
+prometheus:
+  enabled: true
+  service:
+    type: ClusterIP
+  serviceMonitor:
+    selfMonitor: true
+    interval: 15s
+  prometheusSpec:
+    image:
+      registry: quay.io
+      repository: prometheus/prometheus
+      tag: v3.8.1
+    replicas: 1
+    shards: 1
+    scrapeInterval: 15s
+    scrapeTimeout: 10s
+    evaluationInterval: 15s
+    retention: 24h
+    retentionSize: 4GB
+    walCompression: true
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector:
+      matchLabels:
+        release: monitoring
+    serviceMonitorNamespaceSelector: {}
+    podMonitorSelector:
+      matchLabels:
+        release: monitoring
+    probeSelector:
+      matchLabels:
+        release: monitoring
+    scrapeConfigSelector:
+      matchLabels:
+        release: monitoring
+    ruleSelector:
+      matchLabels:
+        release: monitoring
+    resources:
+      requests: {cpu: 200m, memory: 512Mi}
+      limits: {cpu: '1', memory: 1536Mi}
+    securityContext:
+      runAsUser: 1000
+      runAsGroup: 2000
+      fsGroup: 2000
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-retain
+          volumeName: mts-prometheus
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 12Gi
+nodeExporter:
+  enabled: true
+prometheus-node-exporter:
+  fullnameOverride: monitoring-prometheus-node-exporter
+  image:
+    registry: quay.io
+    repository: prometheus/node-exporter
+    tag: v1.10.2
+  # Host mounts supply node metrics without opening another host-network port.
+  hostNetwork: false
+  resources:
+    requests: {cpu: 25m, memory: 32Mi}
+    limits: {cpu: 200m, memory: 128Mi}
+  prometheus:
+    monitor:
+      enabled: true
+      interval: 15s
+      scrapeTimeout: 10s
+kubeStateMetrics:
+  enabled: true
+kube-state-metrics:
+  fullnameOverride: monitoring-kube-state-metrics
+  image:
+    registry: registry.k8s.io
+    repository: kube-state-metrics/kube-state-metrics
+    tag: v2.17.0
+  resources:
+    requests: {cpu: 25m, memory: 64Mi}
+    limits: {cpu: 200m, memory: 256Mi}
+  prometheus:
+    monitor:
+      enabled: true
+      interval: 15s
+      scrapeTimeout: 10s
