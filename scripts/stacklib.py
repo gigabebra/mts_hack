@@ -41,8 +41,6 @@ def environment(name):
         if env.get(key):
             p = Path(os.path.expanduser(env[key]))
             env[key] = str(p if p.is_absolute() else ROOT / p)
-    if os.environ.get('KUBECONFIG'):
-        env['kubeconfig'] = str(Path(os.environ['KUBECONFIG']).resolve())
     env['_file'] = str(path)
     return env
 

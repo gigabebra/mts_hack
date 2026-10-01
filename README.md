@@ -122,6 +122,12 @@ PVC bindings и содержимое существующих прикладны
 выполняет полный verify. Helm release history исключена из сравнения.
 `make evidence` упаковывает JSON-отчеты; kubeconfig/inventory/Secrets не собирает.
 
+На выделенном тестовом стенде `make verify-recovery ENV=ubuntu` проверяет
+сохранение истории Prometheus/Loki при пересоздании pod и доставку пяти
+маркеров из буфера после короткой остановки Loki и рестарта Fluentd.
+Команда восстанавливает одну реплику Loki и завершает сценарий обычным verify.
+Контролируемый reboot VM проверяется последующим `make health ENV=ubuntu`.
+
 ## Ручная диагностика
 
 Используйте kubeconfig именно этого стенда:

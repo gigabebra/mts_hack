@@ -12,7 +12,8 @@ args = parser.parse_args()
 stamp = dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
 destination = ROOT / 'artifacts/evidence' / (stamp + '.tar.gz')
 destination.parent.mkdir(parents=True, exist_ok=True)
-reports = sorted((ROOT / 'artifacts/verify').glob('*/report.json')) + sorted((ROOT / 'artifacts/idempotency').glob('*/report.json'))
+reports = [path for group in ('verify', 'idempotency', 'recovery')
+           for path in sorted((ROOT / 'artifacts' / group).glob('*/report.json'))]
 if not reports:
     parser.error('No reports exist. Run make verify first, including failed runs.')
 index = {'generated_at': stamp, 'environment': args.env,

@@ -3,7 +3,7 @@ PROFILE ?= mvp
 PYTHON := $(CURDIR)/.venv/bin/python
 export PATH := $(CURDIR)/.cache/tools:$(CURDIR)/.venv/bin:$(PATH)
 
-.PHONY: tools lint bootstrap health deploy verify verify-idempotency evidence
+.PHONY: tools lint bootstrap health deploy verify verify-idempotency verify-recovery evidence
 tools:
 	python3 -m venv .venv
 	.venv/bin/python -m pip install -r requirements.txt
@@ -26,6 +26,9 @@ verify:
 
 verify-idempotency:
 	$(PYTHON) scripts/verify-idempotency.py --env $(ENV)
+
+verify-recovery:
+	$(PYTHON) tests/e2e/mvp-recovery.py --env $(ENV)
 
 evidence:
 	$(PYTHON) scripts/evidence.py --env $(ENV)

@@ -41,7 +41,9 @@ Environment — `config/environments/<ENV>.local.yaml`, пример
 `config/environments/ubuntu.example.yaml`. Верхние ключи: `node_name`,
 `node_ip`, `ssh_host`, `ssh_user`, `ssh_private_key_file`, `ssh_port`,
 `pod_cidr`, `service_cidr`, `node_port`, `kubeconfig`, `data_root`.
-Пути относительно корня проекта; CLI может явно переопределить KUBECONFIG.
+Пути относительно корня проекта. Общие команды берут kubeconfig только из
+environment; унаследованный KUBECONFIG не меняет выбранный стенд. Компонентные
+checks принимают явный `--kubeconfig`.
 Имя узла по умолчанию `mts-mvp`; IP не берется из домашнего current-context.
 
 StorageClass `local-retain`: no-provisioner, WaitForFirstConsumer, Retain.
