@@ -64,6 +64,9 @@ def calico(documents, lock, pod_cidr, node_ip):
         "CLUSTER_TYPE": "k8s",
         "FELIX_IPV6SUPPORT": "true",
         "FELIX_HEALTHHOST": "::1",
+        # Felix otherwise calls an external HTTPS usage/version-warning service.
+        # Runtime traffic must not use the host's IPv4 download exception.
+        "FELIX_USAGEREPORTINGENABLED": "false",
     }
     node["env"] = [entry for entry in node["env"] if entry["name"] not in values
                    and not entry["name"].startswith(("CALICO_IPV4POOL_", "CALICO_IPV6POOL_"))]

@@ -148,14 +148,15 @@ class IPv6Render(unittest.TestCase):
         self.assertIn(ipaddress.ip_address(NODE), allow)
         self.assertNotIn(ipaddress.ip_address("192.0.2.1"), allow)
 
-    def test_calico_assigns_ipv6_only_without_unintended_default_pool(self):
+    def test_calico_assigns_ipv6_only_and_overrides_enabled_usage_reporting(self):
         original = [
             {"kind": "ConfigMap", "metadata": {"name": "calico-config"}, "data": {
                 "calico_backend": "bird",
                 "cni_network_config": '{"plugins":[{"type":"calico","mtu":__CNI_MTU__,"ipam":{"type":"calico-ipam"}}]}' }},
             {"kind": "DaemonSet", "metadata": {"name": "calico-node"}, "spec": {"template": {"spec": {"containers": [{
                 "name": "calico-node", "image": "calico/node:v1",
-                "env": [{"name": "CALICO_IPV4POOL_VXLAN", "value": "Never"}],
+                "env": [{"name": "CALICO_IPV4POOL_VXLAN", "value": "Never"},
+                        {"name": "FELIX_USAGEREPORTINGENABLED", "value": "true"}],
                 "livenessProbe": {"exec": {"command": ["/bin/calico-node", "-bird-live", "-felix-live"]}},
                 "readinessProbe": {"exec": {"command": ["/bin/calico-node", "-bird-ready", "-felix-ready"]}}
             }]}}}}
@@ -167,6 +168,8 @@ class IPv6Render(unittest.TestCase):
         env = {entry["name"]: entry["value"] for entry in container["env"]}
         self.assertEqual((env["IP"], env["IP6"], env["FELIX_IPV6SUPPORT"]), ("none", NODE, "true"))
         self.assertEqual(env["NO_DEFAULT_POOLS"], "true")
+        self.assertEqual([entry for entry in container["env"] if entry["name"] == "FELIX_USAGEREPORTINGENABLED"],
+                         [{"name": "FELIX_USAGEREPORTINGENABLED", "value": "false"}])
         self.assertFalse(any(name.startswith(("CALICO_IPV4POOL_", "CALICO_IPV6POOL_")) for name in env))
         self.assertEqual(container["readinessProbe"]["httpGet"]["host"], "::1")
         self.assertNotIn("exec", container["livenessProbe"])

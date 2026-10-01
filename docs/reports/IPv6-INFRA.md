@@ -71,3 +71,25 @@ CoreDNS tests проверяют IPv6 endpoints, downward env, pinned image и
 **not run**: применение на VM132, отсутствие IPv4 self-health после
 перезапуска CoreDNS, фактическое прикрепление BPF и активный IPv6 NTP peer —
 проверяет интегратор. Агент не подключался к VM.
+
+## Внешняя telemetry Calico
+
+Независимое live ревью pristine VM выявило соединение `calico-node` с
+public IPv4:443. Исходники закрепленного Calico 3.31.2 подтверждают
+включенный default `UsageReportingEnabled` и HTTPS reporter
+`usage.projectcalico.org/UsageCheck/calicoVersionCheck`; startup delay —
+300 секунд с jitter, повторный интервал — 86400 секунд. Ссылки на точные
+исходники приведены в `ansible/README.md`.
+
+В структурный render добавлен `FELIX_USAGEREPORTINGENABLED=false`: он
+выключает reporter и его version/security-warning ответ, сохраняя обычные
+health проверки. Просмотрены Felix config/daemon/usagerep, node startup,
+kube-controllers config и полное дерево исходников тега; отдельного default
+usage/versioncheck механизма в просмотренных компонентах не найдено.
+Это не утверждение об отсутствии любого outbound кода во всех зависимостях.
+
+Негативный render case начинает с upstream env=true и требует единственный
+env=false в результате. **pass**: 17 tests, реальный checksum-verified
+Calico render и проверка единственного отключающего флага в DaemonSet.
+**not run**: новый pristine IPv6 bootstrap и runtime snapshot после startup
+delay; выполняет интегратор. VM агентом не изменялись.

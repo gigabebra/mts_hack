@@ -65,6 +65,17 @@ blockSize 122, NAT outgoing и отключенный BGP export. Это так�
 для явно отключенного IPv4 pool недостаточно. Felix health слушает `::1`;
 Kubelet проверяет HTTP по IPv6, без exec-helper с конкатенацией IPv6 без скобок.
 
+Необязательная внешняя usage/version-warning проверка Felix выключена через
+`FELIX_USAGEREPORTINGENABLED=false`, в том числе если upstream manifest
+задаст `true`. В закрепленном Calico 3.31.2 параметр по умолчанию включен:
+[config_params.go](https://github.com/projectcalico/calico/blob/v3.31.2/felix/config/config_params.go#L424).
+[Daemon](https://github.com/projectcalico/calico/blob/v3.31.2/felix/daemon/daemon.go#L625)
+запускает reporter только при этом флаге; [reporter](https://github.com/projectcalico/calico/blob/v3.31.2/felix/usagerep/usagerep.go#L34)
+использует внешний `usage.projectcalico.org/UsageCheck/calicoVersionCheck`.
+Один флаг выключает и отчеты, и получение version/security warnings через
+этот endpoint. Исключение IPv4 для загрузки пакетов/образов не распространяется
+на runtime telemetry. Проверки доступности Kubernetes/Calico сохраняются.
+
 Bootstrap готовит directories, но PV принадлежат Helm release `storage`
 в namespace `default`, который применяет общий deploy интегратора:
 
