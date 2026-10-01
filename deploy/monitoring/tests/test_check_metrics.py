@@ -52,6 +52,9 @@ class Fixture(http.server.BaseHTTPRequestHandler):
                                 "lastError": "", "scrapeUrl": "http://[2001:db8::10]:9100/metrics"})
             if mode == "ipv4_target":
                 targets[0]["scrapeUrl"] = "http://192.0.2.10:9100/metrics"
+            if mode == 'extra_ipv4_target':
+                targets.append(dict(targets[0], labels={'job': 'legacy', 'instance': '127.0.0.1:9090'},
+                                    scrapeUrl='http://127.0.0.1:9090/metrics'))
             if mode == "mapped_target":
                 targets[0]["scrapeUrl"] = "http://[::ffff:192.0.2.10]:9100/metrics"
             if mode == "missing_scrape_url":
@@ -164,7 +167,7 @@ class MetricsFixtures(unittest.TestCase):
                     self.assertIn(selector, query)
 
     def test_snapshot_rejects_invalid_or_missing_data(self):
-        for failure in ("ipv4_target", "mapped_target", "missing_scrape_url", "ipv4_instance", "http_503", "down", "reloader_down", "missing_target", "stale_target", "empty", "vector",
+        for failure in ('extra_ipv4_target', "ipv4_target", "mapped_target", "missing_scrape_url", "ipv4_instance", "http_503", "down", "reloader_down", "missing_target", "stale_target", "empty", "vector",
                         "stale_sample", "nan", "up_zero", "missing_infrastructure", "warning", "invalid_json"):
             with self.subTest(failure=failure):
                 self.server.state["failure"] = failure

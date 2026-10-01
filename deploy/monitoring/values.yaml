@@ -82,7 +82,18 @@ prometheus:
     serviceDiscoveryRole: EndpointSlice
     additionalArgs:
       - name: web.listen-address
-        value: "[::]:9090"
+        value: "[$(POD_IP)]:9090"
+      - name: web.listen-address
+        value: "[::1]:9090"
+    # Specific IPv6 addresses prevent CRI port-forward's tcp4-first dial from
+    # succeeding through an IPv4-mapped wildcard listener inside the Pod.
+    containers:
+      - name: prometheus
+        env:
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
     image:
       registry: quay.io
       repository: prometheus/prometheus

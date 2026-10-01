@@ -49,7 +49,9 @@ python3 scripts/check-metrics.py --mode verify \
 `monitoring/monitoring-kube-state-metrics`, `monitoring/monitoring-prometheus`.
 Scrape discovery использует EndpointSlice. Service имеют `SingleStack` /
 `ipFamilies: [IPv6]`; Operator-created `prometheus-operated` получает IPv6
-из single-stack сети кластера. Prometheus слушает `[::]:9090`,
+из single-stack сети кластера. Prometheus слушает конкретные `[Pod_IPv6]:9090`
+и `[::1]:9090`: IPv4 loopback не принимается даже внутри Pod, поэтому
+CRI port-forward использует IPv6 после отказа начального tcp4 dial.
 kube-state-metrics — `::`. Общий post-renderer задает `[::]:8080` Operator
 и `HOST_IP=::` node-exporter: upstream charts явно задают IPv4 wildcard.
 Operator `--localhost=[::1]` направляет config-reloader к Prometheus по IPv6.
@@ -58,10 +60,12 @@ Operator `--localhost=[::1]` направляет config-reloader к Prometheus 
 services должны быть здоровы, включая Prometheus config-reloader.
 `check-metrics.py` требует native IPv6 literal в обоих `scrapeUrl` и
 `labels.instance` каждого endpoint; IPv4, IPv4-mapped IPv6 и отсутствие URL
-дают fail. URL API принимается как IPv6 literal с квадратными скобками.
+дают fail. Дополнительно проверяются IPv6-адреса всех active targets,
+включая targets вне четырех обязательных groups.
+URL API принимается как IPv6 literal с квадратными скобками.
 
 Фиксированный scope HTTP:
-`traefik_entrypoint_requests_total{entrypoint="web",code="200",method="GET"}`.
+`traefik_entrypoint_requests_total{namespace="edge",service="traefik-metrics",endpoint="metrics",entrypoint="web",code="200",method="GET"}`.
 В `/api/v1/query` передается **range selector**, не `query_range` с
 шагом и не обычный instant vector: matrix содержит timestamps сохраненных
 scrape samples. Все samples должны быть не старше 45s; будущие timestamps

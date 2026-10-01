@@ -61,7 +61,10 @@ def main():
     assert "--host=::" in ksm_args and "--telemetry-host=::" in ksm_args
     prometheus = next(obj for obj in objects if obj["kind"] == "Prometheus")["spec"]
     assert prometheus["serviceDiscoveryRole"] == "EndpointSlice"
-    assert {"name": "web.listen-address", "value": "[::]:9090"} in prometheus["additionalArgs"]
+    assert [arg['value'] for arg in prometheus['additionalArgs'] if arg['name'] == 'web.listen-address'] == [
+        '[$(POD_IP)]:9090', '[::1]:9090']
+    assert prometheus['containers'] == [{'name': 'prometheus', 'env': [
+        {'name': 'POD_IP', 'valueFrom': {'fieldRef': {'fieldPath': 'status.podIP'}}}]}]
     assert prometheus["scrapeInterval"] == "15s" and prometheus["scrapeTimeout"] == "10s"
     assert prometheus["retention"] == "24h" and prometheus["retentionSize"] == "4GB"
     assert prometheus["serviceMonitorSelector"] == {"matchLabels": {"release": "monitoring"}}

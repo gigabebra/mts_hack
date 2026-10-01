@@ -127,11 +127,27 @@ def target_matches(labels, expected):
     return (labels.get("namespace"), labels.get("service"), labels.get("endpoint")) == expected
 
 
+def target_is_ipv6(target):
+    try:
+        scrape = urllib.parse.urlsplit(target.get('scrapeUrl', ''))
+        address = ipaddress.ip_address(scrape.hostname or '')
+        instance = urllib.parse.urlsplit('http://' + target.get('labels', {}).get('instance', ''))
+        peer = ipaddress.ip_address(instance.hostname or '')
+        return (scrape.scheme in ('http', 'https') and scrape.port is not None and instance.port is not None
+                and all(a.version == 6 and a.ipv4_mapped is None and a.scope_id is None
+                        for a in (address, peer)))
+    except ValueError:
+        return False
+
+
 def inspect_targets(api, now):
     targets = api.get("targets", state="active").get("activeTargets")
     if not isinstance(targets, list):
         raise ValueError("missing activeTargets array")
     checks, saved, selected = [], [], []
+    checks.append(check('all_targets_ipv6', bool(targets) and all(target_is_ipv6(t) for t in targets),
+                        'Every active scrape target and instance uses native IPv6',
+                        {'count': len(targets), 'ipv6_count': sum(target_is_ipv6(t) for t in targets)}))
     for name, expected in REQUIRED.items():
         matched = [target for target in targets
                    if (target.get("labels", {}).get("namespace"),
@@ -140,16 +156,7 @@ def inspect_targets(api, now):
         evidence = []
         for target in matched:
             stamp = dt.datetime.fromisoformat(target["lastScrape"].replace("Z", "+00:00")).timestamp()
-            try:
-                scrape = urllib.parse.urlsplit(target.get("scrapeUrl", ""))
-                address = ipaddress.ip_address(scrape.hostname or "")
-                instance = urllib.parse.urlsplit("http://" + target.get("labels", {}).get("instance", ""))
-                instance_address = ipaddress.ip_address(instance.hostname or "")
-                native_ipv6 = (scrape.scheme in ("http", "https") and address.version == 6 and address.ipv4_mapped is None and scrape.port is not None
-                               and instance_address.version == 6 and instance_address.ipv4_mapped is None
-                               and instance.port is not None)
-            except ValueError:
-                native_ipv6 = False
+            native_ipv6 = target_is_ipv6(target)
             item = {"labels": target["labels"], "ipv6": native_ipv6, "health": target.get("health"),
                     "last_scrape": stamp, "has_error": bool(target.get("lastError")),
                     "fresh": fresh(stamp, now)}

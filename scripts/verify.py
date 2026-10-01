@@ -11,10 +11,10 @@ import time
 import urllib.request
 import uuid
 
-from stacklib import ROOT, VERSIONS, command, environment, forward, http_url, kubectl, resource, write_json
+from stacklib import ROOT, VERSIONS, command, environment, forward, http_url, internal_http, kubectl, resource, write_json
 from ipv6_checks import network_evidence
 
-HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+HTTP = internal_http()
 
 
 def now():

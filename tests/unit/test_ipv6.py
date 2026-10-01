@@ -60,7 +60,7 @@ class IPv6Contract(unittest.TestCase):
     def test_ipv6_urls_have_brackets_and_ipv4_is_rejected(self):
         self.assertEqual(http_url('2001:db8::10', 30080), 'http://[2001:db8::10]:30080')
         self.assertEqual(http_url('::1', 9090), 'http://[::1]:9090')
-        for host in ('192.0.2.1', '::ffff:192.0.2.1', '::', 'ff02::1', 'fe80::1'):
+        for host in ('192.0.2.1', '::ffff:192.0.2.1', '::', 'ff02::1', 'fe80::1', '2001:db8::10%eth0'):
             with self.subTest(host=host), self.assertRaises(ValueError):
                 http_url(host, 30080)
 

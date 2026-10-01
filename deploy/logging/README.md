@@ -13,6 +13,7 @@ WAL и compactor на одном volume. Retention 24h применяется co
 отложено еще на 2h. Нужен контроль свободного места; резервирования и HA нет.
 Service Loki имеет `SingleStack` / `ipFamilies: [IPv6]`; ClusterIP 3100
 предназначен для внутренней IPv6 сети, authentication отключена. HTTP/gRPC
+используют `tcp6`, исключая прием IPv4-mapped loopback при CRI port-forward;
 слушают `::`, single-process ring использует `::1` с
 `common.ring.instance_enable_ipv6: true`. Fluentd обращается к
 `loki.logging.svc.cluster.local`: в IPv6-only кластере имя возвращает AAAA.

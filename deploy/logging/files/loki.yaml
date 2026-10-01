@@ -1,5 +1,7 @@
 auth_enabled: false
 server:
+  http_listen_network: tcp6
+  grpc_listen_network: tcp6
   http_listen_address: "::"
   grpc_listen_address: "::"
   http_listen_port: 3100

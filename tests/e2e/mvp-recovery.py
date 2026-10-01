@@ -12,9 +12,9 @@ import urllib.request
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
-from stacklib import ROOT, command, deployment_lock, environment, forward, http_url, kubectl, resource, write_json
+from stacklib import ROOT, command, deployment_lock, environment, forward, http_url, internal_http, kubectl, resource, write_json
 
-HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+HTTP = internal_http()
 
 
 def api(url, path, params=None):

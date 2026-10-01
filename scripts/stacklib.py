@@ -17,6 +17,15 @@ VERSIONS = yaml.safe_load((ROOT / 'config/versions.yaml').read_text())
 IMAGES = yaml.safe_load((ROOT / 'config/images.lock.yaml').read_text())['images']
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def internal_http():
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+
+
 def direct_api_env(source=None):
     result = dict(os.environ if source is None else source)
     for key in tuple(result):
@@ -66,7 +75,7 @@ def environment(name):
 
 def ipv6_host(value):
     address = ipaddress.IPv6Address(value)
-    if address.ipv4_mapped or address.is_unspecified or address.is_multicast or address.is_link_local:
+    if address.scope_id or address.ipv4_mapped or address.is_unspecified or address.is_multicast or address.is_link_local:
         raise ValueError('Expected an unscoped unicast IPv6 address')
     return str(address)
 
@@ -117,8 +126,10 @@ def lock_document(node):
                             if arg.lower().startswith('--entrypoints.') else arg
                             for arg in node.get('args', [])]
         if node.get('name') == 'kube-prometheus-stack' and 'image' in node:
-            node['args'] = [arg.replace('--web.listen-address=:', '--web.listen-address=[::]:')
-                            for arg in node.get('args', [])]
+            node['args'] = list(dict.fromkeys(
+                '--localhost=[::1]' if arg.startswith('--localhost=') else
+                arg.replace('--web.listen-address=:', '--web.listen-address=[::]:')
+                for arg in node.get('args', [])))
         if node.get('name') == 'node-exporter' and 'image' in node:
             for item in node.get('env', []):
                 if item.get('name') == 'HOST_IP':
