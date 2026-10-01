@@ -11,12 +11,15 @@ spec.loader.exec_module(recovery)
 class CollectorObservation(unittest.TestCase):
     def test_waits_for_both_counter_and_persisted_position(self):
         before = ({('nginx.log', 'inode'): 34200}, 165)
+        boundaries = {('nginx.log', 'inode'): 35170}
         # Observed live: emit_records already advanced while the earlier file
         # read still showed the old offset; the next observation saw both.
-        self.assertFalse(recovery.collector_consumed(before, (before[0], 170), 5))
-        self.assertFalse(recovery.collector_consumed(before, ({('nginx.log', 'inode'): 35170}, 165), 5))
-        self.assertFalse(recovery.collector_consumed(before, ({}, 170), 5))
-        self.assertTrue(recovery.collector_consumed(before, ({('nginx.log', 'inode'): 35170}, 170), 5))
+        self.assertFalse(recovery.collector_consumed(before, (before[0], 170), 5, boundaries))
+        self.assertFalse(recovery.collector_consumed(before, ({('nginx.log', 'inode'): 34394}, 170), 5, boundaries))
+        self.assertFalse(recovery.collector_consumed(before, ({('nginx.log', 'inode'): 35170}, 165), 5, boundaries))
+        self.assertFalse(recovery.collector_consumed(before, ({}, 170), 5, boundaries))
+        self.assertFalse(recovery.collector_consumed(before, ({('nginx.log', 'new-inode'): 35170}, 170), 5, boundaries))
+        self.assertTrue(recovery.collector_consumed(before, ({('nginx.log', 'inode'): 35170}, 170), 5, boundaries))
 
 
 if __name__ == '__main__':

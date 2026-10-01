@@ -62,19 +62,54 @@ def collector_state(env):
     positions = {}
     for line in position_text.splitlines():
         path, offset, inode = line.split('\t')
-        positions[(path, inode)] = int(offset, 16)
+        positions[(path, int(inode, 16))] = int(offset, 16)
     ruby = 'j=JSON.parse(Net::HTTP.get(URI("http://[::1]:24220/api/plugins.json"))); puts JSON.generate(j["plugins"].find{|p| p["plugin_id"]=="nginx_cri"})'
     metrics = json.loads(kubectl(env, '-n', 'logging', 'exec', 'daemonset/fluentd', '-c', 'fluentd',
                                 '--', 'ruby', '-rnet/http', '-rjson', '-e', ruby, capture=True).stdout)
     return positions, metrics['emit_records']
 
 
-def collector_consumed(before, after, expected_records):
+def collector_boundaries(env, markers):
+    """Find byte boundaries of the exact CRI records the collector must persist."""
+    ruby = '''wanted=JSON.parse(ARGV[0]); found={}
+Dir.glob('/var/log/containers/hello-*_demo_nginx-*.log').each do |path|
+  File.open(path, 'rb') do |file|
+    inode=file.stat.ino
+    file.each_line do |line|
+      parts=line.split(' ',4)
+      next unless parts[1]=='stdout' && parts[2]=='F'
+      begin
+        record=JSON.parse(parts[3])
+      rescue JSON::ParserError
+        next
+      end
+      marker=record['request_id']
+      next unless wanted.include?(marker)
+      (found[marker] ||= []) << {'path'=>path, 'inode'=>inode, 'offset'=>file.pos}
+    end
+  end
+end
+puts JSON.generate(found)'''
+    found = json.loads(kubectl(env, '-n', 'logging', 'exec', 'daemonset/fluentd', '-c', 'fluentd',
+                               '--', 'ruby', '-rjson', '-e', ruby, json.dumps(markers), capture=True).stdout)
+    if set(found) != set(markers) or any(len(records) != 1 for records in found.values()):
+        raise ValueError('Each outage marker must identify exactly one source CRI record')
+    boundaries = {}
+    for records in found.values():
+        row = records[0]
+        key = row['path'], row['inode']
+        boundaries[key] = max(boundaries.get(key, 0), row['offset'])
+    return boundaries
+
+
+def collector_consumed(before, after, expected_records, boundaries):
     # The position file and monitor counters are read in separate exec calls.
     # A newer counter can arrive alongside an older position-file observation.
     old_positions, old_emitted = before
     positions, emitted = after
-    return bool(positions) and positions != old_positions and emitted >= old_emitted + expected_records
+    return (bool(boundaries) and bool(positions) and positions != old_positions
+            and emitted >= old_emitted + expected_records
+            and all(positions.get(key, -1) >= offset for key, offset in boundaries.items()))
 
 
 def replace_pod(env, namespace, selector, workload):
@@ -146,11 +181,16 @@ def main():
                 old_positions, old_emitted = collector_state(env)
                 for item in markers:
                     http(base, item)
+                boundaries = poll(lambda: collector_boundaries(env, markers), 30)
+                write_json(directory / 'collector-boundaries.json',
+                           {'markers': markers, 'boundaries': [
+                               {'path': key[0], 'inode': key[1], 'offset': offset}
+                               for key, offset in boundaries.items()]})
                 # Require successful tail consumption before testing persistent buffer/positions.
                 def consumed():
                     positions, emitted = collector_state(env)
                     return (positions, emitted) if collector_consumed(
-                        (old_positions, old_emitted), (positions, emitted), len(markers)) else None
+                        (old_positions, old_emitted), (positions, emitted), len(markers), boundaries) else None
                 saved_positions, _ = poll(consumed, 30)
                 if not saved_positions or saved_positions == old_positions:
                     raise ValueError('Tail positions did not advance during the Loki outage')
@@ -160,7 +200,8 @@ def main():
                 if restored_positions != saved_positions or new_emitted != 0:
                     raise ValueError('Collector replayed old source records or lost saved tail positions')
                 report['checks'].append({'name': 'collector_positions', 'status': 'pass',
-                                         'position_files': len(saved_positions), 'records_replayed_after_restart': new_emitted})
+                                         'position_files': len(saved_positions), 'source_markers_consumed': len(markers),
+                                         'records_replayed_after_restart': new_emitted})
             finally:
                 kubectl(env, '-n', 'logging', 'scale', 'deployment/loki', '--replicas=1')
                 kubectl(env, '-n', 'logging', 'rollout', 'status', 'deployment/loki', '--timeout=180s')
