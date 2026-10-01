@@ -14,7 +14,6 @@
 | Метрики и Fluentd → Loki | IPv6 Pod/Service endpoints; IPv4 target дает ошибку verify |
 | Prometheus/Loki diagnostics | Локальный `::1`, API и CRI streaming по IPv6 |
 | Config reloader и внутренний Loki ring | IPv6 loopback `::1` |
-| CoreDNS DNS/health/ready/metrics и self-check | Конкретный IPv6 Pod IP из downward API |
 | Синхронизация времени | IPv6 из `ntp_servers` |
 
 В `config/environments/ubuntu.local.yaml` IPv6 literals задаются **без**
@@ -46,17 +45,6 @@ API не принимается, и CRI переходит к IPv6. Config reloa
 `http://[::1]:9090`. Внутренние HTTP checkers обходят HTTP proxy окружения
 и запрещают смену транспорта через redirect.
 
-CoreDNS получает Pod IP через downward API: `bind`, health, ready и metrics
-используют этот IPv6. Это также устраняет IPv4 из периодической health
-самопроверки и loop plugin. Corefile и Deployment согласуются bootstrap
-при первой установке и повторе; checksum вызывает rollout при изменении.
-
-У systemd-timesyncd заданы IPv6 основные и fallback NTP-серверы. Фильтр
-только этой службы (`IPAddressDeny=any`, `IPAddressAllow=::/0`) запрещает
-IPv4, даже если DHCP предлагает IPv4 NTP. Приемка проверила активный сервер
-и прикрепленные ingress/egress BPF-программы; DHCP-метаданные сами по себе
-не доказывают используемый транспорт.
-
 Wildcard listener некоторых остальных компонентов может принимать IPv4
 loopback в своем namespace; это не IPv4 Pod/Service сеть. Фактические
 соединения проверяются отдельно: все targets, DNS, sockets и внешний HTTP.
@@ -78,12 +66,7 @@ VM. Предыдущая VM выключается, ее диск, kubeconfig и
 
 Порядок установки совпадает с README. `make verify` дополнительно проверяет
 IPv6 API/InternalIP/Pod/Service/EndpointSlice/IPPool и адреса всех active
-Prometheus targets. Обязательный `ipv6_transport` через SSH6/`sudo -n`
-проверяет снимок сокетов узла и Pod (включая TIME-WAIT), активный IPv6 NTP
-и отказ IPv4 loopback к Prometheus/Loki. Для ОС исключены публичные IPv4
-HTTP(S) и локальный DNS загрузчиков: классификация по адресу/порту,
-не анализ содержимого. Snapshot не является непрерывным packet capture.
-После deploy следует выполнить повторные bootstrap,
+Prometheus targets. После deploy следует выполнить повторные bootstrap,
 deploy и `make verify-recovery`, затем reboot и `make health`/`make verify`.
 Внешний `curl -6 --noproxy '*'` должен вернуть HTTP 200, ровно 12 bytes и
 совпадающий Request-ID. IPv4 подключения к 22/6443/30080 должны отклоняться.
@@ -93,10 +76,3 @@ manifest/argv управляющих компонентов, AAAA без A дл�
 и отрицательными пробами IPv4 loopback к Prometheus/Loki. Исторический
 [IPv4-протокол MVP](acceptance/mvp-acceptance.md) сохраняется как отдельное
 доказательство прежней ревизии, а не как приемка новых IPv6 изменений.
-
-Итоговая кодовая ревизия `232964fc1cc6642f563225e4768f5964cde94e5f`
-прошла отдельную [независимую IPv6-приемку](acceptance/ipv6-acceptance.md),
-Чистая установка из свежего checkout выполнена на `fd67893`; последующая
-поправка `232964f` меняет только клиентские проверки proxy. Дерево установки
-не изменилось, итоговый verify повторен на обоих стендах с нерабочим IPv4
-proxy в окружении. Эти два прогона описаны раздельно в протоколе.
