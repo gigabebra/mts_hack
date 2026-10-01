@@ -16,10 +16,10 @@ SNAPSHOT = {
     'api_server': 'https://[2001:db8:20::10]:6443',
     'nodes': [{'metadata': {'name': 'fixture'}, 'spec': {'podCIDRs': ['fd4d:5453:1000:100::/64', '10.244.0.0/24']},
                'status': {'addresses': [{'type': 'InternalIP', 'address': ENV[k]} for k in ('node_ip', 'node_ipv4')]}}],
-    'pods': [{'metadata': {'namespace': 'demo', 'name': 'hello', 'uid': 'pod-1'}, 'spec': {},
+    'pods': [{'metadata': {'namespace': 'demo', 'name': 'hello', 'uid': 'pod-1', 'labels': {'app': 'hello'}}, 'spec': {},
               'status': {'phase': 'Running', 'podIP': POD_IPS[0], 'podIPs': [{'ip': ip} for ip in POD_IPS]}}],
     'services': [{'metadata': {'namespace': 'demo', 'name': 'hello'},
-                  'spec': {'ipFamilies': ['IPv6', 'IPv4'], 'ipFamilyPolicy': 'RequireDualStack',
+                  'spec': {'selector': {'app': 'hello'}, 'ipFamilies': ['IPv6', 'IPv4'], 'ipFamilyPolicy': 'RequireDualStack',
                            'clusterIP': 'fd4d:5453:1000:200::1', 'clusterIPs': ['fd4d:5453:1000:200::1', '10.96.0.1']}}],
     'endpoint_slices': [{'metadata': {'namespace': 'demo', 'labels': {'kubernetes.io/service-name': 'hello'}},
                          'addressType': family, 'endpoints': [{'addresses': [ip], 'targetRef': {'uid': 'pod-1'},
@@ -50,6 +50,10 @@ class DualStackContract(unittest.TestCase):
             lambda d: d['services'][0]['spec'].update(ipFamilies=['IPv6'], ipFamilyPolicy='SingleStack'),
             lambda d: d['endpoint_slices'].pop(),
             lambda d: d['endpoint_slices'][1]['endpoints'][0]['targetRef'].update(uid='other-pod'),
+            lambda d: d['endpoint_slices'][1]['endpoints'][0]['targetRef'].update(name='wrong-pod'),
+            lambda d: d['endpoint_slices'][1]['endpoints'][0]['targetRef'].update(kind='Node'),
+            lambda d: d['pods'][0]['metadata'].update(namespace='other'),
+            lambda d: d['pods'][0]['metadata'].update(labels={'app': 'other'}),
             lambda d: d['endpoint_slices'][1]['endpoints'][0]['conditions'].update(ready=False),
             lambda d: d['endpoint_slices'][1]['endpoints'][0].update(addresses=['10.244.0.2']),
             lambda d: d['calico_pools'].pop(),
@@ -65,6 +69,7 @@ class DualStackContract(unittest.TestCase):
         data = copy.deepcopy(SNAPSHOT)
         service = data['services'][0]
         service['metadata'].update(namespace='kube-system', name='kube-dns')
+        data['pods'][0]['metadata']['namespace'] = 'kube-system'
         service['spec'].update(ipFamilies=['IPv6'], ipFamilyPolicy='SingleStack', clusterIPs=[service['spec']['clusterIP']])
         data['endpoint_slices'] = data['endpoint_slices'][:1]
         data['endpoint_slices'][0]['metadata'].update(namespace='kube-system', labels={'kubernetes.io/service-name': 'kube-dns'})

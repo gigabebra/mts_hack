@@ -131,7 +131,7 @@ def main():
         base = http_url(env['node_ip'], env['node_port'])
         check(report, 'readiness', 'Expected node, workloads Ready, PVC Bound', lambda: readiness(env))
         check(report, 'dual_stack_network', 'IPv6-primary API and dual-stack Node, Pods, Services, EndpointSlices and Calico pools',
-              lambda: network_evidence(env))
+              lambda: network_evidence(env, directory))
         common = ['--kubeconfig', env['kubeconfig'], '--base-url', base, '--run-id', run_id,
                   '--request-id', run_id, '--error-marker', run_id + '-err', '--timeout', '90']
         common4 = ['--kubeconfig', env['kubeconfig'], '--base-url', http_url(env['node_ipv4'], env['node_port']),

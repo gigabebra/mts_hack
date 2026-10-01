@@ -3,7 +3,7 @@ import ipaddress
 import json
 from urllib.parse import urlsplit
 
-from stacklib import ipv6_host, native_host, kubectl, resource
+from stacklib import ipv6_host, native_host, kubectl, resource, write_json
 
 # kubeadm and Prometheus Operator create these; our Helm Services have no exception.
 SYSTEM_SINGLE = {('default', 'kubernetes'), ('kube-system', 'kube-dns'),
@@ -36,6 +36,7 @@ def validate_snapshot(env, snapshot):
         raise ValueError('Node requires IPv6-primary Pod CIDRs within both pools')
     count = {'pods': 0, 'services': 0, 'endpoint_slices': 0, 'endpoints': 0}
     pod_ips = {}
+    pod_metadata = {}
     for pod in snapshot['pods']:
         status = pod.get('status', {})
         if status.get('phase') in ('Succeeded', 'Failed'):
@@ -50,6 +51,7 @@ def validate_snapshot(env, snapshot):
         elif any(a not in n for a, n in zip(addresses, pod_nets)):
             raise ValueError('Pod outside configured pools: ' + label)
         pod_ips[pod['metadata']['uid']] = addresses
+        pod_metadata[pod['metadata']['uid']] = pod['metadata']
         count['pods'] += 1
     services = {}
     exceptions = []
@@ -73,7 +75,8 @@ def validate_snapshot(env, snapshot):
                     raise ValueError('Service IP outside configured family/range')
         for address in spec.get('externalIPs', []):
             native_host(address)
-        services[key] = {'families': families, 'ready': {f: set() for f in families}}
+        services[key] = {'families': families, 'selector': spec.get('selector', {}),
+                         'ready': {f: set() for f in families}}
         if single:
             exceptions.append('/'.join(key))
         count['services'] += 1
@@ -92,6 +95,14 @@ def validate_snapshot(env, snapshot):
                 if key != ('default', 'kubernetes'):
                     if uid not in pod_ips or address not in pod_ips[uid]:
                         raise ValueError('EndpointSlice address is not bound to its actual Pod UID')
+                    pod_meta = pod_metadata[uid]
+                    ref = endpoint['targetRef']
+                    if pod_meta['namespace'] != key[0] or any(
+                            pod_meta.get('labels', {}).get(k) != v for k, v in services[key]['selector'].items()):
+                        raise ValueError('Endpoint Pod must match the Service namespace and selector')
+                    for field, expected in [('kind', 'Pod'), ('name', pod_meta['name']), ('namespace', key[0])]:
+                        if field in ref and ref[field] != expected:
+                            raise ValueError('Endpoint targetRef does not match the referenced Pod')
                 elif address not in node_ips:
                     raise ValueError('API endpoint is outside the configured node')
                 if endpoint.get('conditions', {}).get('ready', True):
@@ -117,7 +128,7 @@ def validate_snapshot(env, snapshot):
             'system_single_stack_services': sorted(exceptions), **count}
 
 
-def network_evidence(env):
+def network_evidence(env, directory=None):
     config = json.loads(kubectl(env, 'config', 'view', '--minify', '-o', 'json', capture=True).stdout)
     if config['clusters'][0]['cluster'].get('proxy-url'):
         raise ValueError('Kubeconfig proxy-url is outside the direct API contract')
@@ -127,4 +138,6 @@ def network_evidence(env):
                             ('endpoint_slices', 'endpointslices.discovery.k8s.io', ['-A']),
                             ('calico_pools', 'ippools.crd.projectcalico.org', [])]:
         snapshot[key] = resource(env, kind, *args)['items']
+    if directory is not None:
+        write_json(directory / 'network-snapshot.json', snapshot)
     return validate_snapshot(env, snapshot)
