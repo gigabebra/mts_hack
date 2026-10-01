@@ -11,7 +11,7 @@ import time
 import urllib.request
 import uuid
 
-from stacklib import ROOT, VERSIONS, command, environment, forward, http_url, internal_http, kubectl, resource, write_json
+from stacklib import ROOT, VERSIONS, command, direct_api_env, environment, forward, http_url, internal_http, kubectl, resource, write_json
 from ipv6_checks import network_evidence
 from ipv6_transport import transport_evidence
 
@@ -35,7 +35,8 @@ def check(report, name, expected, operation):
 
 def component(script, path, *args):
     result = subprocess.run([sys.executable, str(ROOT / 'scripts' / script), *map(str, args),
-                             '--output', str(path)], capture_output=True, text=True, timeout=240)
+                             '--output', str(path)], capture_output=True, text=True, timeout=240,
+                            env=direct_api_env())
     if not path.exists():
         raise RuntimeError(script + ' produced no JSON: ' + result.stderr[-2000:])
     data = json.loads(path.read_text())
