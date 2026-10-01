@@ -5,17 +5,20 @@ Prometheus измеряет HTTP и состояние узла, Fluentd дос�
 логи в Loki. `make verify` связывает HTTP-ответ и access-log одним Request-ID
 и отдельно подтверждает увеличение агрегированного HTTP counter.
 
-Первоначальный MVP принят на чистой Ubuntu 24.04.5, кодовая ревизия
-`337d0c671617929ebf162e1216099524fe8d611d`. Сейчас выполняется назначенный
-переход на IPv6-only для внешнего доступа и внутреннего обмена.
-[Сетевой контракт, диагностика и переход с IPv4](docs/networking-ipv6.md).
-[Протокол и матрица требований](docs/acceptance/mvp-acceptance.md),
+MVP с IPv6 принят на Ubuntu 24.04.5, кодовая ревизия
+`232964fc1cc6642f563225e4768f5964cde94e5f`.
+Чистая установка выполнена на `fd67893`; финальная поправка касается
+только проверки proxy и повторно проверена на обоих стендах.
+[Независимая IPv6-приемка](docs/acceptance/ipv6-acceptance.md),
+[сетевой контракт и переход с IPv4](docs/networking-ipv6.md),
 [реестр](docs/status.md), [черновик паспорта](docs/passport/mvp-draft.md).
+[Первоначальная IPv4-приемка](docs/acceptance/mvp-acceptance.md) сохранена
+как история прежней ревизии `337d0c6`.
 Этап FINAL не начат.
 
 ```mermaid
 flowchart LR
-    User[Проверяющий] -->|HTTP NodePort 30080| Traefik
+    User[Проверяющий] -->|HTTP IPv6 NodePort 30080| Traefik
     Traefik --> Gateway[Gateway / HTTPRoute]
     Gateway --> Service[Service hello]
     Service --> Nginx
@@ -89,7 +92,7 @@ Git. Все команды запускайте из корня репозито
 и принять до bootstrap обычным SSH-подключением. `make tools` устанавливает
 инструменты в `.venv` и `.cache/tools`, без Nix и без root на управляющей машине.
 
-До установки должен проходить `ssh <user>@<VM> sudo -n true`. На VM необходимы
+До установки должен проходить `ssh -6 <user>@<VM_IPv6> sudo -n true`. На VM необходимы
 исходящий HTTPS/DNS/NTP; с управляющей машины — SSH, Kubernetes API TCP 6443
 и HTTP TCP 30080 по IPv6. Для одноузлового стенда сетевой overlay остается внутри VM;
 дополнительные узлы в MVP не поддерживаются.
@@ -120,9 +123,11 @@ Traefik, ServiceMonitor, Loki/Fluentd, Nginx и Gateway. Конфигураци�
 создается автоматизацией; ручные `kubectl apply/edit` для установки не нужны.
 
 `make verify` явно выбирает kubeconfig из environment, открывает временные
-loopback port-forward к Prometheus/Loki и закрывает их при завершении.
+IPv6 loopback port-forward к Prometheus/Loki и закрывает их при завершении.
+Для обязательного аудита сокетов ему также нужен SSH по IPv6 и `sudo -n`
+из того же environment; отсутствие доступа дает ошибку проверки.
 Отчет всегда сохраняется в `artifacts/verify/<run-id>/report.json`, в том
-числе при отказе. Код 0 означает успех всех обязательных проверок:
+числе при отказе. Код 0 означает успех всех десяти проверок, покрывающих:
 
 - Ready node/workloads и Bound PVC; актуальные Gateway/HTTPRoute conditions.
 - Фактические IPv6 API/InternalIP/Pod/Service/EndpointSlice и единственный
@@ -134,6 +139,10 @@ loopback port-forward к Prometheus/Loki и закрывает их при за�
 - Точная запись access с тем же Request-ID и независимая stderr error-запись
   через Loki API, правильные stream и source labels.
 - Реальные UID PID1, отсутствие capabilities/API token и read-only root mount.
+- Сокеты узла и Pod, включая TIME-WAIT: нет IPv4 соединений стека;
+  Prometheus/Loki отклоняют IPv4 loopback; активный NTP-сервер использует IPv6.
+  Исключение ОС для публичного HTTP(S)/локального DNS определяется адресом
+  и портом, без анализа содержимого загрузки.
 
 `PROFILE=final` пока возвращает ошибку: сетевые политики, TLS, canary,
 автооткат, Grafana/Alertmanager и CI относятся к следующему этапу.
@@ -148,15 +157,18 @@ PVC bindings и содержимое существующих прикладны
 сохранение истории Prometheus/Loki при пересоздании pod и доставку пяти
 маркеров из буфера после короткой остановки Loki и рестарта Fluentd.
 Команда восстанавливает одну реплику Loki и завершает сценарий обычным verify.
-Контролируемый reboot VM проверяется последующим `make health ENV=ubuntu`.
-Запускайте health после завершения загрузки ОС: служба kubelet в состоянии
-`activating` дает ненулевой код, после ее запуска проверку нужно повторить.
+Контролируемый reboot VM проверяется последующими `make health ENV=ubuntu`
+и `make verify ENV=ubuntu`.
+Запускайте health после завершения загрузки ОС и startup hooks API.
+Служба kubelet в состоянии `activating` или еще неготовый `/readyz` дают
+ненулевой код; после завершения запуска проверку нужно повторить.
 
 ## Ручная диагностика
 
 Используйте kubeconfig именно этого стенда:
 
 ```bash
+unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
 export KUBECONFIG="$PWD/.state/ubuntu/admin.kubeconfig"
 export PATH="$PWD/.cache/tools:$PATH"
 kubectl get nodes

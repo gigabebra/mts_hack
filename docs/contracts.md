@@ -152,17 +152,24 @@ ENV=ubuntu`, `make evidence ENV=ubuntu`. Обязательные инструм
   запуск без ID. Проверить access exact request_id/method/uri/status,
   отдельный stderr missing-file marker и источник.
 
-Общий verify: readiness/conditions → warm-up → baseline → общие HTTP
-пробы → counter delta → Loki access/error → runtime UID/capabilities/
-read-only root mount/token. Port-forward Prometheus/Loki только loopback,
-с cleanup. `artifacts/verify/<run-id>/report.json`: schema_version, run_id,
+Общий verify: readiness → IPv6 API/Node/Pod/Service/EndpointSlice/IPPool →
+conditions → warm-up → baseline → общие HTTP пробы → counter delta →
+Loki access/error → runtime UID/capabilities/read-only root mount/token →
+IPv6 transport audit. Последний использует SSH6 с `sudo -n`, проверяет
+сокеты узла/Pod с TIME-WAIT, отказ IPv4 loopback Prometheus/Loki и активный
+IPv6 NTP. Отсутствие доступа не считается успешным skip. Port-forward
+Prometheus/Loki только `::1`, с cleanup. `artifacts/verify/<run-id>/report.json`: schema_version, run_id,
 request_id, revision, profile, started_at, finished_at, environment (без
 credentials), versions, checks, status. Ошибка любого обязательного check
 дает ненулевой exit; следующие невозможные checks отмечаются fail с причиной.
 Profile `final` пока завершается ошибкой unsupported, а не успешным skip.
 
-MVP gate проверяет все шесть групп: readiness, gateway/http, metrics,
-access/error logs, runtime security, сохранение identities/PVC при deploy.
+Один успешный verify содержит десять checks: readiness, ipv6_network,
+gateway_conditions, metrics_warmup, metrics_baseline, http, metrics_delta,
+logs, runtime_security и ipv6_transport. Все active Prometheus targets
+проверяются на native IPv6. Отдельный idempotency gate проверяет сохранение
+identities/PVC при deploy. Сырые ipv6-runtime.json содержат адреса и остаются
+в игнорируемых artifacts; в документацию входит только очищенная сводка.
 NetworkPolicy/canary/TLS/CI относятся только к FINAL. Хостинг по умолчанию
 GitHub; публикация и hosted CI сейчас не выполняются. Локальная проверка:
 lint/render → bootstrap/deploy/verify → повтор → fresh Ubuntu приемка.
