@@ -31,6 +31,13 @@ kubeDns:
   enabled: false
 prometheusOperator:
   enabled: true
+  extraArgs:
+    - --localhost=[::1]
+  service:
+    ipDualStack:
+      enabled: true
+      ipFamilies: [IPv6]
+      ipFamilyPolicy: SingleStack
   image:
     registry: quay.io
     repository: prometheus-operator/prometheus-operator
@@ -64,10 +71,18 @@ prometheus:
   enabled: true
   service:
     type: ClusterIP
+    ipDualStack:
+      enabled: true
+      ipFamilies: [IPv6]
+      ipFamilyPolicy: SingleStack
   serviceMonitor:
     selfMonitor: true
     interval: 15s
   prometheusSpec:
+    serviceDiscoveryRole: EndpointSlice
+    additionalArgs:
+      - name: web.listen-address
+        value: "[::]:9090"
     image:
       registry: quay.io
       repository: prometheus/prometheus
@@ -126,6 +141,11 @@ prometheus-node-exporter:
     tag: v1.10.2
   # Host mounts supply node metrics without opening another host-network port.
   hostNetwork: false
+  service:
+    ipDualStack:
+      enabled: true
+      ipFamilies: [IPv6]
+      ipFamilyPolicy: SingleStack
   resources:
     requests: {cpu: 25m, memory: 32Mi}
     limits: {cpu: 200m, memory: 128Mi}
@@ -137,6 +157,14 @@ prometheus-node-exporter:
 kubeStateMetrics:
   enabled: true
 kube-state-metrics:
+  extraArgs:
+    - "--host=::"
+    - "--telemetry-host=::"
+  service:
+    ipDualStack:
+      enabled: true
+      ipFamilies: [IPv6]
+      ipFamilyPolicy: SingleStack
   fullnameOverride: monitoring-kube-state-metrics
   image:
     registry: registry.k8s.io

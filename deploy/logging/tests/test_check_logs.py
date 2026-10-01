@@ -22,7 +22,7 @@ def record(stream="stdout", marker="fixture", timestamp="2026-10-01T12:00:00.123
     fields = {"time": timestamp, "request_id": marker, "method": "GET", "uri": "/", "status": 200}
     message = json.dumps(fields) if stream == "stdout" else (
         '2026/10/01 12:00:00 [error] 1#1: *1 open() "/app/verify/missing/' + marker
-        + '" failed (2: No such file or directory), client: 192.0.2.2, request: "GET /verify/missing/'
+        + '" failed (2: No such file or directory), client: 2001:db8::2, request: "GET /verify/missing/'
         + marker + ' HTTP/1.1", host: "fixture"')
     result = {"cri_time": timestamp, "cri_flag": "F", "message": message,
               "source_file": "/var/log/containers/hello-fixture_demo_nginx-1234.log"}
@@ -76,7 +76,7 @@ class CheckLogs(unittest.TestCase):
         self.assertIsNone(LOGS.error_match(fixture, "fixture", self.start, self.end))
 
     def test_supplied_ids_never_generate_http_probes(self):
-        args = LOGS.cli(["--loki-url", "http://fixture", "--base-url", "http://never-called",
+        args = LOGS.cli(["--loki-url", "http://[::1]", "--base-url", "http://[2001:db8::10]",
                          "--run-id", "fixture", "--request-id", "fixture", "--error-marker", "fixture",
                          "--start-time", "0", "--timeout", "1", "--output", "unused"])
         with patch.object(LOGS, "standalone_probe", side_effect=AssertionError("unexpected probe")), \
@@ -87,7 +87,7 @@ class CheckLogs(unittest.TestCase):
         self.assertFalse(result["data"]["generated_probes"])
 
     def test_standalone_exactly_two_probes(self):
-        args = LOGS.cli(["--loki-url", "http://fixture", "--base-url", "http://fixture",
+        args = LOGS.cli(["--loki-url", "http://[::1]", "--base-url", "http://[::1]",
                          "--run-id", "fixture", "--timeout", "0.01", "--output", "unused"])
         def probe(url, path, request_id, deadline):
             return {"status": 200 if path == "/" else 404, "request_id": request_id,
@@ -103,8 +103,9 @@ class CheckLogs(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "result.json"
             common = [sys.executable, str(SCRIPT), "--output", str(path), "--run-id", "fixture",
-                      "--loki-url", "http://127.0.0.1:1", "--request-id", "fixture", "--error-marker", "fixture"]
-            for extra in (["--timeout", "nan"], ["--timeout", "0.05"], ["--start-time", "nan"]):
+                      "--loki-url", "http://[::1]:1", "--request-id", "fixture", "--error-marker", "fixture"]
+            for extra in (["--loki-url", "http://127.0.0.1:3100"],
+                          ["--loki-url", "http://[::ffff:192.0.2.10]:3100"], ["--timeout", "nan"], ["--timeout", "0.05"], ["--start-time", "nan"]):
                 started = time.monotonic()
                 result = subprocess.run(common + extra, capture_output=True, timeout=3)
                 self.assertEqual(result.returncode, 1)
@@ -116,7 +117,7 @@ class CheckLogs(unittest.TestCase):
                         {"status": "error"}, {"status": "success", "data": {"resultType": "vector", "result": []}},
                         {"status": "success", "data": []}):
             with self.subTest(payload=payload), patch.object(LOGS, "read_response", return_value=json.dumps(payload).encode()):
-                args = LOGS.cli(["--loki-url", "http://fixture", "--run-id", "fixture", "--request-id", "fixture",
+                args = LOGS.cli(["--loki-url", "http://[::1]", "--run-id", "fixture", "--request-id", "fixture",
                                  "--error-marker", "fixture", "--timeout", "0.005", "--output", "unused"])
                 result = LOGS.verify(args)
                 self.assertEqual(result["status"], "fail")

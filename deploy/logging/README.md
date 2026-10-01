@@ -11,7 +11,11 @@ Loki использует один Deployment, PVC `loki` 12Gi, TSDB/v13, filesy
 WAL и compactor на одном volume. Retention 24h применяется compactor
 асинхронно; это не жесткая дисковая квота. Удаление chunk после retention
 отложено еще на 2h. Нужен контроль свободного места; резервирования и HA нет.
-ClusterIP 3100 предназначен для внутренней сети, authentication отключена.
+Service Loki имеет `SingleStack` / `ipFamilies: [IPv6]`; ClusterIP 3100
+предназначен для внутренней IPv6 сети, authentication отключена. HTTP/gRPC
+слушают `::`, single-process ring использует `::1` с
+`common.ring.instance_enable_ipv6: true`. Fluentd обращается к
+`loki.logging.svc.cluster.local`: в IPv6-only кластере имя возвращает AAAA.
 
 Fluentd 1.19.0 с Loki plugin из закрепленного image запускается с
 `-p /fluentd/plugins`. Читает только `hello-*_demo_nginx-*.log` из
@@ -26,8 +30,10 @@ Labels только `app`, `namespace`, `container`, `stream`. Автомати�
 остаются в теле записи. Collector не обращается к Kubernetes API, не имеет
 RBAC и ServiceAccount token; root нужен для node log files/positions.
 Root filesystem read-only, capabilities сняты, privilege escalation
-запрещен. Monitor endpoint 24220 показывает состояние процесса collector;
-он сам по себе не подтверждает доставку в Loki — это проверяет CLI.
+запрещен. Monitor endpoint 24220 показывает состояние процесса collector.
+Он слушает `bind "[::]"`: именно bracketed значение необходимо HTTP helper
+Fluentd 1.19, который формирует URI из `bind`. `bind ::` дает invalid URI
+при старте. Endpoint сам по себе не подтверждает доставку в Loki — это проверяет CLI.
 
 Positions `/var/lib/fluentd/nginx.pos` и file buffer
 `/var/lib/fluentd/buffer/loki` сохраняются на hostPath после замены pod.
@@ -48,23 +54,27 @@ python3 -m unittest discover -s deploy/logging/tests -p 'test_*.py' -v
 .venv/bin/python deploy/logging/tests/docker_smoke.py --helm .cache/tools/helm
 ```
 
-Docker smoke создает уникальные временные containers/network, loopback
-порт Loki и synthetic CRI fixtures в `/tmp`. Он проверяет настоящий parser,
-plugin, Loki config/API, persistent buffer и restart при коротком outage.
+Docker smoke требует Docker с `docker network create --ipv4=false --ipv6`
+(проверен 29.8.0) и IPv6 на хосте. Создает уникальные временные
+containers/network без IPv4-адресов, IPv6 loopback
+порт `[::1]` Loki и synthetic CRI fixtures в `/tmp`. Он проверяет настоящий parser,
+plugin, Loki config/API, DNS-резолвинг Loki только в IPv6, persistent buffer
+и restart при коротком outage.
 Это отдельная проверка реализации с fixtures, не приемка Kubernetes.
 
 Проверка общего прогона только читает Loki, не создает новый HTTP запрос:
 
 ```sh
-python3 scripts/check-logs.py --loki-url http://127.0.0.1:13100 \
+python3 scripts/check-logs.py --loki-url 'http://[::1]:13100' \
   --run-id "$RUN_ID" --request-id "$RUN_ID" --error-marker "$RUN_ID-err" \
   --start-time "$STARTED_AT" --timeout 120 --output /tmp/logs-report.json
 ```
 
-Самостоятельная проверка принимает `--base-url http://NODE:30080` вместо
+Самостоятельная проверка принимает `--base-url 'http://[2001:db8::10]:30080'` вместо
 пары `--request-id`/`--error-marker`; создает ровно access GET `/` и error
 GET `/verify/missing/<marker>`. Переданные IDs никогда не заменяются.
-CLI проверяет exact ID/method/URI/numeric status, оригинальный JSON message,
+CLI принимает URL с native IPv6 literal в скобках; IPv4 и IPv4-mapped
+адреса отклоняет. CLI проверяет exact ID/method/URI/numeric status, оригинальный JSON message,
 реальный missing-file stderr, labels, source path и CRI timestamp. Report
 создается также при timeout/ошибке и не содержит сырого stderr с адресами.
 

@@ -34,7 +34,7 @@ def wait_ready(url):
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(url + "/ready", timeout=2) as response:
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(url + "/ready", timeout=2) as response:
                 if response.status == 200:
                     return
         except (urllib.error.URLError, OSError):
@@ -50,7 +50,7 @@ def fixture(path, marker):
     record = {"time": date.isoformat(), "request_id": marker, "method": "GET", "uri": "/",
               "status": 200, "bytes_sent": 12, "request_time": 0.001}
     error = (date.strftime("%Y/%m/%d %H:%M:%S") + ' [error] 1#1: *1 open() "/app/verify/missing/'
-             + marker + '-err" failed (2: No such file or directory), client: 192.0.2.1, request: "GET /verify/missing/'
+             + marker + '-err" failed (2: No such file or directory), client: 2001:db8::1, request: "GET /verify/missing/'
              + marker + '-err HTTP/1.1", host: "fixture"')
     with path.open("a") as target:
         target.write(cri + " stdout F " + json.dumps(record) + "\n")
@@ -60,7 +60,7 @@ def fixture(path, marker):
 
 def verify(url, marker, start, output):
     result = subprocess.run([sys.executable, str(ROOT / "scripts/check-logs.py"),
-                             "--loki-url", url, "--base-url", "http://127.0.0.1:1",
+                             "--loki-url", url, "--base-url", "http://[::1]:1",
                              "--run-id", marker, "--request-id", marker, "--error-marker", marker + "-err",
                              "--start-time", start, "--timeout", "45", "--output", str(output)],
                             timeout=50, check=False)
@@ -97,15 +97,16 @@ def main():
                 "-v", str(directory / "loki.yaml") + ":/etc/loki/config.yaml:ro", LOKI,
                 "-config.file=/etc/loki/config.yaml", "-verify-config=true")
         print("PASS actual Loki 3.6.2 config validation", flush=True)
-        command("docker", "network", "create", network)
+        command("docker", "network", "create", "--ipv6", "--ipv4=false",
+                "--subnet", f"fd7a:115c:{suffix[:4]}:{suffix[4:8]}::/64", network)
         names.append(loki)
         command("docker", "run", "-d", "--name", loki, "--network", network,
                 "--network-alias", "loki.logging.svc.cluster.local", "--read-only", "--cap-drop", "ALL",
                 "--user", "10001:10001", "--security-opt", "no-new-privileges", "--tmpfs", "/tmp",
-                "-p", "127.0.0.1::3100", "-v", str(directory / "loki.yaml") + ":/etc/loki/config.yaml:ro",
+                "-p", "[::1]::3100", "-v", str(directory / "loki.yaml") + ":/etc/loki/config.yaml:ro",
                 "-v", str(directory / "loki") + ":/var/lib/loki", LOKI, "-config.file=/etc/loki/config.yaml")
         port = command("docker", "port", loki, "3100/tcp").split(":")[-1]
-        url = "http://127.0.0.1:" + port
+        url = "http://[::1]:" + port
         wait_ready(url)
         names.append(fluent)
         command("docker", "run", "-d", "--name", fluent, "--network", network,
@@ -116,6 +117,11 @@ def main():
                 "-v", str(directory / "fluent") + ":/var/lib/fluentd", "--entrypoint", "tini", FLUENT,
                 "--", "fluentd", "--no-supervisor", "--suppress-config-dump", "-c", "/fluentd/etc/fluent.conf",
                 "-p", "/fluentd/plugins")
+        resolved = json.loads(command("docker", "exec", fluent, "ruby", "-rsocket", "-rjson", "-e",
+                              'puts Addrinfo.getaddrinfo("loki.logging.svc.cluster.local", 3100, nil, :STREAM).map { |a| a.ip_address }.uniq.to_json'))
+        import ipaddress
+        assert resolved and all(ipaddress.ip_address(address).version == 6 for address in resolved), resolved
+        print("PASS Fluentd service DNS resolves only IPv6 addresses", flush=True)
         marker = "fixture-" + suffix
         start = fixture(logfile, marker)
         verify(url, marker, start, directory / "first.json")
@@ -136,7 +142,7 @@ def main():
         command("docker", "start", loki)
         # Docker may allocate a different ephemeral published port at restart.
         port = command("docker", "port", loki, "3100/tcp").split(":")[-1]
-        url = "http://127.0.0.1:" + port
+        url = "http://[::1]:" + port
         wait_ready(url)
         verify(url, recovery, recovery_start, directory / "recovery.json")
         verify(url, marker, start, directory / "history.json")

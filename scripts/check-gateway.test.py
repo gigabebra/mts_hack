@@ -2,10 +2,14 @@
 """Offline fixtures for checker behavior; these are not Kubernetes acceptance."""
 
 import copy
+import http.server
 import importlib.util
 import json
 from pathlib import Path
+import socket
 import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 
@@ -30,7 +34,7 @@ def snapshot():
             "metadata": {"name": "gateway", "namespace": "demo", "generation": 2},
             "spec": {"gatewayClassName": "mts-traefik"},
             "status": {"conditions": conditions("Accepted", "Programmed"),
-                       "addresses": [{"type": "IPAddress", "value": "192.0.2.10"}],
+                       "addresses": [{"type": "IPAddress", "value": "2001:db8::10"}],
                        "listeners": [{"name": "web", "attachedRoutes": 1,
                                       "conditions": conditions("Accepted", "Programmed", "ResolvedRefs")}] }},
         "httproute": {
@@ -80,7 +84,8 @@ class ConditionTests(unittest.TestCase):
         self.assert_failed(resources)
 
     def test_reject_missing_or_invalid_address_and_no_routes(self):
-        for address in ([], [{"type": "IPAddress", "value": "invalid"}],
+        for address in ([], [{"type": "IPAddress", "value": "192.0.2.10"}],
+                        [{"type": "IPAddress", "value": "::ffff:192.0.2.10"}], [{"type": "IPAddress", "value": "invalid"}],
                         [{"type": "Hostname", "value": "example.invalid"}]):
             resources = snapshot()
             resources["gateway"]["status"]["addresses"] = address
@@ -95,6 +100,41 @@ class ConditionTests(unittest.TestCase):
         self.assert_failed(resources)
 
 
+class IPv6TransportTests(unittest.TestCase):
+    def test_request_uses_ipv6_loopback(self):
+        class Server(http.server.ThreadingHTTPServer):
+            address_family = socket.AF_INET6
+
+            def server_bind(self):
+                self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+                super().server_bind()
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                pass
+
+            def do_GET(self):
+                self.server.peer = self.client_address[0]
+                self.send_response(200)
+                self.send_header("X-Request-ID", self.headers["X-Request-ID"])
+                self.send_header("Content-Length", "12")
+                self.end_headers()
+                self.wfile.write(b"Hello World!")
+
+        with Server(("::1", 0), Handler) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                result = GATEWAY.request(f"http://[::1]:{server.server_port}", "/", "ipv6-fixture",
+                                         time.monotonic() + 3)
+                self.assertTrue(result["body_exact"])
+                self.assertEqual(result["request_id"], "ipv6-fixture")
+                self.assertEqual(server.peer, "::1")
+            finally:
+                server.shutdown()
+                thread.join()
+
+
 class ReportTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -104,7 +144,7 @@ class ReportTests(unittest.TestCase):
         self.kubeconfig.write_text("fixture only; never read by real kubectl")
         self.output = self.directory / "report.json"
         self.args = ["--mode", "traffic", "--kubeconfig", str(self.kubeconfig),
-                     "--base-url", "http://192.0.2.10:30080", "--run-id", "fixture-run",
+                     "--base-url", "http://[2001:db8::10]:30080", "--run-id", "fixture-run",
                      "--request-id", "fixture-access", "--error-marker", "fixture-error",
                      "--requests", "2", "--timeout", "0.05", "--output", str(self.output)]
 
@@ -167,7 +207,8 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(report["status"], "fail")
 
     def test_bad_arguments_still_write_fail_report(self):
-        for extra in (["--requests", "0"], ["--timeout", "nan"], ["--request-id", "bad id"],
+        for extra in (["--base-url", "http://192.0.2.10:30080"],
+                      ["--base-url", "http://[::ffff:192.0.2.10]:30080"], ["--requests", "0"], ["--timeout", "nan"], ["--request-id", "bad id"],
                       ["--kubeconfig", str(self.directory / "missing")], ["--base-url", "http://user:secret@example.invalid"]):
             with self.subTest(extra=extra):
                 code, report = self.run_fixture(args=self.args + extra)

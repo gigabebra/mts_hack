@@ -50,8 +50,18 @@ def main():
     assert "--prometheus-config-reloader=" + image + "@" + lock[image] in args
     for obj in workloads:
         for container in obj["spec"]["template"]["spec"]["containers"]:
+            assert all(isinstance(arg, str) for arg in container.get("args", [])), container["args"]
             assert container["resources"]["requests"] and container["resources"]["limits"]
+    services = [obj for obj in objects if obj["kind"] == "Service"]
+    assert services and all(obj["spec"].get("ipFamilies") == ["IPv6"]
+                            and obj["spec"].get("ipFamilyPolicy") == "SingleStack" for obj in services)
+    assert "--localhost=[::1]" in args
+    ksm = next(obj for obj in workloads if obj["metadata"]["name"] == "monitoring-kube-state-metrics")
+    ksm_args = ksm["spec"]["template"]["spec"]["containers"][0]["args"]
+    assert "--host=::" in ksm_args and "--telemetry-host=::" in ksm_args
     prometheus = next(obj for obj in objects if obj["kind"] == "Prometheus")["spec"]
+    assert prometheus["serviceDiscoveryRole"] == "EndpointSlice"
+    assert {"name": "web.listen-address", "value": "[::]:9090"} in prometheus["additionalArgs"]
     assert prometheus["scrapeInterval"] == "15s" and prometheus["scrapeTimeout"] == "10s"
     assert prometheus["retention"] == "24h" and prometheus["retentionSize"] == "4GB"
     assert prometheus["serviceMonitorSelector"] == {"matchLabels": {"release": "monitoring"}}

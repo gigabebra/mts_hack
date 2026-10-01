@@ -4,6 +4,7 @@ import datetime as dt
 import http.server
 import json
 from pathlib import Path
+import socket
 import subprocess
 import sys
 import tempfile
@@ -23,7 +24,7 @@ SERVICES = [
 
 
 def labels(target):
-    return dict(zip(("namespace", "service", "endpoint"), target), job=target[1], instance="fixture:9100")
+    return dict(zip(("namespace", "service", "endpoint"), target), job=target[1], instance="[2001:db8::10]:9100")
 
 
 def matrix_row(metric, points):
@@ -48,7 +49,15 @@ class Fixture(http.server.BaseHTTPRequestHandler):
                 stamp = now - (100 if mode == "stale_target" else 0.1)
                 targets.append({"labels": labels(target), "health": "down" if mode == "down" else "up",
                                 "lastScrape": dt.datetime.fromtimestamp(stamp, dt.timezone.utc).isoformat(),
-                                "lastError": ""})
+                                "lastError": "", "scrapeUrl": "http://[2001:db8::10]:9100/metrics"})
+            if mode == "ipv4_target":
+                targets[0]["scrapeUrl"] = "http://192.0.2.10:9100/metrics"
+            if mode == "mapped_target":
+                targets[0]["scrapeUrl"] = "http://[::ffff:192.0.2.10]:9100/metrics"
+            if mode == "missing_scrape_url":
+                targets[0].pop("scrapeUrl")
+            if mode == "ipv4_instance":
+                targets[0]["labels"]["instance"] = "192.0.2.10:9100"
             if mode == "missing_target":
                 targets.pop(1)
             if mode == "reloader_down":
@@ -100,10 +109,18 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+class IPv6HTTPServer(http.server.ThreadingHTTPServer):
+    address_family = socket.AF_INET6
+
+    def server_bind(self):
+        self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+        super().server_bind()
+
+
 class MetricsFixtures(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
+        cls.server = IPv6HTTPServer(("::1", 0), Fixture)
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
 
@@ -122,7 +139,7 @@ class MetricsFixtures(unittest.TestCase):
     def invoke(self, mode, *extra):
         output = self.baseline if mode == "snapshot" else Path(self.temp.name) / "result.json"
         command = [sys.executable, str(SCRIPT), "--mode", mode, "--prometheus-url",
-                   f"http://127.0.0.1:{self.server.server_port}", "--run-id", "fixture-run",
+                   f"http://[::1]:{self.server.server_port}", "--run-id", "fixture-run",
                    "--timeout", "0.15", "--output", str(output)]
         if mode == "verify":
             command += ["--baseline", str(self.baseline)]
@@ -147,7 +164,7 @@ class MetricsFixtures(unittest.TestCase):
                     self.assertIn(selector, query)
 
     def test_snapshot_rejects_invalid_or_missing_data(self):
-        for failure in ("http_503", "down", "reloader_down", "missing_target", "stale_target", "empty", "vector",
+        for failure in ("ipv4_target", "mapped_target", "missing_scrape_url", "ipv4_instance", "http_503", "down", "reloader_down", "missing_target", "stale_target", "empty", "vector",
                         "stale_sample", "nan", "up_zero", "missing_infrastructure", "warning", "invalid_json"):
             with self.subTest(failure=failure):
                 self.server.state["failure"] = failure
@@ -176,6 +193,7 @@ class MetricsFixtures(unittest.TestCase):
         self.assertEqual(self.invoke("verify", "--run-id", "different-run")["status"], "fail")
         self.assertEqual(self.invoke("verify", "--min-increase", "0")["status"], "fail")
         self.assertEqual(self.invoke("verify", "--timeout", "-1")["status"], "fail")
+        self.assertEqual(self.invoke("snapshot", "--prometheus-url", "http://127.0.0.1:9090")["status"], "fail")
         self.baseline.write_text("{}")
         self.assertEqual(self.invoke("verify")["status"], "fail")
 

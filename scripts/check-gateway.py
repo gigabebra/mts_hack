@@ -73,12 +73,13 @@ def conditions_checks(resources):
     for address in addresses:
         try:
             valid_addresses.append(address.get("type") == "IPAddress"
-                                   and ipaddress.ip_address(address.get("value", "")).version == 4)
+                                   and ipaddress.ip_address(address.get("value", "")).version == 6
+                                   and ipaddress.ip_address(address.get("value", "")).ipv4_mapped is None)
         except ValueError:
             valid_addresses.append(False)
     # Do not store node addresses in the evidence report.
     checks.append(check("gateway.address", bool(valid_addresses) and all(valid_addresses),
-                        "at least one IPv4 status address", {"count": len(addresses), "valid": valid_addresses}))
+                        "at least one native IPv6 status address", {"count": len(addresses), "valid": valid_addresses}))
     listeners = [item for item in gw.get("status", {}).get("listeners", []) if item.get("name") == "web"]
     listener = listeners[0] if len(listeners) == 1 else {}
     condition_checks("gateway.listener.web", listener.get("conditions", []), generation,
@@ -249,6 +250,9 @@ def parse_args(argv):
             raise ValueError("--base-url must be an HTTP origin without credentials, path, query or fragment")
         # Accessing port also validates malformed/out-of-range values before requests start.
         _ = url.port
+        address = ipaddress.ip_address(url.hostname)
+        if address.version != 6 or address.ipv4_mapped is not None:
+            raise ValueError("--base-url must use a native IPv6 literal in brackets")
     return args
 
 

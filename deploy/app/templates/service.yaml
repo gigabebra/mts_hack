@@ -7,6 +7,8 @@ metadata:
     {{- include "app.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
+  ipFamilyPolicy: SingleStack
+  ipFamilies: [IPv6]
   selector:
     app.kubernetes.io/name: hello
     app.kubernetes.io/instance: {{ .Release.Name }}

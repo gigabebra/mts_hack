@@ -29,6 +29,7 @@ def main():
     if not re.fullmatch(r"docker\.io/nginxinc/nginx-unprivileged:[^@]+@sha256:[a-f0-9]{64}", args.image):
         parser.error("--image must be the digest-locked nginx-unprivileged image")
     name = "mts-mvp02-test-" + uuid.uuid4().hex[:12]
+    network = name + "-network"
     with tempfile.TemporaryDirectory(prefix="mts-mvp02-") as temporary:
         directory = Path(temporary)
         directory.chmod(0o755)
@@ -42,15 +43,16 @@ def main():
         kubeconfig = directory / "unused-explicit-kubeconfig"
         kubeconfig.write_text("Traffic-only smoke: no kubectl invocation is made.")
         try:
-            docker("run", "--detach", "--name", name, "--read-only", "--user", "101:101",
+            docker("network", "create", "--ipv6", "--ipv4=false", "--subnet", f"fd7a:115c:{name[-8:-4]}:{name[-4:]}::/64", network)
+            docker("run", "--detach", "--name", name, "--network", network, "--read-only", "--user", "101:101",
                    "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
                    "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m,uid=101,gid=101",
                    "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=16m,uid=101,gid=101",
-                   "--publish", "127.0.0.1::8080", "--volume", f"{config}:/etc/nginx/nginx.conf:ro",
+                   "--publish", "[::1]::8080", "--volume", f"{config}:/etc/nginx/nginx.conf:ro",
                    "--volume", f"{page}:/usr/share/nginx/html:ro", "--entrypoint", "nginx",
                    args.image, "-g", "daemon off;")
             endpoint = docker("port", name, "8080/tcp").stdout.strip()
-            assert re.fullmatch(r"127\.0\.0\.1:\d+", endpoint), endpoint
+            assert re.fullmatch(r"\[::1\]:\d+", endpoint), endpoint
             url = "http://" + endpoint
             deadline = time.monotonic() + 20
             while True:
@@ -103,6 +105,7 @@ def main():
         finally:
             # The unique name also allows cleanup when docker run times out after creation.
             docker("rm", "--force", name, check=False)
+            docker("network", "rm", network, check=False)
 
 
 if __name__ == "__main__":

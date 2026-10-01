@@ -4,6 +4,7 @@
 import argparse
 import datetime
 import decimal
+import ipaddress
 import json
 import math
 from pathlib import Path
@@ -22,7 +23,14 @@ SOURCE_PATTERN = re.compile(r"/var/log/containers/hello-[^/]+_demo_nginx-[^/]+\.
 LABELS = {"app": "hello", "namespace": "demo", "container": "nginx"}
 RFC3339 = re.compile(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?(Z|[+-]\d\d:\d\d)\Z")
 MAX_RESPONSE = 2 * 1024 * 1024
-HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
 
 class Arguments(argparse.ArgumentParser):
@@ -57,6 +65,10 @@ def cli(argv):
             if (parsed.scheme not in ("http", "https") or not parsed.hostname
                     or parsed.username or parsed.password or parsed.query or parsed.fragment):
                 raise ValueError("URLs must be HTTP(S) without credentials, query or fragment")
+            address = ipaddress.ip_address(parsed.hostname)
+            if address.version != 6 or address.ipv4_mapped is not None:
+                raise ValueError("URLs must use native IPv6 literals in brackets")
+            _ = parsed.port
     return args
 
 

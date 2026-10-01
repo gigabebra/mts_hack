@@ -34,11 +34,11 @@ ServiceMonitor Traefik находится в `edge`, имеет label `release=m
 
 ```sh
 python3 scripts/check-metrics.py --mode snapshot \
-  --prometheus-url http://127.0.0.1:9090 --run-id "$RUN_ID" \
+  --prometheus-url 'http://[::1]:9090' --run-id "$RUN_ID" \
   --timeout 90 --output "$BASELINE"
 # Здесь общий verify делает HTTP-пробы через Gateway.
 python3 scripts/check-metrics.py --mode verify \
-  --prometheus-url http://127.0.0.1:9090 --run-id "$RUN_ID" \
+  --prometheus-url 'http://[::1]:9090' --run-id "$RUN_ID" \
   --baseline "$BASELINE" --min-increase 20 --timeout 90 --output "$RESULT"
 ```
 
@@ -47,8 +47,18 @@ python3 scripts/check-metrics.py --mode verify \
 Обязательны services `edge/traefik-metrics`,
 `monitoring/monitoring-prometheus-node-exporter`,
 `monitoring/monitoring-kube-state-metrics`, `monitoring/monitoring-prometheus`.
+Scrape discovery использует EndpointSlice. Service имеют `SingleStack` /
+`ipFamilies: [IPv6]`; Operator-created `prometheus-operated` получает IPv6
+из single-stack сети кластера. Prometheus слушает `[::]:9090`,
+kube-state-metrics — `::`. Общий post-renderer задает `[::]:8080` Operator
+и `HOST_IP=::` node-exporter: upstream charts явно задают IPv4 wildcard.
+Operator `--localhost=[::1]` направляет config-reloader к Prometheus по IPv6.
+
 У каждого требуется основной endpoint; все обнаруженные endpoints этих
 services должны быть здоровы, включая Prometheus config-reloader.
+`check-metrics.py` требует native IPv6 literal в обоих `scrapeUrl` и
+`labels.instance` каждого endpoint; IPv4, IPv4-mapped IPv6 и отсутствие URL
+дают fail. URL API принимается как IPv6 literal с квадратными скобками.
 
 Фиксированный scope HTTP:
 `traefik_entrypoint_requests_total{entrypoint="web",code="200",method="GET"}`.
@@ -76,6 +86,6 @@ Fixtures запускаются командой:
 python3 -m unittest discover -s deploy/monitoring/tests -v
 ```
 
-Это локальный HTTP сервер с синтетическими ответами. Его pass не подтверждает
+Это HTTP сервер на `::1` с `IPV6_V6ONLY=1` и синтетическими ответами. Его pass не подтверждает
 живые scrape, совместимость CRDs/Operator или сохранение истории после
 рестарта Prometheus. Эти проверки выполняет интегратор на выделенной VM.

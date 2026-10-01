@@ -3,6 +3,7 @@
 
 import argparse
 import datetime as dt
+import ipaddress
 import json
 import math
 from pathlib import Path
@@ -53,6 +54,11 @@ def fresh(timestamp, now):
     return -5 <= now - timestamp <= MAX_AGE
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 class API:
     def __init__(self, base, deadline):
         parsed = urllib.parse.urlsplit(base)
@@ -60,10 +66,14 @@ class API:
             raise ValueError("prometheus-url must be an HTTP(S) URL")
         if parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("prometheus-url must not contain credentials/query/fragment")
+        address = ipaddress.ip_address(parsed.hostname)
+        if address.version != 6 or address.ipv4_mapped is not None:
+            raise ValueError("prometheus-url must use a native IPv6 literal in brackets")
+        _ = parsed.port
         self.base = base.rstrip("/")
         self.deadline = deadline
         # Local port forwards must not use an environment HTTP proxy.
-        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
     def get(self, endpoint, **parameters):
         remaining = self.deadline - time.monotonic()
@@ -130,15 +140,25 @@ def inspect_targets(api, now):
         evidence = []
         for target in matched:
             stamp = dt.datetime.fromisoformat(target["lastScrape"].replace("Z", "+00:00")).timestamp()
-            item = {"labels": target["labels"], "health": target.get("health"),
+            try:
+                scrape = urllib.parse.urlsplit(target.get("scrapeUrl", ""))
+                address = ipaddress.ip_address(scrape.hostname or "")
+                instance = urllib.parse.urlsplit("http://" + target.get("labels", {}).get("instance", ""))
+                instance_address = ipaddress.ip_address(instance.hostname or "")
+                native_ipv6 = (scrape.scheme in ("http", "https") and address.version == 6 and address.ipv4_mapped is None and scrape.port is not None
+                               and instance_address.version == 6 and instance_address.ipv4_mapped is None
+                               and instance.port is not None)
+            except ValueError:
+                native_ipv6 = False
+            item = {"labels": target["labels"], "ipv6": native_ipv6, "health": target.get("health"),
                     "last_scrape": stamp, "has_error": bool(target.get("lastError")),
                     "fresh": fresh(stamp, now)}
             evidence.append(item)
             selected.append(target["labels"])
         passed = main_endpoint_present and bool(evidence) and all(
-            item["health"] == "up" and item["fresh"] and not item["has_error"] for item in evidence
+            item["health"] == "up" and item["fresh"] and not item["has_error"] and item["ipv6"] for item in evidence
         )
-        checks.append(check("target_" + name, passed, "present, up, fresh, no scrape error", evidence))
+        checks.append(check("target_" + name, passed, "present, native IPv6 scrape URL, up, fresh, no scrape error", evidence))
         saved.extend(evidence)
     return checks, saved, selected
 
