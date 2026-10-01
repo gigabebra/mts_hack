@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mts-health-{{ health_uuid.stdout }}
+  namespace: default
+  labels:
+    mts-health-run: {{ health_uuid.stdout }}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 150
+  template:
+    metadata:
+      labels:
+        mts-health-client: {{ health_uuid.stdout }}
+        mts-health-run: {{ health_uuid.stdout }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: probe
+          image: {{ images.busybox | mvp_image(image_lock.images) | to_json }}
+          command:
+            - sh
+            - -ec
+            - |
+              case "$CLIENT_POD_IP" in *:*) ;; *) echo "Expected IPv6 client pod address"; exit 1;; esac
+              for attempt in $(seq 1 60); do
+                if nslookup -type=AAAA kubernetes.default.svc.cluster.local | grep -F '{{ health_kubernetes_ipv6 }}' &&
+                   nslookup -type=AAAA mts-health-{{ health_uuid.stdout }}.default.svc.cluster.local | grep -F '{{ health_service_ipv6 }}' &&
+                   test "$(wget -T 2 -qO- http://mts-health-{{ health_uuid.stdout }}.default.svc.cluster.local:8080/)" = MTS_POD_HTTP_OK &&
+                   test "$(wget -T 2 -qO- 'http://[{{ health_server_ipv6 }}]:8080/')" = MTS_POD_HTTP_OK; then
+                  echo MTS_IPV6_AAAA_SERVICE_AND_DIRECT_POD_OK
+                  exit 0
+                fi
+                sleep 2
+              done
+              exit 1
+          env:
+            - name: CLIENT_POD_IP
+              valueFrom:
+                fieldRef: {fieldPath: status.podIP}
+          securityContext: {runAsNonRoot: true, runAsUser: 65534, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}, seccompProfile: {type: RuntimeDefault}}
+          resources: {requests: {cpu: 10m, memory: 16Mi}, limits: {cpu: 100m, memory: 32Mi}}

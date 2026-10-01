@@ -5,12 +5,13 @@ metadata:
   namespace: default
   labels:
     mts-health: {{ health_uuid.stdout }}
+    mts-health-run: {{ health_uuid.stdout }}
 spec:
   automountServiceAccountToken: false
   containers:
     - name: http
       image: {{ images.busybox | mvp_image(image_lock.images) | to_json }}
-      command: [sh, -ec, 'mkdir -p /tmp/www; printf MTS_POD_HTTP_OK >/tmp/www/index.html; exec httpd -f -p 8080 -h /tmp/www']
+      command: [sh, -ec, 'mkdir -p /tmp/www; printf MTS_POD_HTTP_OK >/tmp/www/index.html; exec httpd -f -p [::]:8080 -h /tmp/www']
       securityContext: {runAsNonRoot: true, runAsUser: 65534, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}, seccompProfile: {type: RuntimeDefault}}
       resources: {requests: {cpu: 10m, memory: 16Mi}, limits: {cpu: 100m, memory: 32Mi}}
       volumeMounts: [{name: tmp, mountPath: /tmp}]
@@ -22,41 +23,11 @@ kind: Service
 metadata:
   name: mts-health-{{ health_uuid.stdout }}
   namespace: default
+  labels:
+    mts-health-run: {{ health_uuid.stdout }}
 spec:
+  ipFamilyPolicy: SingleStack
+  ipFamilies: [IPv6]
   selector:
     mts-health: {{ health_uuid.stdout }}
   ports: [{port: 8080, targetPort: 8080}]
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: mts-health-{{ health_uuid.stdout }}
-  namespace: default
-spec:
-  backoffLimit: 0
-  activeDeadlineSeconds: 150
-  template:
-    metadata:
-      labels:
-        mts-health-client: {{ health_uuid.stdout }}
-    spec:
-      restartPolicy: Never
-      automountServiceAccountToken: false
-      containers:
-        - name: probe
-          image: {{ images.busybox | mvp_image(image_lock.images) | to_json }}
-          command:
-            - sh
-            - -ec
-            - |
-              for attempt in $(seq 1 60); do
-                if nslookup kubernetes.default.svc.cluster.local &&
-                   test "$(wget -T 2 -qO- http://mts-health-{{ health_uuid.stdout }}.default.svc.cluster.local:8080/)" = MTS_POD_HTTP_OK; then
-                  echo MTS_DNS_AND_POD_NETWORK_OK
-                  exit 0
-                fi
-                sleep 2
-              done
-              exit 1
-          securityContext: {runAsNonRoot: true, runAsUser: 65534, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}, seccompProfile: {type: RuntimeDefault}}
-          resources: {requests: {cpu: 10m, memory: 16Mi}, limits: {cpu: 100m, memory: 32Mi}}

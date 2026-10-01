@@ -17,16 +17,109 @@
     path: /etc/hosts
     regexp: "^{{ node_ip | regex_escape }}\\s"
     line: "{{ node_ip }} {{ node_name }}"
+- name: Configure the SSH daemon for IPv6 only
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/00-mts-ipv6.conf
+    mode: '0644'
+    content: |
+      AddressFamily inet6
+      ListenAddress ::
+      Port {{ ssh_port | default(22) }}
+  register: ssh_ipv6_config
+- name: Validate complete SSH configuration before restarting its listener
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+- name: Inspect Ubuntu SSH socket activation
+  ansible.builtin.command: systemctl is-active ssh.socket
+  register: ssh_socket_active
+  changed_when: false
+  failed_when: false
+- name: Create an override directory for Ubuntu SSH socket activation
+  ansible.builtin.file:
+    path: /etc/systemd/system/ssh.socket.d
+    state: directory
+    mode: '0755'
+- name: Make the systemd SSH listener IPv6 only too
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/ssh.socket.d/99-mts-ipv6.conf
+    mode: '0644'
+    content: |
+      [Socket]
+      ListenStream=
+      ListenStream=[::]:{{ ssh_port | default(22) }}
+      BindIPv6Only=ipv6-only
+  register: ssh_ipv6_socket
+- name: Confirm SSH restart preserves established child sessions
+  ansible.builtin.command: systemctl show ssh.service --property=KillMode --value
+  register: ssh_kill_mode
+  changed_when: false
+  failed_when: ssh_kill_mode.stdout != 'process'
+  when: ssh_ipv6_config.changed or ssh_ipv6_socket.changed
+- name: Reload SSH unit overrides before changing its listener
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: ssh_ipv6_config.changed or ssh_ipv6_socket.changed
+- name: Restart SSH socket and master in one ordered systemd transaction
+  ansible.builtin.command:
+    argv: [systemctl, restart, ssh.socket, ssh.service]
+  when:
+    - ssh_socket_active.stdout == 'active'
+    - ssh_ipv6_config.changed or ssh_ipv6_socket.changed
+- name: Restart the SSH master on installations without socket activation
+  ansible.builtin.systemd_service:
+    name: ssh.service
+    state: restarted
+  when:
+    - ssh_socket_active.stdout != 'active'
+    - ssh_ipv6_config.changed or ssh_ipv6_socket.changed
+- name: Confirm the explicit IPv6 SSH connection still works
+  ansible.builtin.wait_for_connection:
+    timeout: 60
+  when: ssh_ipv6_config.changed or ssh_ipv6_socket.changed
 - name: Install OS prerequisites through signed Ubuntu repositories
   ansible.builtin.apt:
     name: [ca-certificates, curl, gpg, conntrack, socat, iptables, ethtool, python3, python3-apt, systemd-timesyncd]
     state: present
     update_cache: true
     cache_valid_time: 3600
-- name: Enable network time synchronization
+- name: Create the time synchronization override directory
+  ansible.builtin.file:
+    path: /etc/systemd/timesyncd.conf.d
+    state: directory
+    mode: '0755'
+- name: Configure NTP traffic to explicit IPv6 servers
+  ansible.builtin.copy:
+    dest: /etc/systemd/timesyncd.conf.d/99-mts-ipv6.conf
+    mode: '0644'
+    content: |
+      [Time]
+      NTP={{ ntp_servers | default(['2606:4700:f1::123']) | mvp_ipv6_servers | join(' ') }}
+      FallbackNTP=
+  register: ntp_ipv6_config
+- name: Enable IPv6 network time synchronization
   ansible.builtin.systemd_service:
     name: systemd-timesyncd
-    state: started
+    state: "{{ ntp_ipv6_config.changed | ternary('restarted', 'started') }}"
+    enabled: true
+- name: Create the resolver override directory
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: '0755'
+- name: Prefer explicit IPv6 DNS upstreams over DHCP resolver defaults
+  ansible.builtin.copy:
+    dest: /etc/systemd/resolved.conf.d/99-mts-ipv6.conf
+    mode: '0644'
+    content: |
+      [Resolve]
+      DNS={{ dns_servers | mvp_ipv6_servers | join(' ') }}
+      FallbackDNS=
+      Domains=~.
+  register: dns_ipv6_config
+- name: Enable IPv6 DNS upstream configuration
+  ansible.builtin.systemd_service:
+    name: systemd-resolved
+    state: "{{ dns_ipv6_config.changed | ternary('restarted', 'started') }}"
     enabled: true
 - name: Wait for synchronized wall clock
   ansible.builtin.command: timedatectl show --property=NTPSynchronized --value
@@ -58,9 +151,15 @@
     dest: /etc/sysctl.d/99-mts-kubernetes.conf
     mode: '0644'
     content: |
+      # Accept router advertisements before enabling forwarding, including
+      # the existing uplink (default applies only to newly created devices).
+      net.ipv6.conf.all.accept_ra = 2
+      net.ipv6.conf.default.accept_ra = 2
+      net/ipv6/conf/{{ node_interface }}/accept_ra = 2
       net.bridge.bridge-nf-call-iptables = 1
       net.bridge.bridge-nf-call-ip6tables = 1
-      net.ipv4.ip_forward = 1
+      net.ipv6.conf.all.forwarding = 1
+      net.ipv6.conf.default.forwarding = 1
   register: sysctl_config
 - name: Apply required sysctls
   ansible.builtin.command: sysctl --load=/etc/sysctl.d/99-mts-kubernetes.conf
@@ -79,3 +178,13 @@
     - /opt/cni/bin
     - /usr/local/sbin
     - "{{ data_root }}"
+- name: Give Kubernetes DNS only explicit IPv6 recursive resolvers
+  ansible.builtin.copy:
+    dest: "{{ remote_state }}/resolv.conf"
+    mode: '0644'
+    content: |
+      # Managed by mts bootstrap; kubelet/CoreDNS never inherit DHCP IPv4 DNS.
+      {% for resolver in dns_servers | mvp_ipv6_servers %}
+      nameserver {{ resolver }}
+      {% endfor %}
+      options timeout:2 attempts:3

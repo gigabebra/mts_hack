@@ -26,9 +26,11 @@
           - ansible_facts.memtotal_mb >= 7000
           - ansible_facts.processor_vcpus >= 4
           - node_name is match('^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$')
-          - node_ip in ansible_facts.all_ipv4_addresses
+          - node_ip is defined
           - pod_cidr is defined
           - service_cidr is defined
+          - dns_servers is defined and dns_servers | mvp_ipv6_servers | length > 0
+          - ntp_servers | default(['2606:4700:f1::123']) | mvp_ipv6_servers | length > 0
           - kubeconfig is defined and kubeconfig | length > 0
           - data_root is match('^/[a-zA-Z0-9_/-]+$') and data_root != '/'
         fail_msg: Explicit single-host Ubuntu 24.04 amd64 environment, 4 CPUs and at least 7000 MiB RAM are required.
@@ -50,10 +52,13 @@
       ansible.builtin.set_fact:
         cluster_exists: "{{ bootstrap_state.results[0].stat.exists }}"
         expected_identity:
+          network_family: IPv6
           node_name: "{{ node_name }}"
           node_ip: "{{ node_ip }}"
           pod_cidr: "{{ pod_cidr }}"
           service_cidr: "{{ service_cidr }}"
+          dns_servers: "{{ dns_servers }}"
+          ntp_servers: "{{ ntp_servers | default(['2606:4700:f1::123']) }}"
           kubernetes: "{{ platform.kubernetes }}"
           containerd: "{{ platform.containerd }}"
           calico: "{{ platform.calico }}"
@@ -73,6 +78,10 @@
         cmd: "files/preflight.py {{ pod_cidr | quote }} {{ service_cidr | quote }} {{ node_ip | quote }} {{ cluster_exists | ternary('existing', 'new') }}"
         executable: /usr/bin/python3
       changed_when: false
+      register: network_preflight
+    - name: Keep the validated IPv6 uplink for router advertisements
+      ansible.builtin.set_fact:
+        node_interface: "{{ (network_preflight.stdout | from_json).node_interface }}"
     - name: Verify access to the existing cluster before mutation
       ansible.builtin.command:
         argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=20s, get, nodes, -o, json]

@@ -22,13 +22,29 @@ networking:
   serviceSubnet: {{ service_cidr | to_json }}
   dnsDomain: cluster.local
 apiServer:
+  extraArgs:
+    - name: bind-address
+      value: {{ node_ip | to_json }}
   certSANs:
     - {{ node_ip | to_json }}
     - {{ node_name | to_json }}
+controllerManager:
+  extraArgs:
+    - name: bind-address
+      value: "::1"
+    - name: node-cidr-mask-size-ipv6
+      value: "64"
+scheduler:
+  extraArgs:
+    - name: bind-address
+      value: "::1"
 ---
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
 cgroupDriver: systemd
+address: {{ node_ip | to_json }}
+healthzBindAddress: "::1"
+resolvConf: {{ (remote_state ~ '/resolv.conf') | to_json }}
 failSwapOn: true
 containerLogMaxSize: 10Mi
 containerLogMaxFiles: 3
@@ -36,3 +52,9 @@ containerLogMaxFiles: 3
 apiVersion: kubeproxy.config.k8s.io/v1alpha1
 kind: KubeProxyConfiguration
 mode: iptables
+bindAddress: {{ node_ip | to_json }}
+healthzBindAddress: "[::1]:10256"
+metricsBindAddress: "[::1]:10249"
+nodePortAddresses: [{{ (node_ip ~ '/128') | to_json }}]
+iptables:
+  localhostNodePorts: false

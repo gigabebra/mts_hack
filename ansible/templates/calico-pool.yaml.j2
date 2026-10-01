@@ -1,0 +1,13 @@
+apiVersion: crd.projectcalico.org/v1
+kind: IPPool
+metadata:
+  name: mts-ipv6-pool
+spec:
+  cidr: {{ pod_cidr | to_json }}
+  blockSize: 122
+  vxlanMode: Always
+  ipipMode: Never
+  natOutgoing: true
+  nodeSelector: all()
+  allowedUses: [Workload, Tunnel]
+  disableBGPExport: true

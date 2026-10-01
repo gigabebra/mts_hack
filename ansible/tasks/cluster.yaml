@@ -103,6 +103,20 @@
     argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=120s, apply, --server-side, --field-manager=mts-bootstrap, -f, "{{ remote_state }}/calico.yaml"]
   register: apply_calico
   changed_when: "'created' in apply_calico.stdout or 'serverside-applied' in apply_calico.stdout"
+- name: Wait for the IPPool API before creating the IPv6 pool
+  ansible.builtin.command:
+    argv: [kubectl, --kubeconfig, "{{ admin_config }}", wait, --for=condition=Established, crd/ippools.crd.projectcalico.org, --timeout=120s]
+  changed_when: false
+- name: Render the explicit IPv6 VXLAN pool
+  ansible.builtin.template:
+    src: calico-pool.yaml.j2
+    dest: "{{ remote_state }}/calico-pool.yaml"
+    mode: '0600'
+- name: Apply the single IPv6 VXLAN pool
+  ansible.builtin.command:
+    argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=60s, apply, --server-side, --field-manager=mts-bootstrap, -f, "{{ remote_state }}/calico-pool.yaml"]
+  register: apply_pool
+  changed_when: "'created' in apply_pool.stdout or 'serverside-applied' in apply_pool.stdout"
 - name: Read current control-plane taints
   ansible.builtin.command:
     argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=30s, get, node, "{{ node_name }}", -o, json]
