@@ -3,6 +3,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import sys
@@ -13,18 +14,34 @@ def collect():
         return subprocess.check_output(args, text=True, stderr=subprocess.PIPE, timeout=25)
     cri = ['crictl', '--runtime-endpoint', 'unix:///run/containerd/containerd.sock']
     host_namespace = os.readlink('/proc/self/ns/net')
-    result = {'host_sockets': read('ss', '-H', '-antup'), 'pods': [],
+    result = {'host_sockets': read('ss', '-H', '-antup'), 'pods': [], 'calico_usage_reporting': [],
               'ntp_server': read('timedatectl', 'show-timesync', '--property=ServerAddress', '--value').strip()}
+    result['host_processes'] = {}
+    host_mount = os.readlink('/proc/self/ns/mnt')
+    for pid in set(re.findall(r'pid=(\d+)', result['host_sockets'])):
+        try:
+            result['host_processes'][pid] = {
+                'exe': os.readlink(f'/proc/{pid}/exe'),
+                'cgroup': Path(f'/proc/{pid}/cgroup').read_text(),
+                'host_mount_namespace': os.readlink(f'/proc/{pid}/ns/mnt') == host_mount,
+            }
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
+            # A disappearing process cannot prove an allowed download.
+            result['host_processes'][pid] = {}
     containers = json.loads(read(*cri, 'ps', '-o', 'json'))['containers']
     seen = set()
     for container in containers:
         detail = json.loads(read(*cri, 'inspect', container['id']))
+        labels = container['labels']
+        if labels.get('io.kubernetes.container.name') == 'calico-node':
+            result['calico_usage_reporting'].append([
+                value for value in detail['info']['runtimeSpec']['process'].get('env', [])
+                if value.startswith('FELIX_USAGEREPORTINGENABLED=')])
         pid = detail['info']['pid']
         namespace = os.readlink(f'/proc/{pid}/ns/net')
         if namespace == host_namespace or namespace in seen:
             continue
         seen.add(namespace)
-        labels = container['labels']
         item = {'namespace': labels['io.kubernetes.pod.namespace'], 'name': labels['io.kubernetes.pod.name'],
                 'sockets': read('nsenter', '-t', str(pid), '-n', 'ss', '-H', '-antup')}
         # CRI tries IPv4 first. These two APIs must refuse it even locally.
@@ -49,7 +66,32 @@ def address(endpoint):
     return ipaddress.ip_address(host.strip('[]').split('%', 1)[0]), port
 
 
-def ipv4_flows(text, host=False):
+def host_exception(local, local_port, peer, peer_port, line, processes):
+    owners = re.findall(r'pid=(\d+)', line)
+    if not owners:
+        return False
+    executables = []
+    for pid in owners:
+        process = processes.get(pid, {})
+        cgroup = process.get('cgroup', '')
+        if (not process.get('host_mount_namespace') or not cgroup
+                or any(marker in cgroup for marker in ('kubepods', 'docker', 'libpod'))):
+            return False
+        executables.append(process.get('exe'))
+    downloaders = {'/usr/local/bin/containerd', '/usr/lib/apt/methods/http', '/usr/lib/apt/methods/https'}
+    downloads = all(exe in downloaders for exe in executables)
+    if peer.is_global and peer_port in ('80', '443'):
+        return downloads
+    # The host stub is auxiliary to OS downloads. Pod/hostNetwork clients
+    # and arbitrary host Python/curl processes are never exempted by name.
+    stubs = {'127.0.0.53', '127.0.0.54'}
+    if str(peer) in stubs and peer_port == '53':
+        return downloads
+    return (peer.is_loopback and str(local) in stubs and local_port == '53'
+            and all(exe == '/usr/lib/systemd/systemd-resolved' for exe in executables))
+
+
+def ipv4_flows(text, host=False, processes=None):
     failures = []
     for line in text.splitlines():
         fields = line.split()
@@ -62,10 +104,10 @@ def ipv4_flows(text, host=False):
         v4 = peer if peer.version == 4 else peer.ipv4_mapped
         if v4 is None:
             continue
-        if host and ((v4.is_loopback and (peer_port == '53' or local_port == '53'))
-                     or (v4.is_global and peer_port in ('80', '443'))):
-            continue  # OS download/resolver exception explicitly allowed by the user.
-        failures.append({'protocol': fields[0], 'state': fields[1], 'loopback': v4.is_loopback})
+        if host and host_exception(local, local_port, v4, peer_port, line, processes or {}):
+            continue
+        failures.append({'protocol': fields[0], 'state': fields[1], 'loopback': v4.is_loopback,
+                         'processes': re.findall(r'\("([^"\n]+)",pid=', line)})
     return failures
 
 
@@ -75,7 +117,9 @@ def validate(data):
         raise ValueError('NTP selected an IPv4-mapped server')
     if not data['pods']:
         raise ValueError('No Pod network namespaces observed')
-    failures = {'host': ipv4_flows(data['host_sockets'], host=True)}
+    if data.get('calico_usage_reporting') != [['FELIX_USAGEREPORTINGENABLED=false']]:
+        raise ValueError('Running Calico must explicitly disable external usage/version reporting')
+    failures = {'host': ipv4_flows(data['host_sockets'], host=True, processes=data.get('host_processes', {}))}
     api_ports = set()
     for pod in data['pods']:
         failures[pod['namespace'] + '/' + pod['name']] = ipv4_flows(pod['sockets'])
@@ -85,14 +129,16 @@ def validate(data):
             api_ports.add(pod['ipv6_api_port'])
     if api_ports != {3100, 9090}:
         raise ValueError('Missing Prometheus/Loki transport probes')
-    nonempty = {name: {'count': len(values), 'states': sorted({v['state'] for v in values})}
+    nonempty = {name: {'count': len(values), 'states': sorted({v['state'] for v in values}),
+                      'processes': sorted({p for v in values for p in v['processes']})}
                 for name, values in failures.items() if values}
     if nonempty:
         raise ValueError('Observed IPv4 runtime connections: ' + json.dumps(nonempty))
     return {'pod_network_namespaces': len(data['pods']), 'ipv4_runtime_flows': 0,
             'host_exempt_ipv4_flows': len(ipv4_flows(data['host_sockets'])) - len(failures['host']),
             'prometheus_loki_ipv4_loopback': 'ECONNREFUSED', 'ntp_transport': 'IPv6',
-            'scope': 'Socket snapshot including TIME-WAIT; public host HTTP(S)/local DNS exempt by address/port, not payload inspection'}
+            'calico_usage_reporting': 'disabled in running container',
+            'scope': 'Socket snapshot including TIME-WAIT; OS download exceptions require PID, executable, host mount namespace and non-container cgroup; unowned sockets fail; no payload inspection'}
 
 
 def transport_evidence(env, directory):

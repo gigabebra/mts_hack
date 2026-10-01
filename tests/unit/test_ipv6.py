@@ -35,12 +35,29 @@ class IPv6Contract(unittest.TestCase):
         self.assertEqual(ipv4_flows('tcp LISTEN 0 10 0.0.0.0:8080 0.0.0.0:*'), [])
         self.assertEqual(ipv4_flows('udp UNCONN 0 0 192.0.2.1:68 0.0.0.0:*', host=True), [])
         self.assertEqual(ipv4_flows('udp UNCONN 0 0 127.0.0.53%lo:53 0.0.0.0:*', host=True), [])
-        self.assertEqual(ipv4_flows('tcp ESTAB 0 0 192.0.2.1:40000 1.1.1.1:443', host=True), [])
+        self.assertEqual(len(ipv4_flows('tcp ESTAB 0 0 192.0.2.1:40000 1.1.1.1:443', host=True)), 1)
         self.assertEqual(len(ipv4_flows('tcp ESTAB 0 0 192.0.2.1:40000 192.168.1.10:443', host=True)), 1)
         self.assertEqual(len(ipv4_flows('tcp ESTAB 0 0 192.0.2.1:40000 198.51.100.1:6443', host=True)), 1)
 
+    def test_public_https_is_not_automatically_a_download(self):
+        flow = 'tcp ESTAB 0 0 192.0.2.1:49080 1.1.1.1:443 users:(("calico-node",pid=42,fd=34))'
+        container = {'exe': '/usr/bin/calico-node', 'cgroup': '0::/kubepods.slice/pod-fixture',
+                     'host_mount_namespace': False}
+        self.assertEqual(len(ipv4_flows(flow, host=True, processes={'42': container})), 1)
+        downloader = {'exe': '/usr/local/bin/containerd', 'cgroup': '0::/system.slice/containerd.service',
+                      'host_mount_namespace': True}
+        self.assertEqual(ipv4_flows(flow, host=True, processes={'42': downloader}), [])
+        # Neither a forged comm/executable nor a hostNetwork container qualifies.
+        for changes in ({'cgroup': '0::/kubepods.slice/pod-fixture'}, {'host_mount_namespace': False},
+                        {'exe': '/usr/bin/curl'}, {'exe': '/usr/bin/python3'}, {'cgroup': ''}):
+            with self.subTest(changes=changes):
+                self.assertEqual(len(ipv4_flows(flow, host=True, processes={'42': downloader | changes})), 1)
+        self.assertEqual(len(ipv4_flows(flow, host=True, processes={})), 1)
+        self.assertEqual(len(ipv4_flows('tcp TIME-WAIT 0 0 192.0.2.1:49080 1.1.1.1:443', host=True)), 1)
+
     def test_transport_requires_both_api_loopback_refusals(self):
-        data = {'ntp_server': '2001:db8::123', 'host_sockets': '', 'pods': [
+        data = {'ntp_server': '2001:db8::123', 'host_sockets': '',
+                'calico_usage_reporting': [['FELIX_USAGEREPORTINGENABLED=false']], 'pods': [
             {'namespace': 'monitoring', 'name': 'prometheus', 'sockets': '',
              'ipv4_loopback_connect_ex': 111, 'ipv6_api_port': 9090},
             {'namespace': 'logging', 'name': 'loki', 'sockets': '',
