@@ -1,11 +1,13 @@
 """Reject incomplete dual-stack resources even when global family counts look healthy."""
 import copy
+import json
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
-from network_checks import validate_snapshot
+from network_checks import network_evidence, validate_snapshot
 from stacklib import http_url, lock_document
 
 ENV = {'node_name': 'fixture', 'node_ip': '2001:db8:20::10', 'node_ipv4': '192.0.2.10',
@@ -31,6 +33,15 @@ SNAPSHOT = {
 
 
 class DualStackContract(unittest.TestCase):
+    def test_insecure_or_proxied_api_is_rejected_before_resource_reads(self):
+        for option in ({'insecure-skip-tls-verify': True}, {'proxy-url': 'http://127.0.0.1:9'}):
+            cluster = {'server': SNAPSHOT['api_server'], **option}
+            with patch('network_checks.kubectl') as command, patch('network_checks.resource') as read:
+                command.return_value.stdout = json.dumps({'clusters': [{'cluster': cluster}]})
+                with self.assertRaises(ValueError):
+                    network_evidence(ENV)
+                read.assert_not_called()
+
     def test_complete_snapshot_and_sanitized_summary(self):
         result = validate_snapshot(ENV, copy.deepcopy(SNAPSHOT))
         self.assertEqual(result['families'], ['IPv6', 'IPv4'])

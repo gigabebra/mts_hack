@@ -130,9 +130,10 @@ def validate_snapshot(env, snapshot):
 
 def network_evidence(env, directory=None):
     config = json.loads(kubectl(env, 'config', 'view', '--minify', '-o', 'json', capture=True).stdout)
-    if config['clusters'][0]['cluster'].get('proxy-url'):
-        raise ValueError('Kubeconfig proxy-url is outside the direct API contract')
-    snapshot = {'api_server': config['clusters'][0]['cluster']['server']}
+    cluster = config['clusters'][0]['cluster']
+    if cluster.get('proxy-url') or cluster.get('insecure-skip-tls-verify'):
+        raise ValueError('API requires direct access and normal CA/SAN verification')
+    snapshot = {'api_server': cluster['server']}
     for key, kind, args in [('nodes', 'nodes', []), ('pods', 'pods', ['-A']),
                             ('services', 'services', ['-A']),
                             ('endpoint_slices', 'endpointslices.discovery.k8s.io', ['-A']),
