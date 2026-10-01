@@ -51,7 +51,9 @@ image, отсутствующий в lock, останавливает deploy. Co
 
 Нужны чистая Ubuntu 24.04 amd64 VM с 4 vCPU, 8 GiB RAM, диском 60 GiB,
 SSH-пользователь с `sudo -n`, доступ к публичным Ubuntu/Kubernetes repositories,
-GitHub, Docker Hub, quay.io и registry.k8s.io. Это начальный размер; измерения
+GitHub, Docker Hub, quay.io и registry.k8s.io. Управляющей машине также нужны
+PyPI/files.pythonhosted.org, get.helm.sh, dl.k8s.io и Helm chart repositories.
+Это начальный размер; измерения
 чистой приемки будут в `docs/acceptance/`. На VM не должно быть другого
 Kubernetes/CNI. Примерные CIDR `10.244.0.0/16` и `10.96.0.0/12` должны
 не пересекаться с вашими сетями/VPN.
@@ -65,7 +67,7 @@ Kubernetes/CNI. Примерные CIDR `10.244.0.0/16` и `10.96.0.0/12` дол
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y git make python3 python3-venv openssh-client
+sudo apt-get install -y git make curl python3 python3-venv openssh-client
 cd <checkout>
 make tools
 cp config/environments/ubuntu.example.yaml config/environments/ubuntu.local.yaml
