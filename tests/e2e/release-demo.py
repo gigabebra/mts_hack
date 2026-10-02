@@ -211,7 +211,9 @@ def main():
                 if code:
                     raise subprocess.CalledProcessError(code, argv)
             finally:
-                terminate_tree(process, grace=180)
+                # The interruption supervisor owns a separate restore session:
+                # allow its 360s wait plus child cleanup before killing it.
+                terminate_tree(process, grace=420 if name == 'interrupted_release' else 180)
         report['checks'].append({'name': name, 'status': 'pass'})
         print('PASS', name, flush=True)
 
