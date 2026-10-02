@@ -107,7 +107,8 @@ def route_checks(resources, hostname, split=False, expected_address=None):
                 "matches": [{"path": {"type": "Exact", "value": "/"}},
                             {"path": {"type": "PathPrefix", "value": "/verify"}}],
                 "filters": [{"type": "ResponseHeaderModifier", "responseHeaderModifier": {
-                    "set": [{"name": "X-Gateway-Route", "value": name}]}}],
+                    "set": [{"name": "X-Gateway-Route", "value": name},
+                            {"name": "X-Traffic-Split", "value": "90/10" if split else "100/0"}]}}],
                 "backendRefs": [backend("hello", 90 if split else 100), backend("hello-canary", 10 if split else 0)]}
         else:
             track = name.removeprefix("hello-")
@@ -196,13 +197,15 @@ def curl_probe(env, family, path, request_id, deadline, *, hostname=None, tls=Fa
         if not status_line.startswith(b"HTTP/1.1 "):
             raise ValueError("unexpected HTTP response protocol")
         for header, key in (("X-Release", "release"), ("X-Revision", "revision"),
-                            ("X-Request-ID", "request_id"), ("X-Gateway-Route", "route")):
+                            ("X-Request-ID", "request_id"), ("X-Gateway-Route", "route"),
+                            ("X-Traffic-Split", "traffic_split")):
             values = headers.get_all(header, [])
             result[key] = values[0] if len(values) == 1 else None
         return result
 
 
-def response_ok(response, request_id, expected_release=None, expected_route=None, revisions=None):
+def response_ok(response, request_id, expected_release=None, expected_route=None, revisions=None,
+                expected_split=None):
     release, revision = response.get("release"), response.get("revision")
     return (response.get("curl_exit") == 0 and response.get("status") == 200
             and response.get("body_exact") is True and response.get("request_id") == request_id
@@ -210,6 +213,7 @@ def response_ok(response, request_id, expected_release=None, expected_route=None
             and MVP.ID_PATTERN.fullmatch(revision) is not None
             and (expected_release is None or release == expected_release)
             and (expected_route is None or response.get("route") == expected_route)
+            and (expected_split is None or response.get("traffic_split") == expected_split)
             and (revisions is None or revisions.get(release) == revision))
 
 
@@ -229,6 +233,7 @@ def distribution_check(counts, total, split):
 def traffic_checks(env, ca, args, deadline):
     checks, data = [], {"revisions": {}, "samples": {}}
     revisions = data["revisions"]
+    expected_split = "90/10" if args.split else "100/0"
 
     def request(family, path, **kwargs):
         request_id = hashlib.sha256(f"{args.run_id}:{uuid.uuid4().hex}".encode()).hexdigest()[:32]
@@ -250,7 +255,8 @@ def traffic_checks(env, ca, args, deadline):
             for path in ("/", "/verify"):
                 request_id, result = request(family, path, tls=tls, hostname=env["tls_hostname"])
                 checks.append(check(f"final.ipv{family}.{scheme}.host.{path}",
-                                    response_ok(result, request_id, expected_route="hello-host", revisions=revisions),
+                                    response_ok(result, request_id, expected_route="hello-host", revisions=revisions,
+                                                expected_split=expected_split),
                                     "hostname route; exact body and release/revision headers", result))
             # The precise path matcher must not expose arbitrary suffixes.
             _, result = request(family, "/backend/canary/extra", tls=tls)
@@ -259,7 +265,8 @@ def traffic_checks(env, ca, args, deadline):
                                 "HTTP 404 for unmatched path", result))
         request_id, result = request(family, "/", hostname="unmatched.invalid")
         checks.append(check(f"final.ipv{family}.hostname.fallback",
-                            response_ok(result, request_id, expected_route="hello", revisions=revisions),
+                            response_ok(result, request_id, expected_route="hello", revisions=revisions,
+                                        expected_split=expected_split),
                             "unknown hostname falls back to the preserved IP route", result))
         _, result = request(family, "/", tls=True, hostname="unmatched.invalid")
         checks.append(check(f"final.ipv{family}.tls.wrong_name", result.get("curl_exit") == 60,
@@ -268,7 +275,8 @@ def traffic_checks(env, ca, args, deadline):
         first_error = None
         for _ in range(args.requests):
             request_id, result = request(family, "/")
-            if response_ok(result, request_id, expected_route="hello", revisions=revisions):
+            if response_ok(result, request_id, expected_route="hello", revisions=revisions,
+                           expected_split=expected_split):
                 counts[result["release"]] += 1
             else:
                 errors += 1

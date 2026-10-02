@@ -34,7 +34,11 @@ class AppRender(unittest.TestCase):
                 deployment = docs["Deployment"]["spec"]
                 self.assertEqual(deployment["selector"]["matchLabels"], selector)
                 self.assertEqual(deployment["replicas"], replicas)
-                self.assertEqual(deployment["strategy"]["rollingUpdate"]["maxUnavailable"], 0)
+                if track == "stable":
+                    self.assertEqual(deployment["strategy"], {"type": "RollingUpdate", "rollingUpdate": {
+                        "maxUnavailable": 0, "maxSurge": 1}})
+                else:
+                    self.assertEqual(deployment["strategy"], {"type": "Recreate"})
                 pod = deployment["template"]["spec"]
                 self.assertEqual(pod["terminationGracePeriodSeconds"], 30)
                 self.assertEqual(pod["containers"][0]["lifecycle"]["preStop"]["exec"]["command"],

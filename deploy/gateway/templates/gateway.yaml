@@ -72,6 +72,8 @@ spec:
             set:
               - name: X-Gateway-Route
                 value: {{ $name }}
+              - name: X-Traffic-Split
+                value: {{ printf "%d/%d" (int $.Values.traffic.stableWeight) (int $.Values.traffic.canaryWeight) | quote }}
       backendRefs:
         {{- include "gateway.backends" $ | nindent 8 }}
 {{- end }}

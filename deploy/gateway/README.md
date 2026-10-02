@@ -70,6 +70,11 @@ environment; по умолчанию это `30080`, `30443`, `hello.test`.
 записи, а не новые Loki labels. Fluentd glob `hello-*` охватывает также
 pod `hello-canary-*`.
 
+Canary использует `Recreate`: обычное изменение кандидата выполняется
+после изоляции общих маршрутов на 100/0, старый candidate pod завершается
+до запуска нового. Так smoke не чередует ответы двух ревизий кандидата.
+Stable сохраняет RollingUpdate и две replicas.
+
 Перед остановкой Nginx pod выполняет `preStop: sleep 5` в пределах
 `terminationGracePeriodSeconds: 30`. На это время Nginx продолжает
 отвечать, пока удаление endpoint распространяется до Traefik. Это
@@ -98,6 +103,14 @@ pod `hello-canary-*`.
 Кандидат доступен для smoke при нулевом весе. Эти пути не входят в
 выборку распределения общего трафика. `ResponseHeaderModifier` добавляет
 `X-Gateway-Route: hello|hello-host` для проверки hostname-маршрутизации.
+Оба пользовательских маршрута также добавляют `X-Traffic-Split: 100/0`
+или `90/10` из тех же values, что и backendRefs. Общий release helper
+ждет этот маркер фактически обслуживаемой конфигурации после изменения
+весов, затем начинает строгую выборку без retries. Одних текущих API
+conditions недостаточно: Traefik может еще обслуживать прежнюю конфигурацию.
+FINAL checker требует ожидаемый маркер на IP/hostname запросах, сохраняя
+проверки фактического распределения и release/revision. Детерминированные
+`/backend/<track>` от общих весов не зависят и этот маркер не добавляют.
 Незнакомый HTTP host сохраняет поведение `hello`; `/backend/canary/extra`
 и `/unrouted` дают 404.
 

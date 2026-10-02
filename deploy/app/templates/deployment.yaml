@@ -9,10 +9,16 @@ spec:
   replicas: {{ .Values.replicas }}
   revisionHistoryLimit: 2
   strategy:
+    {{- if eq .Values.releaseTrack "canary" }}
+    # The candidate is isolated at 100/0 before an ordinary revision change.
+    # Do not serve old and new candidate revisions at the same time.
+    type: Recreate
+    {{- else }}
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 0
       maxSurge: 1
+    {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: hello

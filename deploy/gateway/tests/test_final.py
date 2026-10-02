@@ -162,6 +162,15 @@ class HttpChecks(unittest.TestCase):
         self.assertFalse(FINAL.response_ok(self.response(), "fixture", expected_route="hello-host"))
         self.assertFalse(FINAL.response_ok(self.response(), "fixture", revisions={"canary": "old"}))
 
+    def test_current_spec_does_not_accept_stale_or_missing_served_split(self):
+        response = self.response()
+        for expected in ("100/0", "90/10"):
+            for observed in (None, "", "100/0" if expected == "90/10" else "90/10", "invalid"):
+                response["traffic_split"] = observed
+                self.assertFalse(FINAL.response_ok(response, "fixture", expected_route="hello", expected_split=expected))
+            response["traffic_split"] = expected
+            self.assertTrue(FINAL.response_ok(response, "fixture", expected_route="hello", expected_split=expected))
+
     def test_split_statistical_band_missing_responses_and_no_canary_baseline(self):
         for count in (50, 87, 100, 113, 150):
             self.assertEqual(FINAL.distribution_check({"stable": 1000 - count, "canary": count}, 1000, True)["status"], "pass")

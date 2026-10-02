@@ -52,7 +52,7 @@ export MTS_TEST_TRAEFIK_CHART=/home/Bebroid/mts_hack/.cache/downloads/traefik.tg
 | pass | `/home/Bebroid/mts_hack/.cache/tools/helm lint deploy/app deploy/gateway` | Оба собственных chart |
 | pass | `/home/Bebroid/mts_hack/.venv/bin/python deploy/app/tests/test_render.py` | 3 теста; identities/selectors, checksum, rollout, faults, schema negatives |
 | pass | `/home/Bebroid/mts_hack/.venv/bin/python deploy/gateway/tests/test_render.py` | 8 тестов; pinned Traefik render, HTTPS ports, routes/weights, TLS secret/schema negatives, hostname specificity |
-| pass | `/home/Bebroid/mts_hack/.venv/bin/python deploy/gateway/tests/test_final.py` | 13 fixture tests; stale/missing/duplicate conditions, wrong refs/weights/routes, invalid HTTP/revision, statistical gates, explicit kubeconfig, verified curl TLS args, details at deadline, pinned attachedRoutes semantics, HTTPS route selection |
+| pass | `/home/Bebroid/mts_hack/.venv/bin/python deploy/gateway/tests/test_final.py` | 14 fixture tests; stale/missing/duplicate conditions, wrong refs/weights/routes, invalid HTTP/revision, statistical gates, explicit kubeconfig, verified curl TLS args, details at deadline, pinned attachedRoutes semantics, HTTPS route selection, stale served split |
 | pass | `/home/Bebroid/mts_hack/.venv/bin/python -m py_compile scripts/check-gateway.final.py scripts/check-gateway.container.py deploy/app/tests/test_render.py deploy/gateway/tests/test_render.py deploy/gateway/tests/test_final.py` | Python syntax |
 | pass | `/home/Bebroid/mts_hack/.venv/bin/yamllint -c .yamllint deploy/app/values.yaml deploy/gateway/values.yaml deploy/gateway/traefik-values.yaml` | YAML lint |
 | pass | `git diff --check` | Whitespace |
@@ -89,6 +89,16 @@ Traefik и Gateway API 1.4 hostname убран только из HTTPS listener;
 форму listener и по-прежнему отклоняет здоровый HTTPS ответ от неправильного
 route. Добавлены render/negative регрессии; повторный live deploy выполняет
 интегратор. Подробные источники — в Gateway README.
+
+Полный live demo выявил отдельные гонки применения: RollingUpdate
+кандидата временно выдавал старую и новую revision, а актуальные Gateway
+conditions появлялись раньше новых обслуживаемых весов. Проверки оставлены
+строгими. Для canary выбран Recreate при обязательной исходной изоляции
+100/0; stable сохраняет RollingUpdate. Оба weighted routes добавляют
+`X-Traffic-Split` из своих values. Общий release helper интегратора ждет
+маркер перед выборкой, а FINAL checker сверяет его в каждом weighted
+ответе. Fixtures отвергают отсутствующий/старый маркер даже при правильном
+теле и HTTP 200. Повторные живые сценарии выполняет интегратор.
 
 После общего deploy с обоими backend и TLS CA:
 

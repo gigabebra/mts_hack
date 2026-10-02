@@ -109,6 +109,9 @@ class GatewayRender(unittest.TestCase):
                 if name in ("hello", "hello-host"):
                     self.assertEqual([(item["name"], item["weight"]) for item in rule["backendRefs"]],
                                      [("hello", weights[0]), ("hello-canary", weights[1])])
+                    self.assertEqual(rule["filters"], [{"type": "ResponseHeaderModifier", "responseHeaderModifier": {
+                        "set": [{"name": "X-Gateway-Route", "value": name},
+                                {"name": "X-Traffic-Split", "value": f"{weights[0]}/{weights[1]}"}]}}])
                 else:
                     track = name.removeprefix("hello-")
                     self.assertEqual(rule["matches"], [{"path": {"type": "Exact", "value": "/backend/" + track}}])
