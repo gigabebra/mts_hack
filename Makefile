@@ -5,7 +5,7 @@ export PATH := $(CURDIR)/.cache/tools:$(CURDIR)/.venv/bin:$(PATH)
 export ANSIBLE_LOCAL_TEMP := $(CURDIR)/.state/ansible/tmp
 export ANSIBLE_SSH_CONTROL_PATH_DIR := $(CURDIR)/.state/ansible/cp
 
-.PHONY: tools lint bootstrap health deploy verify verify-idempotency verify-recovery evidence deploy-canary restore-stable verify-canary verify-release demo
+.PHONY: tools lint bootstrap health deploy verify verify-idempotency verify-recovery evidence deploy-canary restore-stable verify-canary verify-interruption verify-release demo
 tools:
 	python3 -m venv .venv
 	.venv/bin/python -m pip install -r requirements.txt
@@ -43,6 +43,10 @@ restore-stable:
 
 verify-canary:
 	$(PYTHON) tests/canary/verify.py --env $(ENV)
+
+verify-interruption:
+	$(PYTHON) tests/canary/interrupt.py --env $(ENV)
+	$(PYTHON) scripts/verify-release.py --env $(ENV)
 
 verify-release:
 	$(PYTHON) scripts/verify-release.py --env $(ENV)

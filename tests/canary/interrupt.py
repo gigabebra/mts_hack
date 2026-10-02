@@ -4,6 +4,7 @@ import argparse
 import base64
 import hashlib
 import json
+import os
 from pathlib import Path
 import signal
 import subprocess
@@ -17,6 +18,25 @@ from release_control import assert_target, candidate_defaults, current_weights, 
 from stacklib import ROOT, deployment_lock, environment, locked_image, resource, write_json
 
 STALL_IMAGE = 'docker.io/library/busybox:1.37.0'
+
+
+def terminate_tree(process, grace=15):
+    """Terminate only this test's process group before another writer starts."""
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        pass
+    finally:
+        # The parent may have exited while a Helm descendant remains alive.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait(timeout=10)
 
 
 def certificate_fingerprint(env):
@@ -56,10 +76,15 @@ def pending_candidate(env, process, timeout=35):
 
 def cli(env, directory, run_id, *arguments):
     with (directory / (run_id + '.log')).open('w') as log:
-        result = subprocess.run([sys.executable, str(ROOT / 'scripts/canary.py'), '--env', env['_name'],
-                                 '--run-id', run_id, *arguments], stdout=log, stderr=subprocess.STDOUT, timeout=360)
+        process = subprocess.Popen([sys.executable, str(ROOT / 'scripts/canary.py'), '--env', env['_name'],
+                                    '--run-id', run_id, *arguments], stdout=log, stderr=subprocess.STDOUT,
+                                   start_new_session=True)
+        try:
+            exit_code = process.wait(timeout=360)
+        finally:
+            terminate_tree(process)
     report = json.loads((ROOT / 'artifacts/canary' / run_id / 'report.json').read_text())
-    return result.returncode, report
+    return exit_code, report
 
 
 def main():
@@ -70,6 +95,9 @@ def main():
     env = environment(args.env)
     if args.writer:
         writer(env, args.writer)
+    def interrupted(_signal, _frame):
+        raise KeyboardInterrupt()
+    previous_handler = signal.signal(signal.SIGTERM, interrupted)
     run_id = 'interrupt-' + uuid.uuid4().hex[:12]
     directory = ROOT / 'artifacts/canary' / run_id
     directory.mkdir(parents=True)
@@ -89,19 +117,13 @@ def main():
                      '--revision', case_id, '--image', STALL_IMAGE] if mode == 'same-run' else
                     [sys.executable, str(Path(__file__).resolve()), '--env', args.env, '--writer', case_id])
             with (directory / (mode + '.log')).open('w') as log:
-                process = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT)
+                process = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
                 try:
                     pending = pending_candidate(env, process)
                     process.send_signal(signal.SIGTERM)
                     exit_code = process.wait(timeout=360)
                 finally:
-                    if process.poll() is None:
-                        process.terminate()
-                        try:
-                            process.wait(timeout=180)
-                        except subprocess.TimeoutExpired:
-                            process.kill()
-                            process.wait(timeout=10)
+                    terminate_tree(process)
             observed = {'name': mode, 'pending_before_signal': pending, 'writer_exit_code': exit_code}
             if mode == 'same-run':
                 case = json.loads((ROOT / 'artifacts/canary' / case_id / 'report.json').read_text())
@@ -127,8 +149,8 @@ def main():
             write_json(directory / 'report.json', report)
             print('PASS', mode, flush=True)
         report['status'] = 'pass'
-    except Exception as error:
-        report['error'] = canary.safe_error(error)
+    except BaseException as error:
+        report['error'] = str(error) if isinstance(error, (RuntimeError, TimeoutError)) else canary.safe_error(error)
     finally:
         if target_verified:
             try:
@@ -140,6 +162,7 @@ def main():
                 report.update(status='fail', cleanup={'status': 'fail', 'error': canary.safe_error(error)})
         report['finished_at'] = canary.timestamp()
         write_json(directory / 'report.json', report)
+        signal.signal(signal.SIGTERM, previous_handler)
     print(report['status'].upper(), directory / 'report.json')
     return 0 if report['status'] == 'pass' else 1
 

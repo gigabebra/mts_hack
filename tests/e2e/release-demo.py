@@ -156,6 +156,7 @@ def main():
         if args.section == 'all':
             stage('initial_verify', [sys.executable, ROOT / 'scripts/verify-release.py', '--env', args.env])
             stage('canary_scenarios', [sys.executable, ROOT / 'tests/canary/verify.py', '--env', args.env], timeout=3600)
+            stage('interrupted_release', [sys.executable, ROOT / 'tests/canary/interrupt.py', '--env', args.env], timeout=1800)
         if args.section in ('all', 'app'):
             app_recovery(env, report)
         if args.section in ('all', 'recovery'):

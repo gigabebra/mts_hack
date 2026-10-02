@@ -230,6 +230,7 @@ make deploy-canary ENV=ubuntu CANARY_ARGS="--revision demo-v2"
 make verify-release ENV=ubuntu
 make restore-stable ENV=ubuntu
 make verify-canary ENV=ubuntu
+make verify-interruption ENV=ubuntu
 make demo ENV=ubuntu
 # Дополнительно — контролируемый reboot только выбранной тестовой VM:
 make demo ENV=ubuntu DEMO_ARGS="--reboot"
@@ -269,7 +270,9 @@ curl --noproxy '*' --cacert .state/tls/ubuntu/ca.crt \
 отсутствия/недостатка метрик. Он заканчивает восстановлением 100/0 и полным
 `verify-release`. `demo` дополнительно проверяет замену app pod при трафике,
 изменение версии конфигурации и Helm rollback, историю Prometheus/Loki и
-буфер Fluentd. Каждый сценарий сохраняет JSON в `artifacts/`; `make evidence`
+буфер Fluentd. `verify-interruption` реально прерывает отдельный процесс выпуска
+во время Helm upgrade и проверяет восстановление в том же и следующем запуске;
+этот сценарий также входит в `demo`. Каждый сценарий сохраняет JSON в `artifacts/`; `make evidence`
 включает и вложенные отчеты canary. Это fault-сценарии только для выделенного
 тестового стенда, они временно изменяют его состояние.
 
