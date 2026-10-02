@@ -4,7 +4,6 @@ import argparse
 import base64
 import hashlib
 import json
-import os
 from pathlib import Path
 import signal
 import subprocess
@@ -14,29 +13,11 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 import canary
+from process_control import terminate_tree
 from release_control import assert_target, candidate_defaults, current_weights, helm_info, install_candidate, set_weights
 from stacklib import ROOT, deployment_lock, environment, locked_image, resource, write_json
 
 STALL_IMAGE = 'docker.io/library/busybox:1.37.0'
-
-
-def terminate_tree(process, grace=15):
-    """Terminate only this test's process group before another writer starts."""
-    try:
-        os.killpg(process.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
-    try:
-        process.wait(timeout=grace)
-    except subprocess.TimeoutExpired:
-        pass
-    finally:
-        # The parent may have exited while a Helm descendant remains alive.
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        process.wait(timeout=10)
 
 
 def certificate_fingerprint(env):

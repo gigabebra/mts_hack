@@ -234,8 +234,10 @@ make restore-stable ENV=ubuntu
 make verify-canary ENV=ubuntu
 make verify-interruption ENV=ubuntu
 make demo ENV=ubuntu
-# Дополнительно — контролируемый reboot только выбранной тестовой VM:
+# С внешней управляющей машины с явным kubeconfig — reboot тестовой VM:
 make demo ENV=ubuntu DEMO_ARGS="--reboot"
+# Только reboot + health/verify, если остальные demo-сценарии уже проверены:
+make demo ENV=ubuntu DEMO_ARGS="--section reboot"
 ```
 
 `deploy-canary` сначала подтверждает 100/0 и проверяет кандидата отдельным
@@ -277,6 +279,8 @@ curl --noproxy '*' --cacert .state/tls/ubuntu/ca.crt \
 этот сценарий также входит в `demo`. Каждый сценарий сохраняет JSON в `artifacts/`; `make evidence`
 включает и вложенные отчеты canary. Это fault-сценарии только для выделенного
 тестового стенда, они временно изменяют его состояние.
+Reboot запускается снаружи целевой VM, чтобы проверяющий процесс пережил
+перезагрузку. Запуск этого сценария на самой VM отклоняется до изменения стенда.
 
 `verify-release` объединяет проверки MVP и назначенного Gateway/TLS.
 NetworkPolicy, Grafana, alerts и CI остаются отдельными неназначенными задачами;
