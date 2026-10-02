@@ -15,7 +15,9 @@ IPv6 — основной; приложение и компоненты дост
 [Сетевой контракт и диагностика](docs/networking.md),
 [независимая приемка](docs/acceptance/dual-stack-acceptance.md),
 [реестр](docs/status.md), [черновик паспорта](docs/passport/mvp-draft.md).
-Этап FINAL не начат.
+Назначены FINAL-01 и FINAL-05: TLS/Gateway и проверяемый выпуск canary.
+Их текущие результаты — в [реестре](docs/status.md); остальные карточки
+FINAL не назначены. Полный профиль `PROFILE=final` пока не поддерживается.
 
 ```mermaid
 flowchart LR
@@ -211,6 +213,71 @@ Request-ID хранится в записи, а не в metric/Loki labels.
 | Bootstrap отказал на существующем кластере | Сверить identity и прошлый failed task; исправить причину, автоматического reset нет |
 | Verify неуспешен | JSON содержит конкретный check; ограниченные events лежат рядом, затем повторить тот же verify |
 
+## TLS, два backend и выпуск canary
+
+После `make deploy ENV=ubuntu` основной маршрут имеет веса stable/canary
+100/0. Stable — `hello` (две replicas), canary — `hello-canary` (одна);
+оба здоровых backend возвращают ровно `Hello World!`. Заголовки `X-Release`
+и `X-Revision` показывают реально обслужившую запрос версию.
+`/backend/stable` и `/backend/canary` проверяют каждый backend отдельно.
+Hostname `hello.test` имеет собственный HTTPRoute. HTTPS доступен через
+NodePort 30443; имя и порт можно задать как `tls_hostname` и
+`https_node_port` в локальном environment.
+
+```bash
+make verify-release ENV=ubuntu
+make deploy-canary ENV=ubuntu CANARY_ARGS="--revision demo-v2"
+make verify-release ENV=ubuntu
+make restore-stable ENV=ubuntu
+make verify-canary ENV=ubuntu
+make demo ENV=ubuntu
+# Дополнительно — контролируемый reboot только выбранной тестовой VM:
+make demo ENV=ubuntu DEMO_ARGS="--reboot"
+```
+
+`deploy-canary` сначала подтверждает 100/0 и проверяет кандидата отдельным
+маршрутом, затем подает ему 10% общего трафика. За ограниченное окно собирает
+точные HTTP-ответы и метрики именно canary backend. Параметры в
+`config/canary.yaml`: 60 секунд, не менее 100 canary запросов, не более 1% 5xx,
+свежие samples. HTTP 200 с неверным телом тоже означает отказ.
+При недоступных/устаревших метриках либо недостатке выборки результат
+`inconclusive`, а не успех. При отказе выполняется возврат 100/0, проверка
+stable-трафика и восстановление здоровой конфигурации кандидата. Команда
+выпуска возвращает ненулевой код даже при успешном откате.
+
+Успешный выпуск оставляет веса 90/10. `restore-stable` и обычный `deploy`
+возвращают 100/0 и базового здорового кандидата: отклоненная версия при
+повторном deploy не возвращается. Все изменения выполняются через Helm
+под общей блокировкой. После interruption читается фактическое состояние;
+для Helm `pending-*` восстанавливается завершенная ревизия (для Gateway —
+только 100/0). Если безопасной ревизии нет, операция завершается явной ошибкой:
+нужно исследовать `helm history` с тем же kubeconfig и восстановить известную
+принятую ревизию; удаление Helm Secrets вручную не является штатным способом.
+
+CA создается автоматически и хранится в `.state/tls/<ENV>/ca.crt`; повтор
+deploy сохраняет сертификаты. Ключи не входят в Git. Проверка TLS без `-k`:
+
+```bash
+curl --noproxy '*' --cacert .state/tls/ubuntu/ca.crt \
+  --resolve 'hello.test:30443:[<VM_IPv6>]' 'https://hello.test:30443/'
+curl --noproxy '*' --cacert .state/tls/ubuntu/ca.crt \
+  --resolve 'hello.test:30443:<VM_IPv4>' 'https://hello.test:30443/backend/canary'
+```
+
+`verify-canary` включает реальные тестовые версии с HTTP 500/неверным телом
+после включения 90/10, отрицательный smoke до подачи трафика и сценарии
+отсутствия/недостатка метрик. Он заканчивает восстановлением 100/0 и полным
+`verify-release`. `demo` дополнительно проверяет замену app pod при трафике,
+изменение версии конфигурации и Helm rollback, историю Prometheus/Loki и
+буфер Fluentd. Каждый сценарий сохраняет JSON в `artifacts/`; `make evidence`
+включает и вложенные отчеты canary. Это fault-сценарии только для выделенного
+тестового стенда, они временно изменяют его состояние.
+
+`verify-release` объединяет проверки MVP и назначенного Gateway/TLS.
+NetworkPolicy, Grafana, alerts и CI остаются отдельными неназначенными задачами;
+поэтому `PROFILE=final` по-прежнему отклоняется. Выпуск canary — конечная
+операция с окном наблюдения, не непрерывный контроллер отката.
+
 ## Ограничения
 
 Single-node без HA. Local PV с Retain сохраняют данные при пересоздании pod,
@@ -218,8 +285,9 @@ Single-node без HA. Local PV с Retain сохраняют данные при
 Емкость local PV не устанавливает filesystem-квоту на каталог узла.
 Retention Prometheus 24h/4GB, Loki 24h, два PV по 12Gi. Fluentd имеет
 persistent positions и ограниченный буфер, допускает дубли; отсутствие
-потерь при произвольной длительности outage не обещается. HTTP без TLS,
-endpoint рассчитан на контролируемую тестовую сеть. Prometheus/Loki —
+потерь при произвольной длительности outage не обещается. HTTP сохраняется
+наряду с HTTPS от локальной CA; автоматическое обновление сертификатов не
+реализовано. Endpoint рассчитан на контролируемую тестовую сеть. Prometheus/Loki —
 ClusterIP, доступны для диагностики через loopback port-forward.
 
 Правила работы — [AGENTS.md](AGENTS.md), технические параметры —

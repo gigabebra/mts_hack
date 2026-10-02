@@ -7,23 +7,11 @@ from pathlib import Path
 import yaml
 from stacklib import (ROOT, VERSIONS, command, deployment_lock, download,
                       environment, kubectl, resource, tool)
-
-
-def install(env, release, namespace, chart, values=None, overrides=None):
-    argv = [tool('helm'), 'upgrade', '--install', release, chart,
-            '--namespace', namespace, '--kubeconfig', env['kubeconfig'],
-            '--skip-crds', '--post-renderer', ROOT / 'scripts/post-render.py',
-            '--wait', '--timeout', '10m', '--history-max', '5', '--hide-notes']
-    if values:
-        argv += ['-f', ROOT / values]
-    if overrides:
-        path = ROOT / '.state' / ('values-' + release + '.yaml')
-        path.write_text(yaml.safe_dump(overrides))
-        argv += ['-f', path]
-    command(argv, timeout=700)
+from release_control import assert_target, candidate_defaults, ensure_tls, install, install_candidate, set_weights, wait_routes
 
 
 def deploy(env):
+    assert_target(env)
     nodes = resource(env, 'nodes')['items']
     if [x['metadata']['name'] for x in nodes] != [env['node_name']]:
         raise ValueError('Refusing deploy: explicit target is not the expected single-node cluster')
@@ -42,6 +30,12 @@ def deploy(env):
     for crd in ('gatewayclasses', 'gateways', 'httproutes', 'referencegrants', 'grpcroutes', 'backendtlspolicies'):
         kubectl(env, 'wait', '--for=condition=Established', 'crd/' + crd + '.gateway.networking.k8s.io', '--timeout=90s')
 
+    previous = kubectl(env, '-n', 'demo', 'get', 'httproute', 'hello', '--ignore-not-found', '-o', 'json', capture=True).stdout
+    if previous.strip():
+        import json
+        if any(ref.get('name') == 'hello-canary' for rule in json.loads(previous)['spec']['rules'] for ref in rule.get('backendRefs', [])):
+            set_weights(env, 100, 0)
+
     monitoring_chart = download(VERSIONS['charts']['monitoring'], 'kube-prometheus-stack.tgz')
     crds = command([tool('helm'), 'show', 'crds', monitoring_chart], capture=True).stdout
     if not crds.strip():
@@ -55,13 +49,19 @@ def deploy(env):
     traefik_chart = download(VERSIONS['charts']['traefik'], 'traefik.tgz')
     install(env, 'traefik', 'edge', traefik_chart, 'deploy/gateway/traefik-values.yaml',
             overrides={'providers': {'kubernetesGateway': {'statusAddress': {'ip': env['node_ip']}}},
-                       'ports': {'web': {'nodePort': env['node_port']}}})
+                       'ports': {'web': {'nodePort': env['node_port']},
+                                 'websecure': {'nodePort': env['https_node_port']}}})
     install(env, 'monitoring-extras', 'monitoring', ROOT / 'deploy/monitoring/extras')
     install(env, 'logging', 'logging', ROOT / 'deploy/logging',
             overrides={'dataRoot': env['data_root'],
                        'images': {'loki': VERSIONS['images']['loki'], 'fluentd': VERSIONS['images']['fluentd']}})
-    install(env, 'app', 'demo', ROOT / 'deploy/app', overrides={'image': VERSIONS['images']['nginx']})
-    install(env, 'gateway', 'demo', ROOT / 'deploy/gateway')
+    install(env, 'app', 'demo', ROOT / 'deploy/app',
+            overrides={'image': VERSIONS['images']['nginx'], 'replicas': 2,
+                       'releaseTrack': 'stable', 'releaseRevision': 'nginx-1.28.0-base'})
+    install_candidate(env, candidate_defaults(env))
+    install(env, 'gateway', 'demo', ROOT / 'deploy/gateway',
+            overrides={'tls': ensure_tls(env), 'traffic': {'stableWeight': 100, 'canaryWeight': 0}})
+    wait_routes(env)
     for namespace in ('edge', 'demo', 'monitoring', 'logging'):
         kubectl(env, '-n', namespace, 'wait', '--for=condition=Ready', 'pods', '--all', '--timeout=300s', timeout=330)
     print('Deploy complete. Run make verify ENV=' + env['_name'])

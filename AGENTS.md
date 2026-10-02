@@ -1,7 +1,8 @@
 # Работа над MVP
 
 Следовать `docs/implementation-plan.md`, `docs/agent-sessions.md` и
-`docs/contracts.md`. Этап FINAL пока не назначен.
+`docs/contracts.md`. Пользователем назначены FINAL-01 и FINAL-05;
+остальные карточки FINAL не назначены.
 
 Интегратор один изменяет общие файлы (`config/versions.yaml`,
 `config/images.lock.yaml`, `docs/contracts.md`, `Makefile`, `scripts/deploy.*`,

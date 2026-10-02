@@ -1,4 +1,4 @@
-# Контракт MVP, версия 3 — dual-stack с основным IPv6
+# Контракт, версия 4 — dual-stack, FINAL-01 и FINAL-05
 
 Владельцы и границы — `AGENTS.md`. Версии и проверенные SHA256 публичных
 артефактов — `config/versions.yaml`; OCI index/manifest digests —
@@ -200,3 +200,71 @@ access/error logs, runtime security, сохранение identities/PVC при 
 NetworkPolicy/canary/TLS/CI относятся только к FINAL. Хостинг по умолчанию
 GitHub; публикация и hosted CI сейчас не выполняются. Локальная проверка:
 lint/render → bootstrap/deploy/verify → повтор → fresh Ubuntu приемка.
+
+## Назначенные FINAL-01 и FINAL-05
+
+Пользователь назначил TLS/Gateway и выпуск canary. Ни Grafana/alerts
+(FINAL-02), ни NetworkPolicy (FINAL-03), ни CI (FINAL-04) этим назначением
+не включены. Используется существующий Prometheus с дополнительной проверкой
+метрик backend. `PROFILE=final` остается неподдерживаемым, пока не выполнен
+полный набор его security/observability gates. `make verify-release` объединяет
+MVP и проверки только назначенного расширения.
+
+Stable сохраняет release `app`, Deployment/Service/ConfigMap `hello`;
+canary — release `app-canary`, ресурсы `hello-canary`, тот же собственный
+chart. Services выбирают разные `app.kubernetes.io/instance`. Оба backend
+сохраняют `app.kubernetes.io/name=hello` и контейнер `nginx`; CRI glob Fluentd
+охватывает оба. Stable имеет две replicas и rolling update с maxUnavailable 0,
+canary — одну. Это устойчивость к замене pod на одном узле, не HA.
+
+Значения chart: `fullnameOverride`, `releaseTrack: stable|canary`,
+`releaseRevision` (ограниченная строка идентификатора), `image` из image lock,
+`responseBody: Hello World!`, `faultMode: none|http500|wrong-body`.
+Последние режимы — явные тестовые версии для отрицательных сценариев.
+Ответ содержит `X-Release` и `X-Revision`, JSON access содержит release/revision;
+новые высококардинальные labels в Prometheus/Loki не добавляются.
+
+Gateway release `gateway` остается единственным владельцем HTTPRoute.
+`traffic.stableWeight/canaryWeight` задают 100/0 или 90/10 одновременно для
+основного маршрута и hostname `hello.test`. Отдельные точные пути
+`/backend/stable` и `/backend/canary` переписываются на `/` стандартным
+Gateway API и доходят до выбранного backend при любых весах. Их smoke
+отделен по времени от baseline и измерения пользовательского трафика.
+После обновления Helm ожидаются текущие conditions и проверяются фактические
+backendRefs; только затем наблюдается реальный HTTP.
+
+HTTP 30080 сохраняется. HTTPS: NodePort `https_node_port` (30443), entrypoint
+8443, hostname `tls_hostname` (`hello.test`), Secret `demo/hello-tls`.
+Локальная CA и серверный сертификат генерируются автоматически; ключи
+сохраняются в ignored `.state/tls/<ENV>/` с правами 0600, каталог 0700.
+Secret принадлежит Helm gateway и содержит tls.crt/tls.key и публичный ca.crt.
+Повтор deploy сохраняет сертификат, в новом checkout получает существующий
+сертификат/ключ/CA из Secret. Сертификат проверяется по CA и hostname;
+`-k` и внешняя ACME/DNS инфраструктура не нужны. Автоматическая ротация не
+заявляется; просроченный или несовместимый сертификат останавливает deploy.
+
+`scripts/release_control.py` — общие операции Helm и проверки целевого
+кластера. Deploy, canary и fault-сценарии используют одну deployment_lock.
+Основной deploy сначала восстанавливает подтвержденные веса 100/0, затем
+устанавливает здоровые закрепленные версии; отвергнутый canary не возвращается
+в трафик при повторе. Принятый canary остается на 10% только до явного restore
+или следующего обычного deploy. Состояние маршрутов читается из кластера;
+локальный отчет не является источником фактических весов.
+
+Параметры окна/частоты/порогов — `config/canary.yaml`: 60 секунд наблюдения,
+не менее 100 canary запросов, error rate не более 1%, свежесть sample <=45s.
+Метрики ограничены реальным canary backend, не общим entrypoint; проверяются
+сырые значения счетчиков, прирост, возраст и наблюдаемые resets. Отсутствие
+или недостаток данных — `inconclusive`, возврат 100/0 и ненулевой exit.
+HTTP с неверным телом/ролью/ревизией либо 5xx — отказ выпуска. Ошибка возврата
+отдельно получает `rollback_failed`. Успешный rollback не делает неуспешный
+выпуск успешным. Возврат включает проверку stable-трафика и восстановление
+здоровой конфигурации кандидата; после interruption следующий запуск начинает
+с фактического 100/0. Это ограниченный сценарий выпуска, не непрерывный rollout
+controller и не гарантия обнаружения reset между scrape.
+
+`make verify-canary` проверяет здоровую версию, отказ после подачи 10% трафика,
+неверное тело и отсутствие/недостаток метрик. `make demo` включает сценарии
+выпуска, замены app pod и существующего persistent recovery. Alerts не входят
+в демонстрацию до назначения FINAL-02. Каждая проверка сохраняет отчет с
+ревизией, решением, временем, параметрами, наблюдениями и результатом cleanup.

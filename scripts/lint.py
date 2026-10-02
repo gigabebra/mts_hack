@@ -55,4 +55,6 @@ command([sys.executable, 'deploy/monitoring/tests/check_render.py', '--helm', to
 command([sys.executable, '-m', 'unittest', 'discover', '-s', 'ansible/tests', '-v'])
 command([sys.executable, 'scripts/check-gateway.test.py'], timeout=180)
 command([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/unit', '-v'], timeout=180)
+if (ROOT / 'tests/canary').is_dir():
+    command([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/canary', '-p', 'test_*.py', '-v'], timeout=180)
 print('PASS: Python/Ansible syntax, Helm lint/render, locked images, component negative checks')

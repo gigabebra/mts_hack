@@ -1,0 +1,9 @@
+window_seconds: 60
+min_canary_requests: 100
+max_error_rate: 0.01
+max_sample_age_seconds: 45
+request_rate: 40
+scrape_wait_seconds: 45
+operation_timeout_seconds: 420
+host: hello.test
+candidate_service: demo-hello-canary-http-80@kubernetesgateway

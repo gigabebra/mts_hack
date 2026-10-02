@@ -54,6 +54,8 @@ def environment(name):
         if not env.get(key):
             raise ValueError(f'{path}: missing {key}')
     env.setdefault('node_port', 30080)
+    env.setdefault('https_node_port', 30443)
+    env.setdefault('tls_hostname', 'hello.test')
     env.setdefault('data_root', '/var/lib/mts-stack')
     env.setdefault('ssh_port', 22)
     env.setdefault('pod_cidr', 'fd4d:5453:1000:100::/56')
@@ -76,6 +78,7 @@ def environment(name):
             p = Path(os.path.expanduser(env[key]))
             env[key] = str(p if p.is_absolute() else ROOT / p)
     env['_file'] = str(path)
+    env['_name'] = name
     return env
 
 
