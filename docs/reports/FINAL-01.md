@@ -15,6 +15,10 @@ Live-приемка выделенной Ubuntu VM выполняется инт
 - Сохранены stable ресурсы `hello`, исходные selectors и 12-byte body.
   Stable имеет 2 replicas с `maxUnavailable: 0`. Canary — отдельный
   release того же chart с `fullnameOverride: hello-canary`.
+  `preStop: sleep 5` сохраняет ответы удаляемого pod на время обновления
+  EndpointSlice/Traefik, внутри исходного 30-секундного termination grace.
+  Render проверяет delay/grace обоих releases; непрерывный live-трафик
+  при удалении stable pod проверяет интегратор в FINAL-05.
 - `releaseTrack` / `releaseRevision` присутствуют в HTTP headers и
   JSON access; Loki labels не менялись. Schema защищает конфигурацию
   Nginx от некорректных значений revision.

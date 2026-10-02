@@ -35,6 +35,10 @@ class AppRender(unittest.TestCase):
                 self.assertEqual(deployment["selector"]["matchLabels"], selector)
                 self.assertEqual(deployment["replicas"], replicas)
                 self.assertEqual(deployment["strategy"]["rollingUpdate"]["maxUnavailable"], 0)
+                pod = deployment["template"]["spec"]
+                self.assertEqual(pod["terminationGracePeriodSeconds"], 30)
+                self.assertEqual(pod["containers"][0]["lifecycle"]["preStop"]["exec"]["command"],
+                                 ["/bin/sh", "-c", "sleep 5"])
                 volumes = deployment["template"]["spec"]["volumes"]
                 self.assertEqual({v["configMap"]["name"] for v in volumes if "configMap" in v}, {name})
                 self.assertEqual(docs["ConfigMap"]["data"]["index.html"].encode(), b"Hello World!")

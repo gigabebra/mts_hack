@@ -70,6 +70,13 @@ environment; по умолчанию это `30080`, `30443`, `hello.test`.
 записи, а не новые Loki labels. Fluentd glob `hello-*` охватывает также
 pod `hello-canary-*`.
 
+Перед остановкой Nginx pod выполняет `preStop: sleep 5` в пределах
+`terminationGracePeriodSeconds: 30`. На это время Nginx продолжает
+отвечать, пока удаление endpoint распространяется до Traefik. Это
+сокращает окно ошибок при rollout и удалении одного stable pod;
+отсутствие ошибок подтверждает отдельный непрерывный live-тест FINAL-05.
+Ожидание нового canary по revision и отсутствие retries сохраняются.
+
 Для демонстрации отказов `faultMode: http500` возвращает 500 на `/` и
 `/verify`, `faultMode: wrong-body` меняет тело на `Broken World!`.
 `/healthz` остается здоровым, чтобы gate проверял готовый, но ошибочный

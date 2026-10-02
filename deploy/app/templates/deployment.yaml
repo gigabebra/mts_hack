@@ -41,6 +41,12 @@ spec:
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           command: ["nginx"]
           args: ["-g", "daemon off;"]
+          # Keep serving while EndpointSlice removal reaches Traefik before
+          # kubelet stops Nginx; included in the pod's 30-second grace period.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
           ports:
             - name: http
               containerPort: 8080
