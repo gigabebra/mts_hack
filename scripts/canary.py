@@ -7,6 +7,7 @@ import copy
 import datetime as dt
 import hashlib
 import importlib
+from pathlib import Path
 import re
 import signal
 import subprocess
@@ -22,6 +23,21 @@ from stacklib import (ROOT, deployment_lock, environment, forward, http_url, int
 
 def timestamp():
     return dt.datetime.now(dt.timezone.utc).isoformat()
+
+
+def code_identity():
+    """Read the checkout containing this script, independently of artifact ROOT."""
+    repository = Path(__file__).resolve().parent.parent
+    try:
+        revision = subprocess.run(["git", "rev-parse", "--verify", "HEAD"], cwd=repository,
+                                  capture_output=True, check=True, text=True, timeout=10).stdout.strip()
+        if not re.fullmatch(r"[0-9a-f]{40,64}", revision):
+            raise ValueError("invalid Git revision")
+        dirty = subprocess.run(["git", "status", "--porcelain"], cwd=repository,
+                               capture_output=True, check=True, text=True, timeout=10).stdout
+        return {"revision": revision, "working_tree_dirty": bool(dirty)}
+    except Exception as error:
+        return {"revision": None, "working_tree_dirty": None, "code_identity_error": type(error).__name__}
 
 
 def safe_error(error):
@@ -72,8 +88,12 @@ def validate_settings(settings):
         raise ValueError("canary requires a 60..120 second window and at least 100 backend requests")
     if type(result["max_error_rate"]) not in (float, int) or not 0 <= result["max_error_rate"] <= .01:
         raise ValueError("canary max_error_rate cannot exceed one percent")
-    if result["host"] != "hello.test" or result["candidate_service"] != metrics.BACKEND:
-        raise ValueError("canary target must match the contracted host and backend")
+    host = result["host"]
+    if (not isinstance(host, str) or len(host) > 253 or not host.endswith(".test")
+            or any(not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in host.split("."))):
+        raise ValueError("canary host must be a safe bounded .test DNS hostname")
+    if result["candidate_service"] != metrics.BACKEND:
+        raise ValueError("canary target must match the contracted backend")
     return result
 
 
@@ -258,7 +278,8 @@ def run_locked(ops, *, run_id, revision, image=None, fault_mode="none", action="
     no way to inject missing metrics, reduce the sample threshold, or skip gates.
     """
     report = {"schema_version": 1, "run_id": run_id, "started_at": timestamp(), "status": "fail",
-              "decision": "rejected", "action": action, "thresholds": dict(ops.settings), "events": []}
+              "decision": "rejected", "action": action, "thresholds": dict(ops.settings), "events": [],
+              **code_identity()}
     path = ops.directory / "report.json"
     started = time.monotonic()
     deadline = started + ops.settings["operation_timeout_seconds"]
@@ -274,16 +295,37 @@ def run_locked(ops, *, run_id, revision, image=None, fault_mode="none", action="
         write_json(path, report)
 
     try:
+        if report["revision"] is None:
+            raise Rejected("cannot establish the executing Git revision")
         ops.assert_target()
         stable = ops.values("app")
         if not stable.get("releaseRevision"):
             raise Rejected("stable release has no explicit revision identity")
-        report["previous"] = {release: {"values": public_values(ops.values(release)), "helm": ops.info(release)}
-                              for release in ("app", "app-canary", "gateway")}
-        report["weights_before"] = ops.weights()
+        # From this point we know the target and stable identity. A predecessor
+        # may have interrupted Helm halfway through updating the two routes;
+        # strict preexisting weights or absent candidate metadata cannot block
+        # convergence to 100/0. Strict checks remain mandatory after repair.
+        touched = True
+        report["previous"] = {}
+        for release in ("app", "app-canary", "gateway"):
+            previous = report["previous"][release] = {}
+            try:
+                previous["values"] = public_values(stable if release == "app" else ops.values(release))
+            except Exception as error:
+                previous["values_status"] = "unavailable"
+                previous["values_error"] = safe_error(error)
+            try:
+                previous["helm"] = ops.info(release)
+            except Exception as error:
+                previous["helm_status"] = "unavailable"
+                previous["helm_error"] = safe_error(error)
+        try:
+            report["weights_before"] = ops.weights()
+        except Exception as error:
+            report["weights_before"] = {"status": "unavailable",
+                "diagnostic": "preexisting routes have inconsistent or unreadable weights", "reason": safe_error(error)}
         # A killed predecessor may have left 90/10 or a rejected candidate.
         # Always read actual resources and restore stable before a new rollout.
-        touched = True
         report["initial_weights"] = ops.set_weights(100, 0)
         event("stable_only_confirmed")
         report["stable_smoke"] = smoke(ops, stable, "stable", run_id + "-stable")
@@ -382,7 +424,7 @@ def main():
         parser.error("revision/run-id must be safe bounded identifiers")
     directory = ROOT / "artifacts/canary" / run_id
     directory.mkdir(parents=True, exist_ok=False)
-    report = {"schema_version": 1, "run_id": run_id, "status": "fail", "decision": "rejected"}
+    report = {"schema_version": 1, "run_id": run_id, "status": "fail", "decision": "rejected", **code_identity()}
     def interrupted(_signal, _frame):
         raise KeyboardInterrupt()
     old_handler = signal.signal(signal.SIGTERM, interrupted)

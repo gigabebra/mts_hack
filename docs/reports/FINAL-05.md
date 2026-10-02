@@ -45,6 +45,14 @@ Scrape label `service=traefik-metrics` и exporter label `exported_service`
 возвращают exit 2. SIGTERM/SIGINT и общий timeout также запускают восстановление.
 SIGKILL обработать нельзя: следующий выпуск заново читает кластер и начинает
 с подтвержденного 100/0. Доступна отдельная команда `--action restore`.
+Несогласованные веса двух HTTPRoute и отсутствующая история кандидата после
+прерванной операции сохраняются как диагностика, но не блокируют восстановление.
+После восстановления все строгие проверки весов и состояния обязательны.
+
+Отчеты `artifacts/canary/<run-id>/report.json` и aggregate acceptance сохраняют
+фактическую Git-ревизию исполняемого checkout и `working_tree_dirty`.
+Неизвестная ревизия запрещает изменение стенда. Настраиваемый hostname
+принимается только как корректное ограниченное DNS-имя в `.test`.
 
 Отчеты `artifacts/canary/<run-id>/report.json` содержат whitelisted значения
 и ревизии Helm, этапы/времена, наблюдаемые веса, HTTP evidence, raw samples,
@@ -56,7 +64,7 @@ TLS keys, kubeconfig, адреса scrape и тела HTTP не сохраняю
 
 | Проверка | Результат | Команда / пояснение |
 | --- | --- | --- |
-| Engine/metrics/acceptance fixtures | pass | `python3 -m unittest discover -s tests/canary -p 'test_*.py' -v` — 30 тестов |
+| Engine/metrics/acceptance fixtures | pass | `python3 -m unittest discover -s tests/canary -p 'test_*.py' -v` — 36 тестов |
 | Синтаксис Python | pass | `python3 -m py_compile scripts/canary.py scripts/canary_metrics.py tests/canary/verify.py tests/canary/test_canary.py` |
 | Интерфейс CLI | pass | `python3 scripts/canary.py --help`; `python3 tests/canary/verify.py --help` |
 | Whitespace | pass | `git diff --check` |

@@ -101,11 +101,14 @@ def main():
     directory = ROOT / "artifacts/canary" / ("acceptance-" + run_id)
     directory.mkdir(parents=True, exist_ok=False)
     report = {"schema_version": 1, "run_id": run_id, "kind": "live_canary_acceptance", "status": "fail",
-              "started_at": canary.timestamp(), "checks": [], "scope": "FINAL-01 and canary release gate; not full FINAL acceptance"}
+              "started_at": canary.timestamp(), "checks": [], "scope": "FINAL-01 and canary release gate; not full FINAL acceptance",
+              **canary.code_identity()}
     def interrupted(_signal, _frame):
         raise KeyboardInterrupt()
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
+        if report["revision"] is None:
+            raise canary.Rejected("cannot establish the executing Git revision")
         import release_control
         env = environment(args.env)
         settings = canary.validate_settings(release_control.settings(env))

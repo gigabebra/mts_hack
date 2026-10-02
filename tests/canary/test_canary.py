@@ -126,6 +126,14 @@ class EngineFixtures(unittest.TestCase):
         self.assertEqual(self.ops.weights(), {"stable": 90, "canary": 10})
         self.assertGreaterEqual(result["http_observation"]["releases"]["canary"], 100)
         self.assertTrue(self.ops.stopped_metrics)
+        self.assertRegex(result["revision"], r"^[0-9a-f]{40,64}$")
+        self.assertIsInstance(result["working_tree_dirty"], bool)
+
+    def test_code_identity_is_independent_of_artifact_directory(self):
+        with patch.object(canary, "ROOT", Path(self.temp.name)):
+            identity = canary.code_identity()
+        self.assertRegex(identity["revision"], r"^[0-9a-f]{40,64}$")
+        self.assertIsInstance(identity["working_tree_dirty"], bool)
 
     def test_bad_body_is_rejected_before_traffic(self):
         result = self.run_release(fault_mode="wrong-body")
@@ -191,6 +199,38 @@ class EngineFixtures(unittest.TestCase):
         self.assertEqual(result["decision"], "restored")
         self.assertEqual(self.ops.weights(), {"stable": 100, "canary": 0})
         self.assertFalse(self.ops.started_metrics)
+
+    def test_restore_repairs_inconsistent_interrupted_route_weights(self):
+        actual_weights = self.ops.weights
+        calls = 0
+        def initial_mismatch():
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise ValueError("IP and hostname route weights differ")
+            return actual_weights()
+        self.ops.weights = initial_mismatch
+        result = self.run_release(action="restore")
+        self.assertEqual(result["weights_before"]["status"], "unavailable")
+        self.assertEqual(result["decision"], "restored")
+        self.assertEqual(result["rollback"]["weights_after"], {"stable": 100, "canary": 0})
+
+    def test_restore_does_not_depend_on_missing_candidate_history(self):
+        original_values, original_info = self.ops.values, self.ops.info
+        def values(release):
+            if release == "app-canary":
+                raise RuntimeError("candidate not yet installed")
+            return original_values(release)
+        def info(release):
+            if release == "app-canary" and not any(call[0] == "install" for call in self.ops.calls):
+                raise RuntimeError("candidate not yet installed")
+            return original_info(release)
+        self.ops.values, self.ops.info = values, info
+        result = self.run_release(action="restore")
+        self.assertEqual(result["previous"]["app-canary"]["values_status"], "unavailable")
+        self.assertEqual(result["previous"]["app-canary"]["helm_status"], "unavailable")
+        self.assertEqual(result["decision"], "restored")
+        self.assertEqual(result["rollback"]["weights_after"], {"stable": 100, "canary": 0})
 
     def test_secret_fields_not_saved_in_values(self):
         public = canary.public_values(dict(self.ops.candidate, secret="private", responseBody="private body"))
@@ -293,6 +333,22 @@ class MetricsFixtures(unittest.TestCase):
         for settings in ({"min_canary_requests": 99}, {"window_seconds": 30}, {"max_error_rate": .02}):
             with self.subTest(settings=settings), self.assertRaises(ValueError):
                 canary.validate_settings(settings)
+
+    def test_configured_test_hostname_is_accepted(self):
+        for host in ("hello.test", "canary.demo.test", "release-2.test", "a.test"):
+            with self.subTest(host=host):
+                self.assertEqual(canary.validate_settings({"host": host})["host"], host)
+
+    def test_unsafe_hostname_is_rejected(self):
+        for host in (None, "localhost", "hello.example", "hello.test:30080", "Hello.test", ".test",
+                     "bad..test", "-bad.test", "bad-.test", "bad_name.test", "hello.test\r\nX-Test: bad",
+                     "x" * 64 + ".test", ".".join(["x" * 63] * 4) + ".test"):
+            with self.subTest(host=host), self.assertRaises(ValueError):
+                canary.validate_settings({"host": host})
+
+    def test_configurable_hostname_does_not_loosen_backend_identity(self):
+        with self.assertRaises(ValueError):
+            canary.validate_settings({"host": "canary.demo.test", "candidate_service": "another-service"})
 
 
 class SnapshotFixtures(unittest.TestCase):
