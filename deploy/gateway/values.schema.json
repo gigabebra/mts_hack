@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["traffic", "tls", "listenerPort"],
+  "properties": {
+    "listenerPort": {"type": "integer", "minimum": 1, "maximum": 65535},
+    "traffic": {
+      "type": "object", "required": ["stableWeight", "canaryWeight"],
+      "properties": {
+        "stableWeight": {"type": "integer", "minimum": 0, "maximum": 100},
+        "canaryWeight": {"type": "integer", "minimum": 0, "maximum": 100}
+      }
+    },
+    "tls": {
+      "type": "object", "required": ["enabled", "listenerPort", "hostname", "secretName"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "listenerPort": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "hostname": {"type": "string", "maxLength": 253, "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"},
+        "secretName": {"type": "string", "maxLength": 63, "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"},
+        "certificate": {"type": "string"},
+        "privateKey": {"type": "string"},
+        "caCertificate": {"type": "string"}
+      }
+    }
+  }
+}

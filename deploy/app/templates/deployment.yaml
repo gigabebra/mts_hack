@@ -1,13 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hello
+  name: {{ include "app.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "app.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicas }}
   revisionHistoryLimit: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: hello
@@ -17,6 +22,7 @@ spec:
       labels:
         app.kubernetes.io/name: hello
         app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: {{ .Values.releaseTrack }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
@@ -74,13 +80,13 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: hello
+            name: {{ include "app.fullname" . }}
             items:
               - key: nginx.conf
                 path: nginx.conf
         - name: page
           configMap:
-            name: hello
+            name: {{ include "app.fullname" . }}
             items:
               - key: index.html
                 path: index.html

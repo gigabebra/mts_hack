@@ -47,7 +47,15 @@ ports:
     nodePort: 30080
     expose:
       default: true
-  websecure: null
+  websecure:
+    port: 8443
+    exposedPort: 443
+    nodePort: 30443
+    expose:
+      default: true
+    # Gateway TLS termination is configured by the HTTPS listener.
+    tls:
+      enabled: false
   metrics:
     port: 9100
     exposedPort: 9100

@@ -1,6 +1,12 @@
 image: docker.io/nginxinc/nginx-unprivileged:1.28.0-alpine
 imagePullPolicy: IfNotPresent
-replicas: 1
+fullnameOverride: hello
+replicas: 2
+releaseTrack: stable
+releaseRevision: development
+responseBody: Hello World!
+# Demonstration failures affect user traffic, while /healthz stays healthy.
+faultMode: none
 resources:
   requests:
     cpu: 25m

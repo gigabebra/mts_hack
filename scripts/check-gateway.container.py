@@ -4,12 +4,17 @@
 import argparse
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
 import tempfile
 import time
 import uuid
+import urllib.error
+import urllib.request
+
+import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +25,51 @@ SPEC.loader.exec_module(GATEWAY)
 
 def docker(*args, check=True):
     return subprocess.run(["docker", *args], capture_output=True, text=True, check=check, timeout=30)
+
+
+def app_config(track="stable", fault="none"):
+    rendered = subprocess.run([
+        os.environ.get("MTS_TEST_HELM", str(ROOT / ".cache/tools/helm")), "template", "app",
+        str(ROOT / "deploy/app"), "--namespace", "demo", "--set-string", "releaseRevision=container-fixture",
+        "--set-string", "releaseTrack=" + track, "--set-string", "faultMode=" + fault],
+        check=True, capture_output=True, text=True, timeout=30).stdout
+    return next(item for item in yaml.safe_load_all(rendered) if item and item["kind"] == "ConfigMap")["data"]
+
+
+def fault_probes(name, config, page, urls):
+    """Real Nginx response/header checks for healthy and deliberately broken canary."""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), GATEWAY.NoRedirect())
+    for mode, status, body in (("none", 200, b"Hello World!"), ("http500", 500, b"canary fault"),
+                               ("wrong-body", 200, b"Broken World!")):
+        rendered = app_config("canary", mode)
+        for target, value in ((config, rendered["nginx.conf"]), (page / "index.html", rendered["index.html"])):
+            target.chmod(0o644)
+            target.write_text(value)
+            target.chmod(0o444)
+        docker("restart", name)
+        deadline = time.monotonic() + 15
+        while True:
+            try:
+                assert GATEWAY.request(urls[0], "/healthz", "health", deadline)["status"] == 200
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.1)
+        for url in urls:
+            for path in ("/", "/verify"):
+                request_id = "container-" + mode
+                request = urllib.request.Request(url + path, headers={"X-Request-ID": request_id})
+                try:
+                    response = opener.open(request, timeout=5)
+                except urllib.error.HTTPError as error:
+                    response = error
+                with response:
+                    assert response.status == status, (mode, path, response.status)
+                    assert response.read() == body, (mode, path)
+                    assert response.headers.get_all("X-Release") == ["canary"]
+                    assert response.headers.get_all("X-Revision") == ["container-fixture"]
+                    assert response.headers.get_all("X-Request-ID") == [request_id]
 
 
 def main():
@@ -34,11 +84,13 @@ def main():
         directory = Path(temporary)
         directory.chmod(0o755)
         config = directory / "nginx.conf"
-        config.write_text((ROOT / "deploy/app/files/nginx.conf").read_text())
+        # Exercise the same templated config that Kubernetes receives.
+        rendered = app_config()
+        config.write_text(rendered["nginx.conf"])
         config.chmod(0o444)
         page = directory / "html"
         page.mkdir(mode=0o755)
-        (page / "index.html").write_bytes(b"Hello World!")
+        (page / "index.html").write_text(rendered["index.html"])
         (page / "index.html").chmod(0o444)
         kubeconfig = directory / "unused-explicit-kubeconfig"
         kubeconfig.write_text("Traffic-only smoke: no kubectl invocation is made.")
@@ -93,6 +145,7 @@ def main():
             assert len(primary) == 1, primary
             assert primary[0]["method"] == "GET" and primary[0]["uri"] == "/"
             assert primary[0]["status"] == 200 and primary[0]["bytes_sent"] == 12
+            assert primary[0]["release"] == "stable" and primary[0]["revision"] == "container-fixture"
             assert isinstance(primary[0]["request_time"], (float, int))
             assert primary[0]["time"]
             assert not any(line["uri"] == "/healthz" for line in access)
@@ -108,10 +161,12 @@ def main():
             assert docker("exec", name, "touch", "/root-write-probe", check=False).returncode != 0
             assert docker("exec", name, "test", "!", "-e",
                           "/var/run/secrets/kubernetes.io/serviceaccount/token").returncode == 0
+            fault_probes(name, config, page, [url, "http://" + ipv4_endpoint])
             print(json.dumps({"status": "pass", "scope": "isolated Nginx container, not Gateway",
                               "checks": ["IPv6 and IPv4 HTTP body/Request-ID/fallbacks/404", "JSON stdout access",
                                          "real missing-file stderr", "UID 101", "zero effective capabilities",
-                                         "no-new-privileges", "read-only root", "no service-account token"],
+                                         "no-new-privileges", "read-only root", "no service-account token",
+                                         "canary release/revision headers", "real http500/wrong-body canary faults"],
                               "http_checks": {"IPv6": len(report["checks"]), "IPv4": len(ipv4_report["checks"])}}))
         finally:
             # The unique name also allows cleanup when docker run times out after creation.

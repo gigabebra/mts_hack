@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["fullnameOverride", "replicas", "releaseTrack", "releaseRevision", "responseBody", "faultMode"],
+  "properties": {
+    "fullnameOverride": {"type": "string", "minLength": 1, "maxLength": 63, "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"},
+    "replicas": {"type": "integer", "minimum": 1, "maximum": 10},
+    "releaseTrack": {"enum": ["stable", "canary"]},
+    "releaseRevision": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "responseBody": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "faultMode": {"enum": ["none", "http500", "wrong-body"]}
+  },
+  "allOf": [{"if": {"properties": {"releaseTrack": {"const": "stable"}}}, "then": {"properties": {"faultMode": {"const": "none"}}}}]
+}

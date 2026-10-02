@@ -1,0 +1,15 @@
+{{- if or .Values.tls.certificate .Values.tls.privateKey .Values.tls.caCertificate -}}
+{{- if not .Values.tls.enabled -}}
+{{- fail "tls credentials require tls.enabled=true" -}}
+{{- end -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.tls.secretName }}
+  namespace: {{ .Release.Namespace }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ required "tls.certificate is required with tls credentials" .Values.tls.certificate | b64enc | quote }}
+  tls.key: {{ required "tls.privateKey is required with tls credentials" .Values.tls.privateKey | b64enc | quote }}
+  ca.crt: {{ required "tls.caCertificate is required with tls credentials" .Values.tls.caCertificate | b64enc | quote }}
+{{- end }}

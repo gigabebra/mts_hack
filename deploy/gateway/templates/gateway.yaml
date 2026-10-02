@@ -1,3 +1,6 @@
+{{- if ne (int (add .Values.traffic.stableWeight .Values.traffic.canaryWeight)) 100 -}}
+{{- fail "traffic.stableWeight + traffic.canaryWeight must equal 100" -}}
+{{- end -}}
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
@@ -22,18 +25,38 @@ spec:
         kinds:
           - group: gateway.networking.k8s.io
             kind: HTTPRoute
+    {{- if .Values.tls.enabled }}
+    - name: websecure
+      protocol: HTTPS
+      port: {{ .Values.tls.listenerPort }}
+      hostname: {{ .Values.tls.hostname | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: {{ .Values.tls.secretName }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+        kinds:
+          - group: gateway.networking.k8s.io
+            kind: HTTPRoute
+    {{- end }}
+{{- range $name := list "hello" "hello-host" }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: hello
-  namespace: {{ .Release.Namespace }}
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
 spec:
+  {{- if eq $name "hello-host" }}
+  hostnames:
+    - {{ $.Values.tls.hostname | quote }}
+  {{- end }}
   parentRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: gateway
-      sectionName: web
+    {{- include "gateway.parents" $ | nindent 4 }}
   rules:
     - matches:
         - path:
@@ -42,8 +65,40 @@ spec:
         - path:
             type: PathPrefix
             value: /verify
+      filters:
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            set:
+              - name: X-Gateway-Route
+                value: {{ $name }}
+      backendRefs:
+        {{- include "gateway.backends" $ | nindent 8 }}
+{{- end }}
+{{- range $track := list "stable" "canary" }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hello-{{ $track }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  parentRefs:
+    {{- include "gateway.parents" $ | nindent 4 }}
+  rules:
+    - matches:
+        - path:
+            type: Exact
+            value: /backend/{{ $track }}
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /
       backendRefs:
         - group: ""
           kind: Service
-          name: hello
+          name: {{ ternary "hello" "hello-canary" (eq $track "stable") }}
           port: 80
+          weight: 100
+{{- end }}

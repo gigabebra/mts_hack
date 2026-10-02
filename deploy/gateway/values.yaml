@@ -1,3 +1,15 @@
 gatewayClassName: mts-traefik
 controllerName: traefik.io/gateway-controller
 listenerPort: 8000
+traffic:
+  stableWeight: 100
+  canaryWeight: 0
+tls:
+  enabled: true
+  listenerPort: 8443
+  hostname: hello.test
+  secretName: hello-tls
+  # Passed only through an ephemeral local values file by the integrator.
+  certificate: ""
+  privateKey: ""
+  caCertificate: ""
