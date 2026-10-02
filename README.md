@@ -218,7 +218,9 @@ Request-ID хранится в записи, а не в metric/Loki labels.
 После `make deploy ENV=ubuntu` основной маршрут имеет веса stable/canary
 100/0. Stable — `hello` (две replicas), canary — `hello-canary` (одна);
 оба здоровых backend возвращают ровно `Hello World!`. Заголовки `X-Release`
-и `X-Revision` показывают реально обслужившую запрос версию.
+и `X-Revision` показывают реально обслужившую запрос версию, `X-Traffic-Split`
+— примененные Gateway веса. Canary обновляется через Recreate при нулевом
+весе; stable использует rolling update с двумя replicas.
 `/backend/stable` и `/backend/canary` проверяют каждый backend отдельно.
 Hostname `hello.test` имеет собственный HTTPRoute. HTTPS доступен через
 NodePort 30443; имя и порт можно задать как `tls_hostname` и

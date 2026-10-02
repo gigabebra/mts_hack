@@ -7,6 +7,8 @@ from pathlib import Path
 import re
 import tempfile
 import time
+import urllib.error
+import urllib.request
 from urllib.parse import urlsplit
 
 import yaml
@@ -15,7 +17,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
-from stacklib import ROOT, VERSIONS, command, kubectl, locked_image, resource, tool
+from stacklib import ROOT, VERSIONS, command, http_url, internal_http, kubectl, locked_image, resource, tool
 
 
 def _observed(env, kind, name):
@@ -200,7 +202,53 @@ def set_weights(env, stable, canary):
     actual = wait_routes(env)
     if actual != {'stable': stable, 'canary': canary}:
         raise ValueError('Observed weights differ from requested release')
+    wait_traffic_split(env, stable, canary)
     return actual
+
+
+def wait_traffic_split(env, stable, canary, timeout=30):
+    """Observe the marker emitted by the same route config as backend weights."""
+    expected = f'{stable}/{canary}'
+    started = time.monotonic()
+    deadline = started + timeout
+    evidence = {'expected': expected, 'status': 'fail', 'attempts': 0, 'observations': []}
+    env['_last_routing_convergence'] = evidence
+    http = internal_http()
+    while time.monotonic() < deadline:
+        evidence['attempts'] += 1
+        matching = True
+        for route, host in (('hello', None), ('hello-host', env.get('tls_hostname', 'hello.test'))):
+            headers = {'Connection': 'close', 'X-Request-ID': 'routing-convergence'}
+            if host:
+                headers['Host'] = host
+            request = urllib.request.Request(http_url(env['node_ip'], env['node_port']) + '/', headers=headers)
+            observation = {'route': route}
+            try:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError('Routing convergence deadline')
+                try:
+                    response = http.open(request, timeout=min(3, remaining))
+                except urllib.error.HTTPError as error:
+                    response = error
+                with response:
+                    splits = response.headers.get_all('X-Traffic-Split', [])
+                    routes = response.headers.get_all('X-Gateway-Route', [])
+                    response.read(4097)
+                    observation.update(status=response.status,
+                                       split=splits[0] if len(splits) == 1 and splits[0] in ('100/0', '90/10') else 'invalid',
+                                       route_matches=routes == [route])
+                    matching = matching and splits == [expected] and routes == [route]
+            except Exception as error:
+                observation['error'] = type(error).__name__
+                matching = False
+            evidence['observations'].append(observation)
+        if matching:
+            evidence.update(status='pass', duration_seconds=round(time.monotonic() - started, 3))
+            return evidence
+        time.sleep(min(.2, max(0, deadline - time.monotonic())))
+    evidence['duration_seconds'] = round(time.monotonic() - started, 3)
+    raise TimeoutError('Traefik has not served the requested traffic split marker on both routes')
 
 
 def _private_write(path, content):

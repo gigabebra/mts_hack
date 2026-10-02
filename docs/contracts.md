@@ -215,7 +215,10 @@ canary — release `app-canary`, ресурсы `hello-canary`, тот же со
 chart. Services выбирают разные `app.kubernetes.io/instance`. Оба backend
 сохраняют `app.kubernetes.io/name=hello` и контейнер `nginx`; CRI glob Fluentd
 охватывает оба. Stable имеет две replicas и rolling update с maxUnavailable 0,
-canary — одну. Это устойчивость к замене pod на одном узле, не HA.
+canary — одну и Recreate: старая версия прекращает работу до запуска новой.
+Обычное обновление кандидата выполняется при весе 0; тестовая инъекция сбоя
+может прервать его 10% трафика. Это устойчивость stable к замене pod на одном
+узле, не HA.
 
 Значения chart: `fullnameOverride`, `releaseTrack: stable|canary`,
 `releaseRevision` (ограниченная строка идентификатора), `image` из image lock,
@@ -231,7 +234,12 @@ Gateway release `gateway` остается единственным владел
 Gateway API и доходят до выбранного backend при любых весах. Их smoke
 отделен по времени от baseline и измерения пользовательского трафика.
 После обновления Helm ожидаются текущие conditions и проверяются фактические
-backendRefs; только затем наблюдается реальный HTTP.
+backendRefs. Перед строгим HTTP smoke отдельно ожидается `X-Traffic-Split`
+с новыми весами на IP и hostname маршрутах. Этот заголовок задается стандартным
+ResponseHeaderModifier в той же конфигурации HTTPRoute, что и веса: status
+ресурса сам по себе не доказывает завершение перезагрузки конфигурации Traefik.
+Ожидание ограничено 30 секундами и сохраняет наблюдения в отчете; измеряемый
+трафик и smoke не имеют retries.
 
 HTTP 30080 сохраняется. HTTPS: NodePort `https_node_port` (30443), entrypoint
 8443, hostname `tls_hostname` (`hello.test`), Secret `demo/hello-tls`.

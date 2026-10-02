@@ -105,6 +105,7 @@ class Runtime:
         self.http = internal_http()
         self._forward = contextlib.ExitStack()
         self.api = None
+        self.routing_convergence = []
 
     def assert_target(self):
         return self.control.assert_target(self.env)
@@ -123,7 +124,12 @@ class Runtime:
         return normalized_weights(self.control.current_weights(self.env))
 
     def set_weights(self, stable, canary):
-        self.control.set_weights(self.env, stable, canary)
+        try:
+            self.control.set_weights(self.env, stable, canary)
+        finally:
+            observed = self.env.pop('_last_routing_convergence', None)
+            if observed is not None:
+                self.routing_convergence.append(observed)
         self.control.wait_routes(self.env)
         actual = self.weights()
         if actual != {"stable": stable, "canary": canary}:
@@ -434,6 +440,7 @@ def run_locked(ops, *, run_id, revision, image=None, fault_mode="none", action="
                 report["decision"] = "rollback_failed"
         report["finished_at"] = timestamp()
         report["duration_seconds"] = round(time.monotonic() - started, 3)
+        report["routing_convergence"] = getattr(ops, "routing_convergence", [])
         write_json(path, report)
         if previous_timer[0]:
             signal.setitimer(signal.ITIMER_REAL, max(.001, previous_timer[0] - (time.monotonic() - started)), previous_timer[1])

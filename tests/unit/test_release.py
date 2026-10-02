@@ -1,6 +1,7 @@
 """Release safety tests: certificate continuity and observed route identity."""
 import base64
 import copy
+from email.message import Message
 import json
 from pathlib import Path
 import sys
@@ -92,6 +93,42 @@ class Routes(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'no completed safe revision'):
                 release.recover_pending({'kubeconfig': '/explicit/fixture'}, 'gateway')
         self.assertFalse(any('rollback' in call.args[0] for call in command.call_args_list))
+
+    def test_applied_traffic_marker_waits_for_both_routes(self):
+        class Response:
+            status = 200
+            def __init__(self, split, route):
+                self.headers = Message()
+                self.headers['X-Traffic-Split'] = split
+                self.headers['X-Gateway-Route'] = route
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def read(self, _): return b'Hello World!'
+        responses = [Response('90/10', 'hello'), Response('100/0', 'hello-host'),
+                     Response('100/0', 'hello'), Response('100/0', 'hello-host')]
+        from unittest.mock import Mock
+        http = Mock()
+        http.open.side_effect = responses
+        env = {'node_ip': '2001:db8::1', 'node_port': 30080}
+        with patch.object(release, 'internal_http', return_value=http), patch.object(release.time, 'sleep'):
+            actual = release.wait_traffic_split(env, 100, 0)
+        self.assertEqual(actual['attempts'], 2)
+        self.assertEqual(actual['status'], 'pass')
+        self.assertEqual(actual['observations'][0]['split'], '90/10')
+
+    def test_missing_traffic_marker_cannot_pass_on_http_200(self):
+        from unittest.mock import MagicMock
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.status = 200
+        response.headers.get_all.return_value = []
+        http = MagicMock()
+        http.open.return_value = response
+        env = {'node_ip': '2001:db8::1', 'node_port': 30080}
+        with patch.object(release, 'internal_http', return_value=http):
+            with self.assertRaises(TimeoutError):
+                release.wait_traffic_split(env, 100, 0, timeout=.02)
+        self.assertEqual(env['_last_routing_convergence']['status'], 'fail')
 
 
 if __name__ == '__main__':
