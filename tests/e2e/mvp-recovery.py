@@ -128,6 +128,23 @@ def collector_consumed(before, after, expected_records, boundaries):
             and all(positions.get(key, -1) >= offset for key, offset in boundaries.items()))
 
 
+def collector_positions_restored(saved, restored, sources_before, sources_after, boundaries, emitted):
+    """Allow only compaction of inactive entries; preserve every live offset."""
+    if not sources_before or sources_before != sources_after or not boundaries or emitted != 0:
+        return False
+    if not set(boundaries).issubset(sources_before) or set(restored) - set(saved):
+        return False
+    if any(restored[key] != saved[key] for key in restored):
+        return False
+    for key, size in sources_before.items():
+        offset = saved.get(key, -1)
+        if (offset < 0 or offset == 0xffffffffffffffff or offset > size
+                or restored.get(key) != offset or offset < boundaries.get(key, 0)):
+            return False
+    # All removed entries are outside the unchanged current source inventory.
+    return not ((set(saved) - set(restored)) & set(sources_before))
+
+
 def replace_pod(env, namespace, selector, workload):
     pods = selected_pods(env, namespace, selector)
     if len(pods) != 1:
@@ -226,10 +243,15 @@ def main():
                     'sources_after': [{'path': key[0], 'inode': key[1], 'size': size}
                                       for key, size in sorted(sources_after.items())],
                 })
-                if restored_positions != saved_positions or new_emitted != 0:
-                    raise ValueError('Collector replayed old source records or lost saved tail positions')
+                if not collector_positions_restored(saved_positions, restored_positions, sources_before,
+                                                    sources_after, boundaries, new_emitted):
+                    raise ValueError('Collector replayed records, changed active sources, or lost saved active tail positions')
                 report['checks'].append({'name': 'collector_positions', 'status': 'pass',
-                                         'position_files': len(saved_positions), 'source_markers_consumed': len(markers),
+                                         'position_files': len(restored_positions), 'source_markers_consumed': len(markers),
+                                         'active_sources': len(sources_before),
+                                         'active_positions_unchanged': True,
+                                         'source_identity_and_size_unchanged': True,
+                                         'compacted_inactive_entries': len(set(saved_positions) - set(restored_positions)),
                                          'records_replayed_after_restart': new_emitted})
             finally:
                 kubectl(env, '-n', 'logging', 'scale', 'deployment/loki', '--replicas=1')
