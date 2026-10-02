@@ -81,7 +81,7 @@ DNS/NTP могут использовать любую рабочую семью
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y git make curl python3 python3-venv openssh-client
+sudo apt-get install -y git make curl openssl python3 python3-venv openssh-client
 cd <checkout>
 make tools
 cp config/environments/ubuntu.example.yaml config/environments/ubuntu.local.yaml

@@ -97,12 +97,12 @@ def recover_pending(env, release):
 
 def helm_values(env, release):
     return json.loads(command([tool('helm'), 'get', 'values', release, '-n', 'demo',
-                               '--kubeconfig', env['kubeconfig'], '-o', 'json'], capture=True).stdout) or {}
+                               '--kubeconfig', env['kubeconfig'], '-o', 'json'], capture=True, timeout=15).stdout) or {}
 
 
 def helm_info(env, release):
     data = json.loads(command([tool('helm'), 'status', release, '-n', 'demo',
-                               '--kubeconfig', env['kubeconfig'], '-o', 'json'], capture=True).stdout)
+                               '--kubeconfig', env['kubeconfig'], '-o', 'json'], capture=True, timeout=15).stdout)
     metadata = data.get('chart', {}).get('metadata', {})
     return {'revision': data['version'], 'status': data['info']['status'],
             'chart': metadata.get('name', '') + '-' + metadata.get('version', ''),
