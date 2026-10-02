@@ -98,6 +98,15 @@ class CurrentRouteChecks(unittest.TestCase):
             modify(data)
             self.assertFalse(self.is_pass(data))
 
+    def test_wait_keeps_failed_condition_details_at_deadline(self):
+        failure = [{"name": "wrong-weight", "status": "fail"}]
+        with mock.patch.object(FINAL, "snapshot", return_value=self.baseline) as read, \
+                mock.patch.object(FINAL, "route_checks", return_value=failure), \
+                mock.patch.object(FINAL.time, "monotonic", side_effect=[0, 0, 0, 0, 61]), \
+                mock.patch.object(FINAL.time, "sleep"):
+            self.assertEqual(FINAL.wait_routes({"tls_hostname": "hello.test", "node_ip": "2001:db8::10"}, 100, False), failure)
+        read.assert_called_once()
+
 
 class HttpChecks(unittest.TestCase):
     def response(self):

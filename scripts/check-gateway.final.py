@@ -9,7 +9,6 @@ import importlib.util
 import io
 import json
 import math
-import os
 from pathlib import Path
 import re
 import subprocess
@@ -137,11 +136,13 @@ def snapshot(env, deadline):
 
 def wait_routes(env, deadline, split):
     until = min(deadline, time.monotonic() + 60)
-    while True:
+    result = [check("final.routes", False, "current accepted routes", "deadline expired before snapshot")]
+    while time.monotonic() < until:
         result = route_checks(snapshot(env, until), env["tls_hostname"], split, env["node_ip"])
         if all(item["status"] == "pass" for item in result) or time.monotonic() >= until:
             return result
         time.sleep(min(1, max(0, until - time.monotonic())))
+    return result
 
 
 def curl_probe(env, family, path, request_id, deadline, *, hostname=None, tls=False, ca=None):

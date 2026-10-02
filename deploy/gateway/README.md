@@ -1,4 +1,4 @@
-# Dual-stack Gateway MVP
+# Dual-stack Gateway, TLS и stable/canary
 
 Команды ниже выполняются из корня checkout после `make tools`. Для прямого
 вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
@@ -45,4 +45,101 @@ origin и ошибки HTTP/proxy environment. Render test подтвержда�
 уникальную одноразовую dual-stack сеть и публикует порты только на `::1`
 и `127.0.0.1`. Нужен IPv6 на Docker host (проверен Docker 29.8.0).
 Smoke проверяет реальный Nginx по обеим семьям, Request-ID, stdout/stderr
-и runtime security. Kubernetes/Gateway приемка выполняется отдельно.
+и runtime security, затем здоровый canary и оба демонстрационных отказа
+с заголовками release/revision. Kubernetes/Gateway приемка выполняется отдельно.
+
+## Расширение FINAL-01
+
+FINAL-01 добавляет HTTPS `8443 → 443 → NodePort 30443` и второй backend.
+HTTP остается на `8000 → 80 → NodePort 30080`, без redirect. Значения
+`node_port`, `https_node_port`, `tls_hostname` берет общий deploy из выбранного
+environment; по умолчанию это `30080`, `30443`, `hello.test`.
+
+| Helm release | Ресурсы | Track | Replicas |
+| --- | --- | --- | --- |
+| `app` | `hello` | `stable` | 2 |
+| `app-canary` | `hello-canary` | `canary` | 1, передается общим deploy |
+
+Оба release используют `deploy/app` с разными `fullnameOverride` и
+`releaseTrack`. Service selectors включают `app.kubernetes.io/instance`,
+поэтому canary не попадает в stable Service. Stable обновляется с
+`maxUnavailable: 0`, `maxSurge: 1`. Оба нормальных ответа имеют ровно
+12 bytes `Hello World!`, без перевода строки. Nginx всегда возвращает
+`X-Release` и `X-Revision`; JSON access получает `release` и `revision`.
+Значение `releaseRevision` ограничено 64 безопасными символами. Это поля
+записи, а не новые Loki labels. Fluentd glob `hello-*` охватывает также
+pod `hello-canary-*`.
+
+Для демонстрации отказов `faultMode: http500` возвращает 500 на `/` и
+`/verify`, `faultMode: wrong-body` меняет тело на `Broken World!`.
+`/healthz` остается здоровым, чтобы gate проверял готовый, но ошибочный
+кандидат. Schema разрешает эти режимы только для `releaseTrack: canary`.
+`responseBody` по умолчанию `Hello World!`; изменение значения требует
+согласования ожидаемого тела в проверках.
+
+Все четыре HTTPRoute принадлежат единственному Helm release `gateway`.
+Каждый явно подключен к `web` и `websecure`:
+
+| HTTPRoute | Match | Backend |
+| --- | --- | --- |
+| `hello` | Exact `/`, PathPrefix `/verify`, любой HTTP host | `hello` / `hello-canary` с общими весами |
+| `hello-host` | Те же пути, hostname `hello.test` | Те же веса |
+| `hello-stable` | Exact `/backend/stable` | Только `hello:80`, weight 100 |
+| `hello-canary` | Exact `/backend/canary` | Только `hello-canary:80`, weight 100 |
+
+Тестовые пути используют стандартный Gateway API `URLRewrite` в `/`.
+Кандидат доступен для smoke при нулевом весе. Эти пути не входят в
+выборку распределения общего трафика. `ResponseHeaderModifier` добавляет
+`X-Gateway-Route: hello|hello-host` для проверки hostname-маршрутизации.
+Незнакомый HTTP host сохраняет поведение `hello`; `/backend/canary/extra`
+и `/unrouted` дают 404.
+
+`traffic.stableWeight` / `traffic.canaryWeight` по умолчанию `100/0`;
+каждый вес — целое число 0–100, сумма строго 100. Оба пользовательских
+маршрута меняются одним Helm release. Общий release helper интегратора
+владеет весами; checker их не меняет.
+
+TLS завершается на HTTPS listener с `tls.mode: Terminate`. Secret
+`hello-tls` содержит `tls.crt`, `tls.key` и публичный `ca.crt`. Chart
+создает его только при передаче всех трех values: `tls.certificate`,
+`tls.privateKey`, `tls.caCertificate`; частичный набор останавливает
+render. Общий deploy отвечает за постоянные локальные сертификаты,
+передачу временным values-файлом и исключение ключей из render artifacts.
+CA для приемки: `.state/tls/<ENV>/ca.crt`.
+
+Чтение и проверка существующей конфигурации:
+
+```sh
+.venv/bin/python scripts/check-gateway.final.py --env ubuntu \
+  --output artifacts/gateway-final-100-0.json
+# Только после установки 90/10 общим release helper:
+.venv/bin/python scripts/check-gateway.final.py --env ubuntu --split \
+  --output artifacts/gateway-final-90-10.json
+```
+
+Checker использует только kubeconfig выбранного environment, сверяет
+generation/conditions обеих listeners и всех routes, точные backend refs,
+веса, host/path и TLS Secret reference. HTTP и HTTPS проверяются по обеим
+IP-семьям. Curl использует `--resolve` и `--cacert`, без proxy, redirects,
+retries или `-k`. Отрицательные TLS-пробы требуют отказа для другого имени
+и другого CA.
+
+По умолчанию для каждой семьи выполняются 1000 независимых GET `/`
+через HTTP NodePort. При `--split` допустимы 5–15% canary; любой неверный
+HTTP status/body/Request-ID/release/revision, транспортная ошибка или
+неполная выборка дают fail. В режиме 100/0 canary должен отсутствовать.
+Условия и веса проверяются повторно после выборки. Общий deadline —
+300 секунд, настраивается `--timeout`; report не сохраняет IP, URL и
+ключи. Приемка обоих режимов не заменяет возврат 100/0 интегратором.
+
+Дополнительные локальные render/fixture проверки:
+
+```sh
+.venv/bin/python deploy/app/tests/test_render.py
+.venv/bin/python deploy/gateway/tests/test_render.py
+.venv/bin/python deploy/gateway/tests/test_final.py
+```
+
+Первичные источники: [Traefik 3.6 Gateway API](https://doc.traefik.io/traefik/v3.6/reference/routing-configuration/kubernetes/gateway-api/),
+[Gateway API URLRewrite](https://gateway-api.sigs.k8s.io/guides/user-guides/http-redirect-rewrite/),
+[Gateway API TLS](https://gateway-api.sigs.k8s.io/guides/user-guides/tls/).
