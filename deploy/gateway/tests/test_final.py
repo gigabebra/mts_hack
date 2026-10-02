@@ -30,7 +30,9 @@ def snapshot(split=False):
     gateway = docs[("Gateway", "gateway")]
     gateway["status"] = {"conditions": conditions("Accepted", "Programmed"),
                          "addresses": [{"type": "IPAddress", "value": "2001:db8::10"}],
-                         "listeners": [{"name": section, "attachedRoutes": 4,
+                         # Live v3.6.2 counts each of the two Gateway refs before
+                         # applying its section filter: four routes yield eight.
+                         "listeners": [{"name": section, "attachedRoutes": 8,
                                         "conditions": conditions("Accepted", "Programmed", "ResolvedRefs")}
                                        for section in ("web", "websecure")]}
     gc = docs[("GatewayClass", "mts-traefik")]
@@ -55,6 +57,30 @@ class CurrentRouteChecks(unittest.TestCase):
         self.assertTrue(self.is_pass(self.baseline))
         self.assertTrue(self.is_pass(snapshot(True), True))
         self.assertFalse(self.is_pass(self.baseline, True))
+
+    def test_pinned_controller_count_matches_live_pattern_exactly(self):
+        self.assertTrue(self.is_pass(self.baseline))
+        for section in (0, 1):
+            for count in (0, 4, 7, 9):
+                data = copy.deepcopy(self.baseline)
+                data["gateway"]["status"]["listeners"][section]["attachedRoutes"] = count
+                self.assertFalse(self.is_pass(data), (section, count))
+        with mock.patch.dict(FINAL.VERSIONS["images"], {"traefik": "docker.io/library/traefik:v3.7.0"}):
+            self.assertFalse(self.is_pass(self.baseline))
+
+    def test_eight_attachments_cannot_hide_wrong_routes_or_status_parents(self):
+        for mutate in (
+                lambda data: data["routes"].pop("hello-canary"),
+                lambda data: data["routes"].update({"unexpected": copy.deepcopy(data["routes"]["hello"])}),
+                lambda data: data["routes"]["hello"]["spec"]["parentRefs"].pop(),
+                lambda data: data["routes"]["hello"]["status"]["parents"].pop(),
+                lambda data: data["routes"]["hello"]["status"]["parents"].append(
+                    copy.deepcopy(data["routes"]["hello"]["status"]["parents"][0])),
+                lambda data: data["routes"]["hello"]["status"]["parents"].append(
+                    {"controllerName": "another-controller", "parentRef": {"name": "another-gateway"}})):
+            data = copy.deepcopy(self.baseline)
+            mutate(data)
+            self.assertFalse(self.is_pass(data))
 
     def test_reject_stale_unknown_missing_and_duplicate_conditions_everywhere(self):
         original = copy.deepcopy(self.baseline)

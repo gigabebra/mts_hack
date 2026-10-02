@@ -17,13 +17,14 @@ import tempfile
 import time
 import uuid
 
-from stacklib import ROOT, environment, http_url, kubectl, write_json
+from stacklib import ROOT, VERSIONS, environment, http_url, kubectl, write_json
 
 
 SPEC = importlib.util.spec_from_file_location("mvp_gateway", ROOT / "scripts/check-gateway.py")
 MVP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MVP)
 ROUTES = ("hello", "hello-host", "hello-stable", "hello-canary")
+SECTIONS = ("web", "websecure")
 HOSTNAME = re.compile(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+\Z")
 check = MVP.check
 
@@ -55,6 +56,19 @@ def route_checks(resources, hostname, split=False, expected_address=None):
     result = MVP.conditions_checks({"gatewayclass": resources["gatewayclass"],
                                    "gateway": resources["gateway"], "httproute": routes.get("hello", {})},
                                   expected_address)
+    result.append(check("final.httproutes.identities", set(routes) == set(ROUTES), sorted(ROUTES), sorted(routes)))
+    # v3.6.2 matchingGatewayListeners appends each listener for every reference
+    # to the Gateway, without section filtering or deduplication. loadHTTPRoutes
+    # then increments attachedRoutes for every accepted occurrence. Our exact
+    # four-route/two-parent schema therefore yields 4 * 2 = 8 on each listener.
+    # Sources: kubernetes.go matchingGatewayListeners; httproute.go loadHTTPRoutes
+    # https://github.com/traefik/traefik/tree/v3.6.2/pkg/provider/kubernetes/gateway
+    # Keep this version-specific status check separate from exact route identity,
+    # spec, two current status parents, and actual traffic validation below.
+    expected_attached = len(ROUTES) * len(SECTIONS)
+    pinned_controller = "docker.io/library/traefik:v3.6.2"
+    result.append(check("final.gateway.attachedRoutes.version", VERSIONS["images"]["traefik"] == pinned_controller,
+                        pinned_controller, VERSIONS["images"]["traefik"]))
     gateway = resources["gateway"]
     generation = gateway.get("metadata", {}).get("generation")
     expected_listeners = [
@@ -68,13 +82,13 @@ def route_checks(resources, hostname, split=False, expected_address=None):
     actual = gateway.get("spec", {}).get("listeners", [])
     result.append(check("final.gateway.listeners", actual == expected_listeners, expected_listeners, actual))
     listeners = gateway.get("status", {}).get("listeners", [])
-    for section in ("web", "websecure"):
+    for section in SECTIONS:
         items = [item for item in listeners if item.get("name") == section]
         item = items[0] if len(items) == 1 else {}
         result += current_conditions(f"final.listener.{section}", item.get("conditions", []),
                                      generation, ("Accepted", "Programmed", "ResolvedRefs"))
-        result.append(check(f"final.listener.{section}.routes", item.get("attachedRoutes") == len(ROUTES),
-                            len(ROUTES), item.get("attachedRoutes")))
+        result.append(check(f"final.listener.{section}.routes", item.get("attachedRoutes") == expected_attached,
+                            expected_attached, item.get("attachedRoutes")))
 
     for name in ROUTES:
         route = routes.get(name, {})
@@ -82,8 +96,9 @@ def route_checks(resources, hostname, split=False, expected_address=None):
         result.append(check(f"final.{name}.identity", metadata.get("name") == name
                             and metadata.get("namespace") == "demo", f"demo/{name}",
                             {key: metadata.get(key) for key in ("name", "namespace")}))
-        result.append(check(f"final.{name}.parentRefs", spec.get("parentRefs") == [parent("web"), parent("websecure")],
-                            [parent("web"), parent("websecure")], spec.get("parentRefs")))
+        expected_parents = [parent(section) for section in SECTIONS]
+        result.append(check(f"final.{name}.parentRefs", spec.get("parentRefs") == expected_parents,
+                            expected_parents, spec.get("parentRefs")))
         expected_hosts = [hostname] if name == "hello-host" else []
         result.append(check(f"final.{name}.hostnames", spec.get("hostnames", []) == expected_hosts,
                             expected_hosts, spec.get("hostnames", [])))
@@ -105,8 +120,11 @@ def route_checks(resources, hostname, split=False, expected_address=None):
         # deliberately writes group/kind/weight explicitly, so equality is strict.
         result.append(check(f"final.{name}.rules", spec.get("rules") == [expected_rule],
                             [expected_rule], spec.get("rules")))
-        for section in ("web", "websecure"):
-            parents = [item for item in route.get("status", {}).get("parents", [])
+        status_parents = route.get("status", {}).get("parents", [])
+        result.append(check(f"final.{name}.status.parents", len(status_parents) == len(SECTIONS),
+                            len(SECTIONS), len(status_parents)))
+        for section in SECTIONS:
+            parents = [item for item in status_parents
                        if item.get("controllerName") == MVP.CONTROLLER
                        and item.get("parentRef", {}).get("name") == "gateway"
                        and item.get("parentRef", {}).get("namespace", "demo") == "demo"

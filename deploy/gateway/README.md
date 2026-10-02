@@ -124,6 +124,17 @@ IP-семьям. Curl использует `--resolve` и `--cacert`, без pro
 retries или `-k`. Отрицательные TLS-пробы требуют отказа для другого имени
 и другого CA.
 
+В закрепленном Traefik 3.6.2 `attachedRoutes` равен **8 для каждой listener**
+при наших четырех HTTPRoute с двумя явными parentRefs. Причина:
+[`matchingGatewayListeners`](https://github.com/traefik/traefik/blob/v3.6.2/pkg/provider/kubernetes/gateway/kubernetes.go#L1035-L1060)
+добавляет listener за каждую ссылку на Gateway без учета sectionName;
+[`loadHTTPRoutes`](https://github.com/traefik/traefik/blob/v3.6.2/pkg/provider/kubernetes/gateway/httproute.go#L35-L67)
+увеличивает счетчик при каждом принятом повторе. Это особенность счетчика,
+а не восемь самостоятельных routes. Checker требует ровно `4 × 2 = 8`,
+отдельно проверяет ровно четыре ожидаемых имени routes и по два актуальных
+parent status. Смена закрепленной версии требует повторно проверить эту
+семантику; любое другое значение счетчика сейчас дает fail.
+
 По умолчанию для каждой семьи выполняются 1000 независимых GET `/`
 через HTTP NodePort. При `--split` допустимы 5–15% canary; любой неверный
 HTTP status/body/Request-ID/release/revision, транспортная ошибка или

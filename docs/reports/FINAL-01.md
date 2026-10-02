@@ -48,7 +48,7 @@ export MTS_TEST_TRAEFIK_CHART=/home/Bebroid/mts_hack/.cache/downloads/traefik.tg
 | pass | `/home/Bebroid/mts_hack/.cache/tools/helm lint deploy/app deploy/gateway` | Оба собственных chart |
 | pass | `/home/Bebroid/mts_hack/.venv/bin/python deploy/app/tests/test_render.py` | 3 теста; identities/selectors, checksum, rollout, faults, schema negatives |
 | pass | `/home/Bebroid/mts_hack/.venv/bin/python deploy/gateway/tests/test_render.py` | 7 тестов; pinned Traefik render, HTTPS ports, routes/weights, TLS secret/schema negatives |
-| pass | `/home/Bebroid/mts_hack/.venv/bin/python deploy/gateway/tests/test_final.py` | 10 fixture tests; stale/missing/duplicate conditions, wrong refs/weights/routes, invalid HTTP/revision, statistical gates, explicit kubeconfig, verified curl TLS args, details at deadline |
+| pass | `/home/Bebroid/mts_hack/.venv/bin/python deploy/gateway/tests/test_final.py` | 12 fixture tests; stale/missing/duplicate conditions, wrong refs/weights/routes, invalid HTTP/revision, statistical gates, explicit kubeconfig, verified curl TLS args, details at deadline, pinned attachedRoutes semantics |
 | pass | `/home/Bebroid/mts_hack/.venv/bin/python -m py_compile scripts/check-gateway.final.py scripts/check-gateway.container.py deploy/app/tests/test_render.py deploy/gateway/tests/test_render.py deploy/gateway/tests/test_final.py` | Python syntax |
 | pass | `/home/Bebroid/mts_hack/.venv/bin/yamllint -c .yamllint deploy/app/values.yaml deploy/gateway/values.yaml deploy/gateway/traefik-values.yaml` | YAML lint |
 | pass | `git diff --check` | Whitespace |
@@ -65,6 +65,17 @@ MTS_TEST_HELM=/home/Bebroid/mts_hack/.cache/tools/helm \
 ```
 
 ## Интеграционная приемка
+
+Первый live deploy интегратора прошел MVP gate. Первый FINAL checker
+остановился на `attachedRoutes`: ожидались 4, получены 8 у обеих listeners.
+Разбор закрепленных функций Traefik 3.6.2 подтвердил повторное включение
+listener для каждого parentRef к Gateway. Обоснование и ссылки на исходники
+приведены в [Gateway README](../../deploy/gateway/README.md).
+Checker исправлен на строгое значение `4 × 2 = 8` с отдельными проверками
+полного набора из четырех routes и ровно двух корректных parent statuses.
+Негативные fixtures отклоняют 4/7/9, другую версию controller, пропущенные
+или лишние routes/parents даже при счетчике 8. Повторная live-приемка этого
+исправления остается за интегратором.
 
 После общего deploy с обоими backend и TLS CA:
 
