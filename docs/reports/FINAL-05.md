@@ -16,6 +16,12 @@ Live-приемку и изменения выделенной VM выполня
 проверяются точные 12 байт `Hello World!`, статус 200, `X-Release`, запрошенный
 `X-Revision` и Request-ID. Проверка Deployment подтверждает rollout, число
 реплик, закрепленный образ и фактические значения release.
+Перед строгими пятью smoke-пробами ожидается обновление endpoints в Gateway:
+до 30 с, в пределах общего deadline, должен появиться ответ с нужными
+`X-Release` и `X-Revision`. Попытки, время и временные ошибки сохраняются.
+Ответ новой ревизии с 500/неверным телом немедленно передается строгому gate;
+такой сбой не скрывается повторными health-попытками. Измеряемый трафик не
+имеет повторов. При восстановлении применяется то же ограниченное ожидание.
 
 После свежего scrape, покрывающего direct smoke, включаются веса 90/10.
 Основной маршрут получает ограниченную нагрузку 40 запросов/с в течение 60 с
@@ -64,7 +70,7 @@ TLS keys, kubeconfig, адреса scrape и тела HTTP не сохраняю
 
 | Проверка | Результат | Команда / пояснение |
 | --- | --- | --- |
-| Engine/metrics/acceptance fixtures | pass | `python3 -m unittest discover -s tests/canary -p 'test_*.py' -v` — 36 тестов |
+| Engine/metrics/acceptance fixtures | pass | `python3 -m unittest discover -s tests/canary -p 'test_*.py' -v` — 40 тестов |
 | Синтаксис Python | pass | `python3 -m py_compile scripts/canary.py scripts/canary_metrics.py tests/canary/verify.py tests/canary/test_canary.py` |
 | Интерфейс CLI | pass | `python3 scripts/canary.py --help`; `python3 tests/canary/verify.py --help` |
 | Whitespace | pass | `git diff --check` |

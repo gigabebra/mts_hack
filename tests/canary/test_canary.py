@@ -351,6 +351,58 @@ class MetricsFixtures(unittest.TestCase):
             canary.validate_settings({"host": "canary.demo.test", "candidate_service": "another-service"})
 
 
+class DataPlaneConvergenceFixtures(unittest.TestCase):
+    def setUp(self):
+        self.ops = canary.Runtime.__new__(canary.Runtime)
+        self.values = {"releaseRevision": "candidate-v2", "responseBody": "Hello World!"}
+        self.healthy = {"status": 200, "release": "canary", "revision": "candidate-v2",
+                        "request_id_matches": True, "body_length": 12,
+                        "body_sha256": hashlib.sha256(b"Hello World!").hexdigest()}
+
+    def converge(self):
+        clock = Clock()
+        with patch.object(canary.time, "monotonic", clock.monotonic), patch.object(canary.time, "sleep", clock.sleep):
+            return self.ops.converge_identity(self.values)
+
+    def test_transient_unavailable_and_old_revision_converge_then_strict_smoke_passes(self):
+        samples = [{"status": 0, "release": "unavailable", "error": "TimeoutError"},
+                   dict(self.healthy, revision="candidate-v1"), self.healthy]
+        self.ops.request = lambda *_, **kw: samples.pop(0) if samples else self.healthy
+        result = self.converge()
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["attempts"], 3)
+        self.assertEqual(result["duration_seconds"], 1)
+        self.assertEqual(result["observations"][0]["error"], "TimeoutError")
+        self.assertEqual(canary.smoke(self.ops, self.values, "canary", "fixture")["passed"], 5)
+
+    def test_faulty_new_revision_converges_immediately_but_fails_strict_smoke(self):
+        for response in (dict(self.healthy, status=500),
+                         dict(self.healthy, body_length=11, body_sha256=hashlib.sha256(b"Wrong body!").hexdigest())):
+            with self.subTest(status=response["status"]):
+                self.ops.request = lambda *_, **kw: response
+                result = self.converge()
+                self.assertEqual(result["attempts"], 1)
+                self.assertEqual(result["duration_seconds"], 0)
+                with self.assertRaises(canary.Rejected):
+                    canary.smoke(self.ops, self.values, "canary", "fixture")
+
+    def test_persistent_old_revision_rejected_after_bounded_timeout(self):
+        self.ops.request = lambda *_, **kw: dict(self.healthy, revision="candidate-v1")
+        with self.assertRaises(canary.Rejected) as failure:
+            self.converge()
+        self.assertEqual(failure.exception.evidence["duration_seconds"], 30)
+        self.assertEqual(failure.exception.evidence["status"], "fail")
+        self.assertEqual(failure.exception.evidence["attempts"], 60)
+
+    def test_operation_deadline_shortens_convergence(self):
+        self.ops.operation_deadline = 2
+        self.ops.request = lambda *_, **kw: {"status": 0, "release": "unavailable", "error": "TimeoutError"}
+        with self.assertRaises(canary.Rejected) as failure:
+            self.converge()
+        self.assertEqual(failure.exception.evidence["duration_seconds"], 2)
+        self.assertEqual(failure.exception.evidence["attempts"], 4)
+
+
 class SnapshotFixtures(unittest.TestCase):
     def setUp(self):
         self.data = snapshot(1000, 10)

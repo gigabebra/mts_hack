@@ -149,9 +149,36 @@ class Runtime:
             if actual.get(key) != values.get(key):
                 raise Rejected("candidate release values differ from the requested revision")
         return {"ready_replicas": replicas, "generation": deployment["metadata"]["generation"],
-                "image": locked_image(values["image"]), "revision": values["releaseRevision"]}
+                "image": locked_image(values["image"]), "revision": values["releaseRevision"],
+                "data_plane": self.converge_identity(values)}
 
-    def request(self, path, request_id):
+    def converge_identity(self, values):
+        """Wait for Gateway endpoint refresh before the separate strict smoke.
+
+        Match identity only: a new revision serving 500 or an incorrect body
+        has converged and must reach the strict gate without health retries.
+        No requests in the measured traffic window use this convergence loop.
+        """
+        started = time.monotonic()
+        operation_deadline = getattr(self, "operation_deadline", None)
+        until = min(started + 30, operation_deadline if operation_deadline is not None else float("inf"))
+        evidence = {"path": "/backend/canary", "expected_revision": values["releaseRevision"],
+                    "status": "fail", "attempts": 0, "observations": []}
+        request_prefix = "converge-" + uuid.uuid4().hex[:12]
+        while time.monotonic() < until:
+            sample = self.request("/backend/canary", request_prefix + "-" + str(evidence["attempts"]),
+                                  timeout=min(3, max(.001, until - time.monotonic())))
+            evidence["attempts"] += 1
+            evidence["observations"].append(sample)
+            if sample.get("release") == "canary" and sample.get("revision") == values["releaseRevision"]:
+                evidence["status"] = "pass"
+                evidence["duration_seconds"] = round(time.monotonic() - started, 3)
+                return evidence
+            time.sleep(min(.5, max(0, until - time.monotonic())))
+        evidence["duration_seconds"] = round(time.monotonic() - started, 3)
+        raise Rejected("Gateway did not converge to the requested candidate identity within its deadline", evidence)
+
+    def request(self, path, request_id, timeout=3):
         if len(request_id) > 64:
             request_id = request_id[:45] + "-" + hashlib.sha256(request_id.encode()).hexdigest()[:16]
         request = urllib.request.Request(http_url(self.env["node_ip"], self.env["node_port"]) + path,
@@ -159,7 +186,7 @@ class Runtime:
                                                   "Connection": "close"})
         try:
             try:
-                response = self.http.open(request, timeout=3)
+                response = self.http.open(request, timeout=timeout)
             except urllib.error.HTTPError as error:
                 response = error
             with response:
@@ -217,6 +244,9 @@ def restore(ops, stable, report, run_id):
     started = time.monotonic()
     rollback = {"status": "fail", "started_at": timestamp()}
     report["rollback"] = rollback
+    # Recovery gets its own bounded Helm calls and 30-second endpoint refresh;
+    # an expired release observation deadline must not prevent recovery.
+    ops.operation_deadline = None
     try:
         rollback["weights"] = ops.set_weights(100, 0)
         rollback["stable_http"] = smoke(ops, stable, "stable", run_id + "-rollback", 25, "/")
@@ -232,6 +262,8 @@ def restore(ops, stable, report, run_id):
         rollback["status"] = "pass"
     except BaseException as error:
         rollback["reason"] = safe_error(error)
+        if getattr(error, "evidence", None) is not None:
+            rollback["failure_http"] = error.evidence
         with contextlib.suppress(Exception):
             rollback["weights_after"] = ops.weights()
         rollback["recovery_command"] = "python3 scripts/canary.py --env <environment> --action restore"
@@ -283,6 +315,7 @@ def run_locked(ops, *, run_id, revision, image=None, fault_mode="none", action="
     path = ops.directory / "report.json"
     started = time.monotonic()
     deadline = started + ops.settings["operation_timeout_seconds"]
+    ops.operation_deadline = deadline
     stable, touched, accepted = None, False, False
     old_alarm = signal.getsignal(signal.SIGALRM)
     def operation_expired(_signal, _frame):
