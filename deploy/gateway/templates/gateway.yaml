@@ -29,7 +29,8 @@ spec:
     - name: websecure
       protocol: HTTPS
       port: {{ .Values.tls.listenerPort }}
-      hostname: {{ .Values.tls.hostname | quote }}
+      # Match hostnames on HTTPRoute: constraining this listener gives the
+      # generic and hostname routes identical effective Host rules in Traefik.
       tls:
         mode: Terminate
         certificateRefs:

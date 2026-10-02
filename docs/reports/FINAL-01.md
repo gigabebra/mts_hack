@@ -47,8 +47,8 @@ export MTS_TEST_TRAEFIK_CHART=/home/Bebroid/mts_hack/.cache/downloads/traefik.tg
 | --- | --- | --- |
 | pass | `/home/Bebroid/mts_hack/.cache/tools/helm lint deploy/app deploy/gateway` | Оба собственных chart |
 | pass | `/home/Bebroid/mts_hack/.venv/bin/python deploy/app/tests/test_render.py` | 3 теста; identities/selectors, checksum, rollout, faults, schema negatives |
-| pass | `/home/Bebroid/mts_hack/.venv/bin/python deploy/gateway/tests/test_render.py` | 7 тестов; pinned Traefik render, HTTPS ports, routes/weights, TLS secret/schema negatives |
-| pass | `/home/Bebroid/mts_hack/.venv/bin/python deploy/gateway/tests/test_final.py` | 12 fixture tests; stale/missing/duplicate conditions, wrong refs/weights/routes, invalid HTTP/revision, statistical gates, explicit kubeconfig, verified curl TLS args, details at deadline, pinned attachedRoutes semantics |
+| pass | `/home/Bebroid/mts_hack/.venv/bin/python deploy/gateway/tests/test_render.py` | 8 тестов; pinned Traefik render, HTTPS ports, routes/weights, TLS secret/schema negatives, hostname specificity |
+| pass | `/home/Bebroid/mts_hack/.venv/bin/python deploy/gateway/tests/test_final.py` | 13 fixture tests; stale/missing/duplicate conditions, wrong refs/weights/routes, invalid HTTP/revision, statistical gates, explicit kubeconfig, verified curl TLS args, details at deadline, pinned attachedRoutes semantics, HTTPS route selection |
 | pass | `/home/Bebroid/mts_hack/.venv/bin/python -m py_compile scripts/check-gateway.final.py scripts/check-gateway.container.py deploy/app/tests/test_render.py deploy/gateway/tests/test_render.py deploy/gateway/tests/test_final.py` | Python syntax |
 | pass | `/home/Bebroid/mts_hack/.venv/bin/yamllint -c .yamllint deploy/app/values.yaml deploy/gateway/values.yaml deploy/gateway/traefik-values.yaml` | YAML lint |
 | pass | `git diff --check` | Whitespace |
@@ -76,6 +76,15 @@ Checker исправлен на строгое значение `4 × 2 = 8` с 
 Негативные fixtures отклоняют 4/7/9, другую версию controller, пропущенные
 или лишние routes/parents даже при счетчике 8. Повторная live-приемка этого
 исправления остается за интегратором.
+
+Следующий live прогон интегратора подтвердил TLS и нормальный трафик,
+но HTTPS `/` иногда выбирал `hello` вместо `hello-host`. Listener hostname
+делал эффективные Host rules одинаковыми. После проверки исходников
+Traefik и Gateway API 1.4 hostname убран только из HTTPS listener;
+явный hostname route и TLS Secret сохранены. Checker требует исправленную
+форму listener и по-прежнему отклоняет здоровый HTTPS ответ от неправильного
+route. Добавлены render/negative регрессии; повторный live deploy выполняет
+интегратор. Подробные источники — в Gateway README.
 
 После общего deploy с обоими backend и TLS CA:
 

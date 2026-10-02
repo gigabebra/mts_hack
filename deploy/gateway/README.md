@@ -107,6 +107,16 @@ render. Общий deploy отвечает за постоянные локал�
 передачу временным values-файлом и исключение ключей из render artifacts.
 CA для приемки: `.state/tls/<ENV>/ca.crt`.
 
+Hostname задается в `hello-host`, а HTTPS listener принимает все имена.
+Это допустимо по [Gateway API 1.4](https://github.com/kubernetes-sigs/gateway-api/blob/v1.4.0/apis/v1/gateway_types.go#L349-L398).
+В Traefik 3.6.2 ограничение hostname на listener переносится в hostless
+route через [`findMatchingHostnames`](https://github.com/traefik/traefik/blob/v3.6.2/pkg/provider/kubernetes/gateway/kubernetes.go#L974-L995).
+Тогда `hello` и `hello-host` получают одинаковые Host rules и приоритеты.
+Без ограничения listener только `hello-host` получает дополнительную
+[специфичность имени](https://github.com/traefik/traefik/blob/v3.6.2/pkg/provider/kubernetes/gateway/httproute.go#L628-L636).
+TLS Secret и проверка имени сертификата остаются обязательными;
+приемка по HTTPS требует именно `X-Gateway-Route: hello-host`.
+
 Чтение и проверка существующей конфигурации:
 
 ```sh

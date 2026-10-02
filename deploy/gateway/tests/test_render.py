@@ -76,6 +76,23 @@ class TraefikRender(unittest.TestCase):
 
 
 class GatewayRender(unittest.TestCase):
+    def test_hostname_route_remains_more_specific_on_both_listeners(self):
+        for hostname in ("hello.test", "preview.test"):
+            docs = render_gateway("--set-string", "tls.hostname=" + hostname)
+            gateway = docs[("Gateway", "gateway")]["spec"]
+            generic = docs[("HTTPRoute", "hello")]["spec"]
+            named = docs[("HTTPRoute", "hello-host")]["spec"]
+            for listener in gateway["listeners"]:
+                # A listener hostname is inherited by a hostless route in
+                # Traefik v3.6.2, removing the intended specificity difference.
+                self.assertNotIn("hostname", listener)
+            self.assertNotIn("hostnames", generic)
+            self.assertEqual(named["hostnames"], [hostname])
+            self.assertEqual(generic["rules"][0]["matches"], named["rules"][0]["matches"])
+            https = next(item for item in gateway["listeners"] if item["protocol"] == "HTTPS")
+            self.assertEqual(https["tls"], {"mode": "Terminate", "certificateRefs": [
+                {"group": "", "kind": "Secret", "name": "hello-tls"}]})
+
     def test_defaults_and_split_share_both_user_routes_but_preserve_directed_routes(self):
         for weights in ((100, 0), (90, 10)):
             docs = render_gateway("--set", f"traffic.stableWeight={weights[0]},traffic.canaryWeight={weights[1]}")

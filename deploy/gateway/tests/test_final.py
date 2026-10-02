@@ -68,6 +68,18 @@ class CurrentRouteChecks(unittest.TestCase):
         with mock.patch.dict(FINAL.VERSIONS["images"], {"traefik": "docker.io/library/traefik:v3.7.0"}):
             self.assertFalse(self.is_pass(self.baseline))
 
+    def test_old_https_listener_hostname_and_generic_route_response_fail(self):
+        data = copy.deepcopy(self.baseline)
+        data["gateway"]["spec"]["listeners"][1]["hostname"] = "hello.test"
+        self.assertFalse(self.is_pass(data))
+        # The live failure had valid TLS, body and release headers; only the
+        # route marker exposed the lost hostname specificity. Keep it required.
+        response = {"curl_exit": 0, "status": 200, "body_exact": True, "release": "stable",
+                    "revision": "stable-1", "request_id": "fixture", "route": "hello"}
+        self.assertFalse(FINAL.response_ok(response, "fixture", expected_route="hello-host"))
+        response["route"] = "hello-host"
+        self.assertTrue(FINAL.response_ok(response, "fixture", expected_route="hello-host"))
+
     def test_eight_attachments_cannot_hide_wrong_routes_or_status_parents(self):
         for mutate in (
                 lambda data: data["routes"].pop("hello-canary"),

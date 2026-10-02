@@ -73,7 +73,7 @@ def route_checks(resources, hostname, split=False, expected_address=None):
     generation = gateway.get("metadata", {}).get("generation")
     expected_listeners = [
         {"name": "web", "protocol": "HTTP", "port": 8000},
-        {"name": "websecure", "protocol": "HTTPS", "port": 8443, "hostname": hostname,
+        {"name": "websecure", "protocol": "HTTPS", "port": 8443,
          "tls": {"mode": "Terminate", "certificateRefs": [{"group": "", "kind": "Secret", "name": "hello-tls"}]}}]
     allowed = {"namespaces": {"from": "Same"},
                "kinds": [{"group": "gateway.networking.k8s.io", "kind": "HTTPRoute"}]}
