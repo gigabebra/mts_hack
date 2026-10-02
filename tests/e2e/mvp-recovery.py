@@ -197,6 +197,13 @@ def main():
                 replace_pod(env, 'logging', 'app.kubernetes.io/name=fluentd', 'daemonset/fluentd')
                 time.sleep(6)  # One tail refresh interval; no new application traffic here.
                 restored_positions, new_emitted = collector_state(env)
+                write_json(directory / 'collector-position-comparison.json', {
+                    'saved': [{'path': key[0], 'inode': key[1], 'offset': offset}
+                              for key, offset in sorted(saved_positions.items())],
+                    'restored': [{'path': key[0], 'inode': key[1], 'offset': offset}
+                                 for key, offset in sorted(restored_positions.items())],
+                    'records_emitted_after_restart': new_emitted,
+                })
                 if restored_positions != saved_positions or new_emitted != 0:
                     raise ValueError('Collector replayed old source records or lost saved tail positions')
                 report['checks'].append({'name': 'collector_positions', 'status': 'pass',
