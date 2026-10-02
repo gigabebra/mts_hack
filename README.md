@@ -15,17 +15,20 @@ IPv6 — основной; приложение и компоненты дост
 [Сетевой контракт и диагностика](docs/networking.md),
 [независимая приемка](docs/acceptance/dual-stack-acceptance.md),
 [реестр](docs/status.md), [черновик паспорта](docs/passport/mvp-draft.md).
-Назначены FINAL-01 и FINAL-05: TLS/Gateway и проверяемый выпуск canary.
-Их текущие результаты — в [реестре](docs/status.md); остальные карточки
-FINAL не назначены. Полный профиль `PROFILE=final` пока не поддерживается.
+Назначенные TLS/Gateway и выпуск canary с автооткатом приняты на `9ce5f99`:
+[протокол FINAL-01/05](docs/reports/FINAL-INTEGRATION.md), [реестр](docs/status.md).
+Остальные карточки FINAL не назначены. Полный профиль `PROFILE=final`
+пока не поддерживается.
 
 ```mermaid
 flowchart LR
-    User[Проверяющий IPv6 / IPv4] -->|HTTP NodePort 30080| Traefik
+    User[Проверяющий IPv6 / IPv4] -->|HTTP 30080 / HTTPS 30443| Traefik
     Traefik --> Gateway[Gateway / HTTPRoute]
-    Gateway --> Service[Dual-stack Service hello]
+    Gateway -->|100% или 90%| Service[Dual-stack Service hello]
     Service --> Nginx
+    Gateway -->|0% или 10%| Canary[Service hello-canary / Nginx]
     Nginx -->|stdout / stderr, CRI| Fluentd
+    Canary -->|stdout / stderr, CRI| Fluentd
     Fluentd --> Loki[(Loki / local PV)]
     Prometheus[(Prometheus / local PV)] -->|scrape| Traefik
     Prometheus --> Node[node exporter]
@@ -144,8 +147,9 @@ loopback port-forward к Prometheus/Loki и закрывает их при за�
   через Loki API, правильные stream и source labels.
 - Реальные UID PID1, отсутствие capabilities/API token и read-only root mount.
 
-`PROFILE=final` пока возвращает ошибку: сетевые политики, TLS, canary,
-автооткат, Grafana/Alertmanager и CI относятся к следующему этапу.
+`PROFILE=final` пока возвращает ошибку: сетевые политики, Grafana/Alertmanager
+и CI еще не назначены. Принятые TLS/Gateway и canary проверяются через
+`verify-release` и `verify-canary`.
 
 Повторный `make bootstrap` проверяет прежнюю идентичность узла. Команда
 `verify-idempotency` дважды запускает deploy, сравнивает UIDs ресурсов,

@@ -1,4 +1,4 @@
-# Состояние MVP
+# Состояние проекта
 
 Полноценный dual-stack Kubernetes с основным IPv6 принят на кодовой ревизии
 `cc3afc6cab06a4cb441c3f0c705e79cc04910a0f`. IPv4 доступен приложению и компонентам.
@@ -25,13 +25,16 @@
 их диски и данные сохранены. TSDB из прежних кластеров не переносилась.
 Изменения VM выполнял только интегратор; независимый агент сверял код,
 negative fixtures, raw snapshots, вложенные проверки и evidence archives.
-Назначены пользователем FINAL-01 и FINAL-05. Разработка идет от принятого MVP;
-остальные карточки FINAL не назначены. Полный профиль FINAL не заявляется.
+Назначенные пользователем FINAL-01 и FINAL-05 приняты в области TLS/Gateway,
+выпуска canary и восстановления на коде `9ce5f99`.
+[Протокол](reports/FINAL-INTEGRATION.md), [JSON evidence](acceptance/final-01-05.json).
+Остальные карточки FINAL не назначены. Полный профиль FINAL не заявляется;
+alerts и их recovery остаются в FINAL-02.
 
 | ID | Статус | Область |
 | --- | --- | --- |
-| FINAL-01 | in_progress | TLS, host/path routes, два backend, traffic split |
-| FINAL-05 | in_progress | HTTP/metrics gate кандидата, автоматический откат, сценарии восстановления |
+| FINAL-01 | done | TLS, host/path routes, два backend, 90/10 по обеим семьям; live pass |
+| FINAL-05 | done | Назначенная область: HTTP/metrics gate, автооткат, interruption, pod/config/PVC/buffer recovery, reboot; live pass |
 
 Первоначальная IPv4-приемка `337d0c6` сохранена как [история](acceptance/mvp-acceptance.md).
 Строгая IPv6-only попытка заменена новым требованием и не имеет принятой ревизии;
@@ -41,4 +44,4 @@ positions; окончательная чистая приемка выполне
 Дополнительный аудит `8ed0e70` усилил сопоставление Gateway status с `node_ip`
 и проверку repository/tag/digest в image lock; новые regression-тесты и
 повторные live-проверки прошли. До назначения FINAL-01/05 после этой ревизии
-менялась только документация; текущая разработка расширения отражена выше.
+менялась только документация; принятые расширения отражены выше.
