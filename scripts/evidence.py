@@ -14,6 +14,9 @@ destination = ROOT / 'artifacts/evidence' / (stamp + '.tar.gz')
 destination.parent.mkdir(parents=True, exist_ok=True)
 reports = [path for group in ('verify', 'idempotency', 'recovery', 'release', 'canary', 'canary-acceptance', 'demo')
            for path in sorted((ROOT / 'artifacts' / group).rglob('report.json'))]
+# This checker uses an explicit filename beside the aggregate release report.
+# Include its allowlisted TLS/route/distribution observations as well.
+reports += sorted((ROOT / 'artifacts/release').glob('*/gateway.json'))
 if not reports:
     parser.error('No reports exist. Run make verify first, including failed runs.')
 index = {'generated_at': stamp, 'environment': args.env,
