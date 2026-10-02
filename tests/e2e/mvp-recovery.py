@@ -102,6 +102,22 @@ puts JSON.generate(found)'''
     return boundaries
 
 
+def collector_sources(env):
+    """Inventory current tail sources without reading or generating log records."""
+    ruby = '''rows=Dir.glob('/var/log/containers/hello-*_demo_nginx-*.log').filter_map do |path|
+  begin
+    stat=File.stat(path)
+    {'path'=>path, 'inode'=>stat.ino, 'size'=>stat.size}
+  rescue Errno::ENOENT
+    nil
+  end
+end
+puts JSON.generate(rows)'''
+    rows = json.loads(kubectl(env, '-n', 'logging', 'exec', 'daemonset/fluentd', '-c', 'fluentd',
+                             '--', 'ruby', '-rjson', '-e', ruby, capture=True).stdout)
+    return {(row['path'], row['inode']): row['size'] for row in rows}
+
+
 def collector_consumed(before, after, expected_records, boundaries):
     # The position file and monitor counters are read in separate exec calls.
     # A newer counter can arrive alongside an older position-file observation.
@@ -194,15 +210,21 @@ def main():
                 saved_positions, _ = poll(consumed, 30)
                 if not saved_positions or saved_positions == old_positions:
                     raise ValueError('Tail positions did not advance during the Loki outage')
+                sources_before = collector_sources(env)
                 replace_pod(env, 'logging', 'app.kubernetes.io/name=fluentd', 'daemonset/fluentd')
                 time.sleep(6)  # One tail refresh interval; no new application traffic here.
                 restored_positions, new_emitted = collector_state(env)
+                sources_after = collector_sources(env)
                 write_json(directory / 'collector-position-comparison.json', {
                     'saved': [{'path': key[0], 'inode': key[1], 'offset': offset}
                               for key, offset in sorted(saved_positions.items())],
                     'restored': [{'path': key[0], 'inode': key[1], 'offset': offset}
                                  for key, offset in sorted(restored_positions.items())],
                     'records_emitted_after_restart': new_emitted,
+                    'sources_before': [{'path': key[0], 'inode': key[1], 'size': size}
+                                       for key, size in sorted(sources_before.items())],
+                    'sources_after': [{'path': key[0], 'inode': key[1], 'size': size}
+                                      for key, size in sorted(sources_after.items())],
                 })
                 if restored_positions != saved_positions or new_emitted != 0:
                     raise ValueError('Collector replayed old source records or lost saved tail positions')
