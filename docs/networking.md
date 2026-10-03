@@ -1,78 +1,62 @@
-# Сеть MVP: dual-stack, IPv6 основной
+# Сеть: IPv6 и IPv4
 
-Статус: режим принят на `cc3afc6cab06a4cb441c3f0c705e79cc04910a0f`.
-[Независимый протокол](acceptance/dual-stack-acceptance.md) и
-[измерения/evidence](acceptance/dual-stack-evidence.json).
-Последующий [аудит кода `8ed0e70`](reports/MVP-AUDIT.md) повторно подтвердил
-обе сети на рабочем стенде и усилил проверку Gateway status: теперь адрес
-должен точно совпадать с основным `node_ip` выбранного environment.
-Текущий контракт — [версия 3](contracts.md). Строгая IPv6-only приемка остановлена
-по изменению требования; ее промежуточные отчеты не являются приемкой dual-stack.
+IPv6 — основной адрес Kubernetes API и Gateway, а также первое семейство
+Services. IPv4 параллельно доступен приложению и компонентам. DNS/NTP,
+локальные проверки и внешние загрузки могут использовать обе семьи.
 
-IPv6 — основной адрес SSH/API/Gateway и первое семейство Services. IPv4 также
-доступен приложению и компонентам. IPv4 loopback, DNS/NTP и загрузки разрешены.
-Не добавляем переводчики протоколов, дополнительные прокси и фильтры для
-запрета IPv4. Для нового семейства Pod/Service создается отдельный кластер.
-Прежние VM/данные сохраняются; TSDB между кластерами автоматически не переносится.
+## Настройка
 
-Основа: [kubeadm dual-stack](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/dual-stack-support/),
-[Kubernetes Services](https://kubernetes.io/docs/concepts/services-networking/dual-stack/),
-[Calico dual-stack](https://docs.tigera.io/calico/3.31/networking/ipam/ipv6).
+В локальном environment задаются адреса одной VM: `node_ip` (IPv6),
+`node_ipv4` (IPv4), а также `ssh_host`. Оба node IP должны быть стабильными
+и принадлежать активным интерфейсам. Нужны default routes обеих семей.
 
-## Установка и проверка
+| Назначение | Поле | Пример |
+| --- | --- | --- |
+| Pod IPv6 | pod_cidr | `fd4d:5453:1000:100::/56` |
+| Pod IPv4 | pod_cidr_ipv4 | `10.244.0.0/16` |
+| Service IPv6 | service_cidr | `fd4d:5453:1000:200::/112` |
+| Service IPv4 | service_cidr_ipv4 | `10.96.0.0/16` |
 
-В environment задаются `node_ip` (IPv6), `node_ipv4`, IPv6-first Pod CIDR
-`pod_cidr,pod_cidr_ipv4` и Service CIDR `service_cidr,service_cidr_ipv4`.
-Все четыре сети должны быть свободны от пересечений с физической сетью/VPN.
-`ssh_host` по умолчанию — IPv6 узла; явный IPv4 тоже разрешен. URL IPv6 содержит
-скобки. Bootstrap не преобразует существующий single-stack кластер: изменение
-семейства, адресов или CIDR требует новой выделенной VM.
+Эти примеры нужно сверить со своими сетями и VPN. Bootstrap проверяет
+пересечения до изменения VM. Он не преобразует уже созданный single-stack
+кластер в dual-stack; для смены семейства сети нужна чистая VM.
 
 Kubeadm получает CIDR в порядке IPv6,IPv4, kubelet объявляет оба InternalIP.
-Calico использует два VXLAN/NAT pool. Собственные Helm Services имеют
-`ipFamilyPolicy: RequireDualStack`, `ipFamilies: [IPv6, IPv4]`. Исключения допускаются
-только для автоматически созданных `default/kubernetes`, `kube-system/kube-dns`
-и `monitoring/prometheus-operated`; они могут быть SingleStack IPv6.
+Calico использует два явных VXLAN/NAT pool, BGP выключен. Для сохранения
+SLAAC при включенном IPv6 forwarding на uplink задается `accept_ra=2`.
+Bootstrap не меняет netplan, router или настройки гипервизора.
 
-`make verify` проверяет 11 обязательных стадий: readiness, dual-stack ресурсы,
-Gateway conditions, warmup, baseline метрик, HTTP по IPv6, HTTP по IPv4,
-рост счетчика по суммарному трафику, логи IPv6, логи IPv4 и runtime security.
-У каждого собственного Service проверяются обе семьи Ready EndpointSlices и
-соответствие адресов фактическим Pod UID. Проверка SSH/API обеих семей, DNS A/AAAA,
-прямого Pod/Service HTTP, чистой установки, повторов и восстановления дополнительно
-входит в независимую [приемку](acceptance/dual-stack-acceptance.md).
+Собственные Services имеют `ipFamilyPolicy: RequireDualStack` и
+`ipFamilies: [IPv6, IPv4]`. Автоматически созданные `default/kubernetes`,
+`kube-system/kube-dns` и `monitoring/prometheus-operated` могут оставаться
+SingleStack IPv6; исключение проверяется по точному имени ресурса.
 
-## Что означает «IPv6 основной»
+## Проверка и диагностика
 
-Главный kubeconfig, Gateway status и первый Service IP используют IPv6.
-Порядок `ipFamilies` определяет основной ClusterIP, но не порядок DNS/getaddrinfo
-у всех клиентов. IPv4 loopback и DNS/NTP разрешены, системные проверки не требуют
-отдельных BPF-фильтров или запрета IPv4-сокетов. Внешние загрузки могут идти по любой семье.
+`make health ENV=ubuntu` создает временные server/client Pod и Service,
+проверяет DNS A/AAAA, HTTP к обоим Service IP и напрямую к обоим Pod IP.
+После проверки временные ресурсы удаляются, в том числе при ошибке.
 
-ServiceMonitor выбирает IPv6 EndpointSlices. Это исключает двойной сбор метрик
-через IPv4/IPv6 одного Pod; verifier отдельно выявляет дубликаты Pod/port/path
-независимо от job, Service и IP. Этот выбор не обеспечивает автоматическое
-переключение scrape на IPv4 при отказе IPv6. У single-node control plane также
-нет HA. Dual-stack означает проверенную доступность обоих семейств, а не
-автоматический failover всех клиентов.
+`make verify ENV=ubuntu` дополнительно сверяет Node/Pod IP, Calico pools,
+Services и Ready EndpointSlices обоих семейств. Адреса EndpointSlices
+должны соответствовать тем же Pod UID. HTTP и access/error-логи проверяются
+по IPv6 и IPv4 раздельно.
 
-## Диагностика
+При неполадках проверьте Node InternalIP, Pod `status.podIPs`, Service
+`clusterIPs`, EndpointSlice `addressType` и маршруты узла. Сравните
+`curl -6` и `curl -4` с `--noproxy '*'`. IPv6 в URL записывается в скобках.
+В сертификат Kubernetes API включены оба адреса узла; отключать TLS
+verification для доступа по IPv4 не требуется.
 
-Проверяйте маршруты, обе Node InternalIP, Pod `status.podIPs`, Service `clusterIPs`
-и EndpointSlice `addressType`. Для HTTP сравните `curl -6` и `curl -4` с
-`--noproxy '*'`. API по IPv4 проверяется с тем же доверенным CA и сертификатом;
-обе node IP входят в SAN, отключать TLS verification не требуется.
-Опциональные отчеты Calico/Loki и проверки версии/usage Traefik отключены.
+С управляющей машины нужны SSH, API 6443, HTTP 30080 и HTTPS 30443 по обеим
+семьям. Host firewall должен пропускать маршрутизацию Pod. Метрики и Loki
+доступны через loopback port-forward; для него необходим рабочий `::1`.
 
-## Подтвержденный результат
+ServiceMonitor выбирает IPv6 EndpointSlices, чтобы не собирать один endpoint
+дважды через разные адреса. Общий verify выявляет дубликаты Pod/port/path
+независимо от job и Service. Автоматического переключения scrape на IPv4
+при отказе IPv6 нет. Dual-stack также не делает одноузловой control plane
+отказоустойчивым.
 
-Чистая установка, повтор bootstrap/deploy, recovery и полный verify после
-выключения/включения VM прошли на `cc3afc6`. SSH/API/HTTP
-проверены по IPv6 и IPv4; API использует нормальную CA/SAN verification.
-Все восемь собственных Services отвечают по обеим семьям (16 внутренних
-HTTP probes), их DNS A/AAAA точно соответствуют ClusterIPs. Проверены также
-прямые IPv6/IPv4 адреса Pod приложения. Пять scrape endpoints уникальны.
-
-Основной стенд оставлен работающим, приемочная и прежние VM сохранены
-выключенными. Это проверка конкретного одноузлового MVP, без утверждения
-долговременной отказоустойчивости или автоматического family failover.
+Подробная реализация — [Ansible](../ansible/README.md);
+результаты — [протокол проверки](verification.md).

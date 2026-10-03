@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the assigned canary demo and bounded recovery on the explicit test VM."""
+"""Run canary and recovery scenarios on the explicitly configured test VM."""
 import argparse
 import datetime as dt
 import json

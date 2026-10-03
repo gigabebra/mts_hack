@@ -1,5 +1,5 @@
 # Apply to the verified upstream Traefik 37.4.0 chart, release traefik in edge.
-# The integrator sets statusAddress.ip and ports.web.nodePort from environment.
+# Deploy sets statusAddress.ip and ports.web.nodePort from the environment.
 fullnameOverride: traefik
 global:
   checkNewVersion: false

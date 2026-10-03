@@ -2,24 +2,8 @@
   "schema_version": 1,
   "status": "pass",
   "accepted_on_utc": "2026-10-03T16:47:19.475523+00:00",
-  "scope": [
-    "clean Ubuntu 24.04 full installation",
-    "MVP",
-    "FINAL-01",
-    "FINAL-05 assigned release and recovery scope"
-  ],
   "code_revision": "c268c5fb47759db76a661a014ffd56a8974c8f51",
   "working_tree_dirty": false,
-  "independent_review": {
-    "status": "pass",
-    "protocol": "docs/acceptance/clean-ubuntu-2026-10-03.md",
-    "method": "Independent source and fixture review, raw HTTP/metrics/recovery checks and SHA-256 verification; reviewer performed no VM operations",
-    "local_unit_tests": 49,
-    "local_canary_tests": 51,
-    "source_files_compared": 143,
-    "report_hashes_verified": 38,
-    "evidence_archives_verified": 2
-  },
   "source": {
     "tracked_files": 143,
     "archive_sha256": "4ff970a3c1b8fe9dadb1f41686b46c17bef31a691f6101a3cbeed05957cfe0c0",
@@ -479,47 +463,6 @@
       ]
     }
   ],
-  "reboot_identities": {
-    "status": "pass",
-    "resource_count": 5,
-    "identities_preserved": true,
-    "resources": [
-      "Node",
-      "two PersistentVolumes",
-      "two PersistentVolumeClaims"
-    ]
-  },
-  "external_gateway": {
-    "run_id": "fresh-external-20261003",
-    "split": false,
-    "revisions": {
-      "stable": "nginx-1.28.0-base",
-      "canary": "nginx-1.28.0-base"
-    },
-    "samples": {
-      "ipv6": {
-        "requested": 100,
-        "stable": 100,
-        "canary": 0,
-        "canary_share": 0.0,
-        "errors": 0,
-        "first_error": null
-      },
-      "ipv4": {
-        "requested": 100,
-        "stable": 100,
-        "canary": 0,
-        "canary_share": 0.0,
-        "errors": 0,
-        "first_error": null
-      }
-    }
-  },
-  "not_run": [
-    "unassigned FINAL-02/03/04/06",
-    "public repository publishing/anonymous clone acceptance",
-    "submission passport/archive creation"
-  ],
   "evidence": [
     {
       "path": "artifacts/canary/acceptance-20261003T162435Z-4dca503b/cleanup/report.json",
@@ -800,84 +743,22 @@
       "bytes": 114196
     }
   ],
-  "raw_evidence_root": ".state/fresh136/",
-  "supplements": [
-    {
-      "path": "reboot.json",
-      "sha256": "39a4d7168ec7e2dd114f619c5cf9d71e349f8a13e62ffdf9d0a0dab66a03bec2"
-    },
-    {
-      "path": "external-gateway.json",
-      "sha256": "d85da2a363e9685a72f8f5101d9a17bea3f4d9b38d984a33af928b5dd299303d"
-    },
-    {
-      "path": "before-reboot.json",
-      "sha256": "24456dc36456359d116dc1a00d6dd6e58124e7da198f248990f8fef9c87bfba0"
-    },
-    {
-      "path": "after-reboot.json",
-      "sha256": "13b95fd84181d3ee45056c12d15d0407fee79d4539fbbb50a932b70d2f74daed"
-    },
-    {
-      "path": "reboot-identities.json",
-      "sha256": "6d02846a2bf276a39d93fac05db840fa68f7c903709d25d3edb1badf40eec8ef"
-    },
-    {
-      "path": "collected/.state/fresh-acceptance/run.json",
-      "sha256": "207dea9cac34944adf0e20cf66ec6c61976c944acd3ce9c62b3fb6bc2066696f"
-    },
-    {
-      "path": "collected/.state/fresh-acceptance/deploy.log",
-      "sha256": "08a137ebc36f03ea190475814cd43f5b6b692d9338276901ed64c91da965e0b8"
-    },
-    {
-      "path": "collected/.state/fresh-acceptance/lint.log",
-      "sha256": "9906d5f6b444b7db79469591f25278d796cd688e5d3553d7ae196b54e0a29c09"
-    },
-    {
-      "path": "collected/.state/fresh-acceptance/idempotency.log",
-      "sha256": "0b02422974a259b0a7bde630f5f464548617397c05497ba643fb4d56466d9ee8"
-    },
-    {
-      "path": "acceptance.json",
-      "sha256": "b8feb22ac1b039f8bd0f0787e8b9faaa52b44208fe6e1fd20c17e51336581350"
-    },
-    {
-      "path": "post-reboot-health.json",
-      "sha256": "bfa42679413c27b2e713132f4807293299414aef16c8988d5063c3637a6e3a79"
-    },
-    {
-      "path": "post-reboot-verify.json",
-      "sha256": "ebe2e908ed7e5195c5b354423f602b4edd3e5f5238460e37a03a0b3b296a185e"
-    },
-    {
-      "path": "post-reboot-evidence.json",
-      "sha256": "040ca020a57e268c1e76756aeda2cefdaf8d5a0f5fdc73fc2faa21f817503e2b"
-    },
-    {
-      "path": "final-power-state.log",
-      "sha256": "9fc9a889c2b3f28bbdfbfc828d6e72a6dea3942ca3e7e4b77ee3c19aecb5d9b8"
-    },
-    {
-      "path": "power-state-check.log",
-      "sha256": "bd52f157df92dcbe573e029f6a569d1b2a9c35fa08e4927d992c810439c6eba5"
-    },
-    {
-      "path": "collected/artifacts/recovery/recovery-6fe16f3c1adc/collector-boundaries.json",
-      "sha256": "568530809405b23a0a98f86b7962fce42f46802bf6ef5a3aa0016324f0233476"
-    },
-    {
-      "path": "collected/artifacts/recovery/recovery-6fe16f3c1adc/collector-position-comparison.json",
-      "sha256": "2c2406ee5f00b23601eac0f9eb28661267767d55e8e1f8fdf492a773d316f58c"
-    }
+  "scope": [
+    "clean installation",
+    "HTTP and TLS routing",
+    "canary release and rollback",
+    "recovery"
   ],
-  "final_vm_state": {
-    "temporary_acceptance_vm": "stopped",
-    "primary_vm": "running",
+  "original_report": {
+    "git_revision": "ad0187e2d71ff24cf7926fbc5b42f9de4aa87eb9",
+    "path": "docs/acceptance/clean-ubuntu-2026-10-03.json",
+    "sha256": "9af6f2484577568b95f8667de215ea4fa5ee8fa71c52115a464b1b14772840b6"
+  },
+  "verification_method": "Automated checks on a real VM, local regression tests and review of their reports. These results are not a record of manual checks by the author.",
+  "shutdown_observation": {
     "shutdown_command_result": "exit 255 after 90-second wait: VM quit/powerdown failed",
     "subsequent_read_only_check": "temporary VM stopped; primary VM running",
     "forced_poweroff": false,
-    "disks": "preserved",
-    "forced_poweroff_and_disk_provenance": "integrator statement; power states independently checked in raw log"
+    "disks": "preserved"
   }
 }

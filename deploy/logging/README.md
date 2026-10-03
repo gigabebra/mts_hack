@@ -1,4 +1,4 @@
-# Fluentd → Loki для MVP
+# Fluentd и Loki
 
 Команды ниже выполняются из корня checkout после `make tools`. Для прямого
 вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
@@ -7,7 +7,7 @@
 export PATH="$PWD/.cache/tools:$PWD/.venv/bin:$PATH"
 ```
 
-Chart `logging` ставится в namespace `logging`. Интегратор передает
+Chart `logging` ставится в namespace `logging`. Скрипт deploy передает
 `images.loki`, `images.fluentd`, `dataRoot`; общий post-renderer заменяет image
 tags принятым digest lock. Loki требует заранее созданный PV `mts-loki`,
 StorageClass `local-retain` и директорию данных с UID/GID 10001:10001.
@@ -88,6 +88,6 @@ CLI принимает URL с native IPv4 или bracketed IPv6 literal; IPv4-ma
 реальный missing-file stderr, labels, source path и CRI timestamp. Report
 создается также при timeout/ошибке и не содержит сырого stderr с адресами.
 
-Live приемку на выделенной VM выполняет интегратор: deploy/verify, новая
+На выделенной VM проверяются deploy/verify, новая
 проба при остановленном Loki, restart Fluentd, восстановление Loki и поиск
 той же пробы, повторный deploy с сохранением PVC и прежних records.

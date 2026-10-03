@@ -2,7 +2,7 @@
   "schema_version": 1,
   "status": "pass",
   "date": "2026-10-03",
-  "scope": "Integrator repeat: fresh installation, live verification, idempotency, controlled reboot",
+  "scope": "Fresh installation, service verification, repeated deployment and controlled reboot",
   "tested_revision": "27d775b76a5ae0021911293de137a4c3d5efc53c",
   "working_tree_dirty": false,
   "code_changes_required": false,
@@ -315,22 +315,19 @@
   ],
   "not_run": [
     {
-      "name": "full_demo_canary_interruption_pvc_buffer_recovery",
+      "name": "canary_interruption_pvc_buffer_recovery",
       "status": "not run",
-      "reason": "Outside this installation recheck; earlier acceptance retained separately"
+      "reason": "Validated in full-validation.json; not repeated during the second installation"
     },
     {
-      "name": "unassigned_FINAL_cards",
+      "name": "network_policy_alerts_ci_backup",
       "status": "not run",
-      "reason": "Not assigned"
+      "reason": "Not implemented in this version"
     }
   ],
-  "final_state": {
-    "new_vm": "running",
-    "traffic_weights": {
-      "stable": 100,
-      "canary": 0
-    },
-    "existing_vms_modified": false
+  "original_report": {
+    "git_revision": "ad0187e2d71ff24cf7926fbc5b42f9de4aa87eb9",
+    "path": "docs/reports/CLEAN-INSTALL-RECHECK-2026-10-03.json",
+    "sha256": "ee3a2311eb51b3a438d22fb517bd5d7c77d21dc2624e8cfb42d282d780e83969"
   }
 }

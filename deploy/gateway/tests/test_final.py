@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FINAL-01 verifier fixtures: negatives must fail closed. No cluster is used."""
+"""TLS and routing verifier tests; simulated invalid states must be rejected."""
 import copy
 import importlib.util
 import json

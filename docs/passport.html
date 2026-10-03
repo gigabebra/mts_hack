@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Self-Verifying Kubernetes Stack — паспорт решения</title>
+<style>
+@page { size: A4; margin: 14mm 16mm; }
+* { box-sizing: border-box; }
+body { margin: 0; color: #16212c; font: 9.5pt/1.32 "DejaVu Sans", sans-serif; }
+.page { break-after: page; }
+.page:last-child { break-after: auto; }
+header { border-bottom: 2px solid #275a78; padding-bottom: 3mm; margin-bottom: 6mm; }
+.kicker { font-size: 8pt; letter-spacing: .07em; color: #496574; text-transform: uppercase; }
+h1 { font-size: 21pt; line-height: 1.2; margin: 3mm 0; }
+h2 { font-size: 14pt; margin: 4mm 0 2.5mm; }
+h3 { font-size: 10.5pt; margin: 3mm 0 1.5mm; }
+p { margin: 0 0 2.5mm; }
+table { width: 100%; border-collapse: collapse; font-size: 8.4pt; margin: 3mm 0 4mm; }
+th { text-align: left; color: #275a78; background: #eef3f6; }
+th, td { padding: 1.7mm 2.2mm; border-bottom: 1px solid #d7e0e6; vertical-align: top; }
+tr { break-inside: avoid; }
+code { font: 8.2pt "DejaVu Sans Mono", monospace; overflow-wrap: anywhere; }
+.small { font-size: 8pt; color: #496574; }
+.note { border-left: 3px solid #275a78; padding: 2mm 3mm; background: #f4f7f9; }
+ul { margin: 2mm 0 4mm; padding-left: 5mm; }
+li { margin-bottom: 1.5mm; }
+svg { width: 100%; height: 54mm; display: block; margin: 3mm 0; }
+footer { margin-top: 5mm; padding-top: 2mm; border-top: 1px solid #d7e0e6; font-size: 8pt; color: #496574; }
+@media screen { body { background: #e6ebef; } .page { background: white; width: 210mm; min-height: 297mm; padding: 14mm 16mm; margin: 0 auto 8mm; } }
+@media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<section class="page" id="architecture">
+<header><div class="kicker">MTC ENGINEER HACK · паспорт решения · 1 / 3</div><h1>Self-Verifying<br>Kubernetes Stack</h1><p>Автоматическая установка и проверка веб-сервиса</p></header>
+<p>Nginx возвращает <code>Hello World!</code> через Kubernetes Gateway API.
+Prometheus собирает метрики, Fluentd передает access/error-логи в Loki.
+Общий сценарий проверки связывает HTTP-ответ и запись лога по Request-ID
+и отдельно подтверждает прирост HTTP-счетчика.</p>
+<svg viewBox="0 0 680 205" role="img" aria-label="Клиент обращается через Traefik к stable и canary; Fluentd собирает их логи в Loki, Prometheus опрашивает Traefik и exporters">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#496574"/></marker></defs>
+<g fill="#eef3f6" stroke="#8aa3b3"><rect x="0" y="22" width="100" height="45" rx="4"/><rect x="133" y="22" width="150" height="45" rx="4"/><rect x="329" y="0" width="147" height="42" rx="4"/><rect x="329" y="57" width="147" height="42" rx="4"/><rect x="528" y="22" width="150" height="45" rx="4"/><rect x="528" y="123" width="150" height="42" rx="4"/><rect x="133" y="123" width="150" height="42" rx="4"/><rect x="329" y="145" width="147" height="42" rx="4"/></g>
+<g stroke="#496574" stroke-width="1.6" fill="none" marker-end="url(#arrow)"><path d="M100 44H133"/><path d="M283 35L329 21"/><path d="M283 55L329 78"/><path d="M476 21L528 35"/><path d="M476 78L528 55"/><path d="M603 67V123"/><path d="M208 123V67"/><path d="M283 145L329 166"/></g>
+<g fill="#16212c" font-family="DejaVu Sans,sans-serif" font-size="13" text-anchor="middle"><text x="50" y="50">Клиент</text><text x="208" y="42">Traefik</text><text x="208" y="58" font-size="10">Gateway API</text><text x="402" y="26">Nginx stable × 2</text><text x="402" y="83">Nginx canary × 1</text><text x="603" y="49">Fluentd</text><text x="603" y="149">Loki / local PV</text><text x="208" y="149">Prometheus / PV</text><text x="402" y="171">Exporters</text><text x="297" y="18" font-size="10">90%</text><text x="298" y="85" font-size="10">10%</text><text x="636" y="101" font-size="10">логи</text><text x="243" y="99" font-size="10">метрики</text></g>
+</svg>
+<p class="small">На схеме показан canary-выпуск. После установки и после отката stable получает 100% трафика. Оба семейства IP доступны приложению; IPv6 — основной.</p>
+<table><thead><tr><th>Слой</th><th>Состав</th></tr></thead><tbody>
+<tr><td>ОС и Kubernetes</td><td>Ubuntu 24.04.5 amd64; kubeadm / Kubernetes 1.34.3</td></tr>
+<tr><td>Runtime и сеть</td><td>containerd 1.7.28; runc 1.3.3; Calico 3.31.2, dual-stack VXLAN</td></tr>
+<tr><td>Gateway и приложение</td><td>Gateway API 1.4.0; Traefik 3.6.2 (chart 37.4.0); Nginx unprivileged 1.28.0-alpine</td></tr>
+<tr><td>Метрики</td><td>kube-prometheus-stack 80.6.0; Prometheus 3.8.1; Operator 0.87.1; node exporter и kube state metrics</td></tr>
+<tr><td>Логи</td><td>Fluentd 1.19.0 с Loki plugin; Loki 3.6.2</td></tr>
+<tr><td>Автоматизация</td><td>Ansible core 2.19.3, Helm 3.19.0, Python и Make</td></tr>
+</tbody></table>
+<p class="note">Проверенная конфигурация: одна VM, 4 vCPU, 8 GiB RAM, 60 GiB диска.
+Нужны SSH/sudo, IPv6/IPv4, DNS/NTP и доступ к публичным repositories/registries.
+Специфические облачные сервисы и инфраструктура автора не требуются.</p>
+<footer>Исходники и точные версии: README.md, config/versions.yaml, config/images.lock.yaml.</footer>
+</section>
+<section class="page" id="features">
+<header><div class="kicker">MTC ENGINEER HACK · паспорт решения · 2 / 3</div><h1>Функции и проверка</h1></header>
+<p>Перед запуском заполняется локальный environment и проверяется SSH.
+Далее <code>bash scripts/deploy.sh --env ubuntu</code> устанавливает инструменты,
+настраивает ОС и Kubernetes, затем разворачивает все компоненты.</p>
+<table><thead><tr><th style="width:25%">Функция</th><th style="width:44%">Реализация и причина выбора</th><th>Как проверить</th></tr></thead><tbody>
+<tr><td>Kubernetes</td><td>kubeadm на Ubuntu: независимость от облачного вендора; Ansible настраивает runtime, сеть и данные.</td><td><code>make health ENV=ubuntu</code></td></tr>
+<tr><td>Веб-приложение</td><td>Nginx с точным ответом и JSON access-логом. Простое приложение позволяет сосредоточиться на инфраструктуре.</td><td><code>curl http://&lt;VM_IPv4&gt;:30080/</code></td></tr>
+<tr><td>Gateway API</td><td>Traefik, GatewayClass, Gateway и HTTPRoute к ClusterIP Service. NodePort не требует внешнего балансировщика.</td><td><code>make verify-release ENV=ubuntu</code></td></tr>
+<tr><td>Prometheus</td><td>Operator и ServiceMonitor; targets Traefik, exporters и Prometheus. Проверяются свежие samples и прирост HTTP counter.</td><td><code>make verify ENV=ubuntu</code>; API queries в инструкции</td></tr>
+<tr><td>Fluentd / Loki</td><td>DaemonSet читает CRI stdout/stderr, передает в Loki. Positions и buffer сохраняются на узле.</td><td>Тот же verify находит access по Request-ID и отдельный error marker</td></tr>
+<tr><td>Повторная установка</td><td>Закрепленные версии, SHA-256 и digest; проверка принадлежности кластера, сохранение PVC и Secrets.</td><td><code>make verify-idempotency ENV=ubuntu</code></td></tr>
+</tbody></table>
+<h2>Дополнительные возможности</h2>
+<table><thead><tr><th style="width:25%">Возможность</th><th>Реализация и проверка</th></tr></thead><tbody>
+<tr><td>IPv6 и IPv4</td><td>Обе семьи у Pod и собственных Services, IPv6 первый. Verify проверяет EndpointSlices, HTTP и логи обеих семей; один endpoint не собирается дважды.</td></tr>
+<tr><td>HTTPS</td><td>Локальная CA и сертификат создаются автоматически, повторный deploy их сохраняет. Verify-release проверяет CA/hostname, включая отрицательные случаи.</td></tr>
+<tr><td>Canary и откат</td><td>Два backend, 90/10, окно 60 с, минимум 100 canary-запросов, максимум 1% 5xx. Неверный ответ или недостаток метрик возвращают 100/0. Проверка: <code>make verify-canary ENV=ubuntu</code>.</td></tr>
+<tr><td>Ограничения процесса</td><td>Nginx: UID 101, read-only root, без capabilities, privilege escalation и API token. Состояние проверяется в работающем контейнере.</td></tr>
+<tr><td>Восстановление</td><td>Прерывание выпуска, замена app pod, история Prometheus/Loki и буфер Fluentd: <code>make demo ENV=ubuntu</code>. Reboot проверяется с внешнего controller.</td></tr>
+</tbody></table>
+<p class="small">Команды отказов предназначены для тестовой VM и временно меняют ее состояние.
+Отчеты сохраняются в artifacts; make evidence собирает их в архив.
+Полные команды HTTP, Prometheus и Loki — в docs/operations.md.</p>
+<footer>Условия успешной проверки и результаты: docs/verification.md.</footer>
+</section>
+<section class="page" id="review">
+<header><div class="kicker">MTC ENGINEER HACK · паспорт решения · 3 / 3</div><h1>Результаты и развитие</h1></header>
+<p>3 октября 2026 года выполнены две установки на чистую Ubuntu 24.04.5.
+Инструменты, Kubernetes и компоненты установил единый deploy;
+ручные исправления не потребовались.</p>
+<table><thead><tr><th>Проверка</th><th>Результат</th></tr></thead><tbody>
+<tr><td>Чистая установка</td><td>5 мин 12 с и 5 мин 45 с</td></tr>
+<tr><td>Локальные тесты и конфигурации</td><td>180 тестов; Python/Ansible/YAML, 7 Helm lint/render, image lock</td></tr>
+<tr><td>Сквозной verify</td><td>HTTP, обе сети, метрики, access/error-логи, runtime security — pass</td></tr>
+<tr><td>TLS/Gateway</td><td>154 проверки за прогон; неверные CA и hostname отклоняются</td></tr>
+<tr><td>Повторный deploy</td><td>Сохранены 28 identities, привязки двух PVC и содержимое пяти Secrets</td></tr>
+<tr><td>Canary и восстановление</td><td>Полный первый прогон: 6 canary-сценариев, interruption, app/PVC/buffer recovery — pass</td></tr>
+<tr><td>Reboot</td><td>API восстановился за 34,85 с и 35,73 с; последующие health/verify — pass</td></tr>
+</tbody></table>
+<p class="small">Проверенные ревизии: c268c5f и 27d775b. Время подготовки VM и SSH не включено.
+Во втором прогоне сценарии canary и PVC/buffer recovery повторно не запускались.
+Машинные результаты и контрольные суммы сохранены в docs/evidence/.</p>
+<h2>Ревью работы</h2>
+<h3>Главная особенность</h3>
+<p>Проверяется наблюдаемое поведение: правильный HTTP-ответ, изменение счетчика,
+точная запись в Loki и восстановление после отказа. Наличие YAML и Ready pod
+само по себе не считается достаточным результатом.</p>
+<h3>Самое сложное решение</h3>
+<p>При выпуске canary статус Kubernetes может обновиться раньше фактической
+конфигурации Traefik. Поэтому проверка ждет заголовок с примененными весами,
+проверяет readiness stable в трех точках и затем измеряет трафик без retries.</p>
+<h3>Как велась разработка</h3>
+<p>Автор задавал план и приоритеты; ИИ реализовывал конфигурации, скрипты и тесты.
+После разбора результатов уточнялись требования и исправлялись проверки адреса
+Gateway, image lock, выпуска canary и сохранения позиций Fluentd.
+Установка с чистой ОС была повторена отдельным поручением перед сдачей.</p>
+<h3>Следующие шаги</h3>
+<ul>
+<li>NetworkPolicy с проверкой потоков, Grafana и Alertmanager с тестовым приемником уведомлений.</li>
+<li>CI с временным Kubernetes и теми же проверками; нужен runner с достаточными CPU/RAM.</li>
+<li>Несколько узлов, отказоустойчивое хранилище и backup/restore; для телеком-сценариев — проверка деградации и отказа каждой IP-семьи.</li>
+</ul>
+<p class="small">Ограничения: один узел, нет HA и backup. Потеря VM/диска означает потерю
+локальных данных; возможны дубли и потери логов при длительном сбое.
+TLS — локальная CA без автоматической ротации.</p>
+<footer>План и замечания: docs/implementation-plan.md и docs/development.md.</footer>
+</section>
+</body>
+</html>

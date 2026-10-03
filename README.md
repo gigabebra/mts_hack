@@ -1,51 +1,39 @@
 # Self-Verifying Kubernetes Stack
 
-Nginx возвращает `Hello World!` через Traefik и Kubernetes Gateway API.
-Prometheus измеряет HTTP и состояние узла, Fluentd доставляет access/error
-логи в Loki. `make verify` связывает HTTP-ответ и access-log одним Request-ID
-и отдельно подтверждает увеличение агрегированного HTTP counter.
+Учебный DevOps-проект для MTC ENGINEER HACK: Nginx в Kubernetes, публикация
+через Gateway API, метрики в Prometheus и логи в Loki через Fluentd.
+Установка выполняется одной командой. Отдельная проверка отправляет запросы,
+проверяет ответы, прирост HTTP-счетчика и доставку access/error-логов.
 
-Полный стек, включая Kubernetes, TLS/Gateway и canary с автооткатом,
-принят на чистой Ubuntu 24.04.5: кодовая ревизия
-`c268c5fb47759db76a661a014ffd56a8974c8f51`, проверка 2026-10-03.
-Один `deploy.sh` установил инструменты, Kubernetes и все компоненты;
-повторные deploy, fault/recovery и reboot прошли.
-[Независимый протокол](docs/acceptance/clean-ubuntu-2026-10-03.md),
-[JSON evidence](docs/acceptance/clean-ubuntu-2026-10-03.json).
-Дополнительная [чистая установка ревизии](docs/reports/CLEAN-INSTALL-RECHECK-2026-10-03.md)
-`27d775b` подтверждена на новой VM: 5 минут 45 секунд, без ручных
-установочных шагов; повторные deploy, внешние проверки и reboot прошли.
-IPv6 — основной; приложение и компоненты доступны также по IPv4.
-[Сетевой контракт и диагностика](docs/networking.md),
-[реестр](docs/status.md), [черновик паспорта](docs/passport/mvp-draft.md).
-История: [чистая приемка MVP](docs/acceptance/dual-stack-acceptance.md),
-[аудит MVP](docs/reports/MVP-AUDIT.md),
-[первая приемка FINAL-01/05](docs/reports/FINAL-INTEGRATION.md).
-Остальные карточки FINAL не назначены. Полный профиль `PROFILE=final`
-пока не поддерживается.
+Дополнительно реализованы IPv6/IPv4, HTTPS с локальной CA, выпуск canary
+с распределением 90/10 и автоматический возврат на stable при ошибках.
+Проект разработан с использованием ИИ по требованиям автора; решения
+и исправления описаны в [истории разработки](docs/development.md).
+
+## Архитектура
 
 ```mermaid
 flowchart LR
-    User[Проверяющий IPv6 / IPv4] -->|HTTP 30080 / HTTPS 30443| Traefik
-    Traefik --> Gateway[Gateway / HTTPRoute]
-    Gateway -->|100% или 90%| Service[Dual-stack Service hello]
-    Service --> Nginx
-    Gateway -->|0% или 10%| Canary[Service hello-canary / Nginx]
-    Nginx -->|stdout / stderr, CRI| Fluentd
-    Canary -->|stdout / stderr, CRI| Fluentd
-    Fluentd --> Loki[(Loki / local PV)]
-    Prometheus[(Prometheus / local PV)] -->|scrape| Traefik
-    Prometheus --> Node[node exporter]
-    Prometheus --> KSM[kube state metrics]
+    U[Клиент IPv6 / IPv4] -->|HTTP 30080 / HTTPS 30443| T[Traefik / Gateway API]
+    T -->|100% или 90%| S[Service hello / Nginx stable]
+    T -->|0% или 10%| C[Service hello-canary / Nginx canary]
+    S -->|stdout / stderr| F[Fluentd]
+    C -->|stdout / stderr| F
+    F --> L[(Loki / local PV)]
+    P[(Prometheus / local PV)] -->|scrape| T
+    P --> N[node exporter]
+    P --> K[kube state metrics]
 ```
 
-Одна Ubuntu VM, kubeadm, containerd, Calico VXLAN; без домашнего registry,
-NAS, DNS или внешнего LoadBalancer. Proxmox применяется только для получения
-нашего тестового стенда. Эксперту он не нужен.
+Одна Ubuntu VM: kubeadm, containerd и Calico VXLAN. Traefik использует
+`GatewayClass`, `Gateway` и `HTTPRoute`; приложение доступно через NodePort.
+Prometheus и Loki остаются внутри кластера, для диагностики используется
+port-forward. Публичное доменное имя, частный registry и облачный балансировщик
+для стенда не нужны; образы скачиваются из публичных registry.
 
 | Компонент | Версия |
 | --- | --- |
-| Ubuntu | 24.04 LTS, amd64 |
+| Ubuntu | 24.04 LTS, amd64; проверено на 24.04.5 |
 | Kubernetes / kubeadm / kubelet / kubectl | 1.34.3 |
 | containerd / runc / CNI plugins | 1.7.28 / 1.3.3 / 1.8.0 |
 | Calico | 3.31.2 |
@@ -58,275 +46,142 @@ NAS, DNS или внешнего LoadBalancer. Proxmox применяется т
 | Fluentd runtime | 1.19.0 |
 | Helm / Ansible core | 3.19.0 / 2.19.3 |
 
-[Версии и SHA256](config/versions.yaml), [все image digests](config/images.lock.yaml),
-[зависимости Python](requirements.txt). Образы применяются по digest; новый
-image, отсутствующий в lock, останавливает deploy. Config reloader оператора
-также закреплен. Plugin Loki встроен в Fluentd image, включается через
-`-p /fluentd/plugins`; локальная сборка образов не требуется.
+Версии и SHA-256 находятся в [versions.yaml](config/versions.yaml), образы —
+в [images.lock.yaml](config/images.lock.yaml), Python-зависимости —
+в [requirements.txt](requirements.txt). Установка использует image digests;
+образ, которого нет в lock-файле, будет отклонен.
 
-## Подготовка
+## Требования
 
-Нужны чистая Ubuntu 24.04 amd64 VM с 4 vCPU, 8 GiB RAM, диском 60 GiB,
-SSH-пользователь с `sudo -n`, доступ к публичным Ubuntu/Kubernetes repositories,
-GitHub, Docker Hub, quay.io и registry.k8s.io. Управляющей машине также нужны
-PyPI/files.pythonhosted.org, get.helm.sh, dl.k8s.io и Helm chart repositories.
-Этот размер проверен чистой приемкой; минимальная конфигурация не определялась.
-На VM не должно быть другого
-Kubernetes/CNI. Примерные CIDR `fd4d:5453:1000:100::/56` и
-`fd4d:5453:1000:200::/112`, `10.244.0.0/16` и `10.96.0.0/16` должны
-не пересекаться с вашими сетями/VPN.
+- Чистая Ubuntu 24.04 amd64: 4 vCPU, 8 GiB RAM, диск 60 GiB. Это проверенная
+  конфигурация, минимальные ресурсы отдельно не определялись.
+- SSH-пользователь с `sudo -n`; завершенный cloud-init при использовании cloud image.
+- Стабильные IPv6 и IPv4 узла, рабочие DNS/NTP. Подсети Pod и Service не должны
+  пересекаться с локальной сетью и VPN. [Подробности сети](docs/networking.md).
+- Управляющая Ubuntu 24.04 с доступом к обеим семьям адресов, включая `::1`.
+  Ею может быть сама VM, если настроено SSH-подключение к ней.
+- Доступ к Ubuntu repositories, pkgs.k8s.io, GitHub, Docker Hub, quay.io,
+  registry.k8s.io, PyPI/files.pythonhosted.org, get.helm.sh и dl.k8s.io.
+  С управляющей машины нужны SSH, API 6443, HTTP 30080 и HTTPS 30443.
 
-Можно установить обычный Ubuntu Server 24.04 из ISO или использовать
-официальный Ubuntu 24.04 cloud image. Подготовка VM не требует Kubernetes
-ресурсов. Задайте стабильные IPv6/IPv4 и hostname и SSH public key; приватный ключ
-остается на управляющей машине. Нужны маршрутизируемый IPv6 узла (ULA или
-GUA), IPv4 того же узла, рабочие DNS/NTP и обе семьи на управляющей машине, включая `::1`.
-DNS/NTP могут использовать любую рабочую семью. IPv4 разрешен и для внутренних соединений.
-Не открывайте NodePort в Internet для MVP.
+VM можно установить из ISO или официального Ubuntu cloud image. Установщик
+не создает VM и не меняет сеть гипервизора. На узле не должно быть чужого
+Kubernetes или CNI. Приложение рассчитано на контролируемую тестовую сеть.
 
-На управляющей Ubuntu 24.04 (это может быть та же VM при доступном SSH)
-нужны исходники проекта и настроенный локальный environment:
+## Установка
 
-```bash
-cd <checkout>
-cp config/environments/ubuntu.example.yaml config/environments/ubuntu.local.yaml
-```
+1. Передайте checkout на управляющую машину или клонируйте репозиторий.
+   Если Git еще не установлен: `sudo apt-get update && sudo apt-get install -y git`.
+2. Из корня проекта создайте локальную конфигурацию:
 
-Отредактируйте только локальный environment: имя узла, `node_ip` (основной IPv6), `node_ipv4`, SSH host/user/port,
-путь к вашему ключу, kubeconfig, DNS/NTP и непересекающиеся CIDR обеих семей.
-IP задавайте без скобок; URL содержит IPv6 в `[скобках]`.
-Этот файл игнорируется
-Git. Все команды запускайте из корня репозитория. SSH host key нужно проверить
-и принять до bootstrap обычным SSH-подключением. Начальный deploy автоматически
-устанавливает недостающие системные prerequisites управляющей Ubuntu через
-`sudo -n apt-get`, затем закрепленные инструменты в `.venv` и `.cache/tools`.
-Если prerequisites уже установлены, локальный root не нужен. Nix не требуется.
-Для получения checkout через Git на чистой машине сначала установите Git:
-`sudo apt-get update && sudo apt-get install -y git`; также можно передать
-уже клонированный репозиторий. Kubernetes, containerd, Helm и Ansible заранее
-устанавливать не нужно.
+   ```bash
+   cp config/environments/ubuntu.example.yaml config/environments/ubuntu.local.yaml
+   ```
 
-До установки должен проходить `ssh <user>@<VM> sudo -n true`. На VM необходимы
-исходящий HTTPS/DNS/NTP; с управляющей машины — SSH, Kubernetes API TCP 6443
-и HTTP TCP 30080 по IPv6 и IPv4. Для одноузлового стенда сетевой overlay остается внутри VM;
-дополнительные узлы в MVP не поддерживаются.
+   Укажите имя узла, IPv6 `node_ip`, IPv4 `node_ipv4`, SSH host/user/key/port,
+   путь к kubeconfig, DNS/NTP и свободные Pod/Service CIDR. Файл игнорируется Git.
+   Адреса в YAML записываются без квадратных скобок.
+3. Проверьте SSH host key и доступ: `ssh <user>@<VM> sudo -n true`.
+4. Запустите:
 
-В чистой приемке 2026-10-03 единый deploy занял 5 минут 12 секунд,
-включая установку недостающих системных prerequisites. Весь основной прогон
-с lint, health, verify-release, двумя повторными deploy и полным demo —
-26 минут 27 секунд; reboot и внешняя проверка выполнены дополнительно.
-Создание VM, передача checkout и подготовка SSH/environment в эти времена
-не входят. Точные стадии — в [evidence](docs/acceptance/clean-ubuntu-2026-10-03.json).
-Исторические измерения памяти/диска/CPU прежнего MVP сохранены отдельно в
-[dual-stack evidence](docs/acceptance/dual-stack-evidence.json);
-минимальные ресурсы и пределы производительности не определялись.
+   ```bash
+   bash scripts/deploy.sh --env ubuntu
+   ```
 
-## Установка и проверка
+Скрипт установит недостающие системные зависимости, создаст `.venv`, скачает
+закрепленные Helm/kubectl, затем настроит ОС, containerd, Kubernetes, Calico
+и компоненты приложения. CA и TLS-сертификат создаются автоматически.
+При наличии make можно использовать `make deploy ENV=ubuntu`.
+Для другого имени конфигурации передайте соответствующий `--env` или `ENV`.
 
-```bash
-bash scripts/deploy.sh --env ubuntu
-```
+Отдельный запуск bootstrap перед deploy не требуется. Ошибка на этом этапе
+останавливает установку. Повторный запуск проверяет принадлежность кластера
+заданному environment; автоматического сброса чужого кластера нет.
 
-При наличии make эквивалентный вход — `make deploy ENV=ubuntu`.
-Команда готовит локальные инструменты,
-выполняет bootstrap чистой Ubuntu и устанавливает весь стек: Kubernetes,
-containerd, Calico, storage, Gateway API/Traefik, Prometheus, Fluentd/Loki,
-stable/canary Nginx и TLS. Отдельный `make bootstrap` перед deploy не требуется.
-Bootstrap и установка компонентов выполняются последовательно под одной
-блокировкой. Ошибка bootstrap останавливает установку; прежний kubeconfig
-не используется для продолжения после ошибки.
-
-После установки:
+## Проверка
 
 ```bash
 make lint
-make verify ENV=ubuntu
+make health ENV=ubuntu
 make verify-release ENV=ubuntu
 make verify-idempotency ENV=ubuntu
 make evidence ENV=ubuntu
 ```
 
-Bootstrap готовит ОС, swap/sysctl, containerd, kubeadm, Calico и каталоги
-local PV. Чужой или частично созданный кластер не сбрасывается автоматически.
-Deploy устанавливает storage, CRDs, Prometheus Operator и monitoring,
-Traefik, ServiceMonitor, Loki/Fluentd, Nginx и Gateway. Конфигурация Kubernetes
-создается автоматизацией; ручные `kubectl apply/edit` для установки не нужны.
+`verify-release` проверяет готовность компонентов, обе сети, HTTP, TLS,
+Prometheus, Fluentd/Loki и ограничения процесса Nginx. `make verify ENV=ubuntu`
+запускает базовую часть без расширенных TLS-маршрутов. JSON-отчеты сохраняются
+в `artifacts/`, в том числе при ошибке. Ненулевой код означает провал проверки;
+`make evidence` собирает отчеты в архив.
 
-`make verify` явно выбирает kubeconfig из environment, открывает временные
-loopback port-forward к Prometheus/Loki и закрывает их при завершении.
-Отчет всегда сохраняется в `artifacts/verify/<run-id>/report.json`, в том
-числе при отказе. Код 0 означает успех всех 11 обязательных проверок:
+`verify-idempotency` дважды повторяет bootstrap и deploy, сравнивает UID
+ресурсов, привязки PVC и содержимое Secrets, затем снова проверяет сервис.
+TLS-сертификаты при повторном deploy сохраняются.
 
-- Ready node/workloads и Bound PVC; актуальные Gateway/HTTPRoute conditions.
-- Основной IPv6 API, обе семьи Node/Pod и Calico pools; собственные Services
-  RequireDualStack с IPv6 первым. У каждого Service проверяются Ready EndpointSlices
-  обеих семей, связанные с теми же Pod UID. Точные системные исключения описаны в сетевом контракте.
-- По обеим семьям HTTP 200 и ровно 12 bytes `Hello World!`, совпадающий Request-ID; fallback
-  для невалидного ID, отрицательный маршрут и настоящий missing-file 404.
-- Живые targets Traefik/node exporter/kube state metrics/Prometheus, свежие
-  samples, отсутствие повторного scrape одного Pod/port/path через разные адреса или jobs,
-  рост scoped counter после суммарной нагрузки по обеим семьям без уменьшения counter.
-- Для каждого семейства точная запись access с тем же Request-ID и независимая stderr error-запись
-  через Loki API, правильные stream и source labels.
-- Реальные UID PID1, отсутствие capabilities/API token и read-only root mount.
-
-`PROFILE=final` пока возвращает ошибку: сетевые политики, Grafana/Alertmanager
-и CI еще не назначены. Принятые TLS/Gateway и canary проверяются через
-`verify-release` и `verify-canary`.
-
-Повторный `make bootstrap` проверяет прежнюю идентичность узла. Команда
-`make deploy` повторяет тот же bootstrap перед обновлением компонентов.
-`verify-idempotency` дважды запускает полный deploy, сравнивает UIDs ресурсов,
-PVC bindings и содержимое существующих прикладных secrets, каждый раз
-выполняет полный verify. Helm release history исключена из сравнения.
-`make evidence` упаковывает JSON-отчеты; kubeconfig/inventory/Secrets не собирает.
-
-На выделенном тестовом стенде `make verify-recovery ENV=ubuntu` проверяет
-сохранение истории Prometheus/Loki при пересоздании pod и доставку пяти
-маркеров из буфера после короткой остановки Loki и рестарта Fluentd.
-Команда восстанавливает одну реплику Loki и завершает сценарий обычным verify.
-Контролируемый reboot VM проверяется последующим `make health ENV=ubuntu`.
-Запускайте health после завершения загрузки ОС: служба kubelet в состоянии
-`activating` дает ненулевой код, после ее запуска проверку нужно повторить.
-
-## Ручная диагностика
-
-Используйте kubeconfig из выбранного локального environment, а не текущий
-контекст kubectl. Ниже выбран `ubuntu`; при другом `ENV` замените имя в
-`environment("ubuntu")`. Путь разрешается относительно корня репозитория:
+Быстрая внешняя проверка — ожидается HTTP 200 и ровно `Hello World!`:
 
 ```bash
-KUBECONFIG="$(.venv/bin/python -c 'import sys; sys.path.insert(0, "scripts"); from stacklib import environment; print(environment("ubuntu")["kubeconfig"])')" || exit 1
-test -s "$KUBECONFIG" || exit 1
-export KUBECONFIG
-export PATH="$PWD/.cache/tools:$PATH"
-kubectl get nodes
-kubectl get pods -A
-kubectl get gatewayclass
-kubectl -n demo get gateway,httproute
 curl -6 --noproxy '*' -g -i -H 'X-Request-ID: manual-check-01' 'http://[<VM_IPv6>]:30080/'
-curl -4 --noproxy '*' -i -H 'X-Request-ID: manual-check-v4' 'http://<VM_IPv4>:30080/'
+curl -4 --noproxy '*' -i -H 'X-Request-ID: manual-check-02' 'http://<VM_IPv4>:30080/'
+curl --noproxy '*' --cacert .state/tls/ubuntu/ca.crt --resolve 'hello.test:30443:[<VM_IPv6>]' 'https://hello.test:30443/'
 ```
 
-Метрики (отдельный терминал для port-forward):
+В ответе присутствуют `X-Request-ID`, `X-Release` и `X-Revision`.
+Как проверить targets Prometheus, выполнить запрос метрик и найти эти
+Request-ID в Loki — в [инструкции по эксплуатации](docs/operations.md).
+
+## Canary и восстановление
+
+После установки stable имеет две replicas и 100% трафика; canary — одну
+replica и 0%. Пути `/backend/stable` и `/backend/canary` проверяют каждый
+backend отдельно. Для выпуска новой ревизии и возврата:
 
 ```bash
-kubectl -n monitoring port-forward --address=::1 service/monitoring-prometheus 9090:9090
-curl -6 --noproxy '*' -gs 'http://[::1]:9090/api/v1/targets'
-curl -6 --noproxy '*' -gsG 'http://[::1]:9090/api/v1/query' \
-  --data-urlencode 'query=traefik_entrypoint_requests_total{namespace="edge",service="traefik-metrics",endpoint="metrics",entrypoint="web",code="200",method="GET"}'
-```
-
-Логи (еще один терминал):
-
-```bash
-kubectl -n logging port-forward --address=::1 service/loki 3100:3100
-curl -6 --noproxy '*' -gsG 'http://[::1]:3100/loki/api/v1/query_range' \
-  --data-urlencode 'query={app="hello",namespace="demo",stream="stdout"} |= "manual-check-01"'
-```
-
-Для stderr отправьте `GET /verify/missing/manual-error-01` через тот же NodePort
-и найдите `manual-error-01` с `stream="stderr"`. `kubectl logs` показывает
-локальный контейнер и не является доказательством доставки во Fluentd/Loki.
-Request-ID хранится в записи, а не в metric/Loki labels.
-
-| Симптом | Диагностика и следующий шаг |
-| --- | --- |
-| ImagePullBackOff | `kubectl describe pod -n <ns> <pod>`; проверить доступ к публичному registry и image lock, повторить deploy |
-| Недостаточно CPU/RAM | `kubectl describe node`; увеличить VM, не удалять requests ради прохождения |
-| PVC Pending | `kubectl get pv,pvc -A`; сверить node affinity, имя узла, volumeName и storageClass |
-| CRD/condition ошибка | `kubectl -n demo describe gateway,httproute`; проверить закрепленную матрицу и порядок deploy |
-| Target down/absent | `/api/v1/targets`, ServiceMonitor labels, `kubectl -n edge get svc traefik-metrics -o yaml` |
-| Loki не находит marker | `kubectl -n logging logs ds/fluentd --tail=100`; проверить CRI путь, stream, buffer и Loki Ready |
-| Bootstrap отказал на существующем кластере | Сверить identity и прошлый failed task; исправить причину, автоматического reset нет |
-| Verify неуспешен | JSON содержит конкретный check; ограниченные events лежат рядом, затем повторить тот же verify |
-
-## TLS, два backend и выпуск canary
-
-После `make deploy ENV=ubuntu` основной маршрут имеет веса stable/canary
-100/0. Stable — `hello` (две replicas), canary — `hello-canary` (одна);
-оба здоровых backend возвращают ровно `Hello World!`. Заголовки `X-Release`
-и `X-Revision` показывают реально обслужившую запрос версию, `X-Traffic-Split`
-— примененные Gateway веса. Canary обновляется через Recreate при нулевом
-весе; stable использует rolling update с двумя replicas.
-`/backend/stable` и `/backend/canary` проверяют каждый backend отдельно.
-Hostname `hello.test` имеет собственный HTTPRoute. HTTPS доступен через
-NodePort 30443; имя и порт можно задать как `tls_hostname` и
-`https_node_port` в локальном environment.
-
-```bash
-make verify-release ENV=ubuntu
 make deploy-canary ENV=ubuntu CANARY_ARGS="--revision demo-v2"
 make verify-release ENV=ubuntu
 make restore-stable ENV=ubuntu
-make verify-canary ENV=ubuntu
-make verify-interruption ENV=ubuntu
-make demo ENV=ubuntu
-# С внешней управляющей машины с явным kubeconfig — reboot тестовой VM:
-make demo ENV=ubuntu DEMO_ARGS="--reboot"
-# Только reboot + health/verify, если остальные demo-сценарии уже проверены:
-make demo ENV=ubuntu DEMO_ARGS="--section reboot"
 ```
 
-`deploy-canary` сначала подтверждает 100/0 и проверяет кандидата отдельным
-маршрутом, затем подает ему 10% общего трафика. За ограниченное окно собирает
-точные HTTP-ответы и метрики именно canary backend. Параметры в
-`config/canary.yaml`: 60 секунд, не менее 100 canary запросов, не более 1% 5xx,
-свежие samples. HTTP 200 с неверным телом тоже означает отказ.
-При недоступных/устаревших метриках либо недостатке выборки результат
-`inconclusive`, а не успех. При отказе выполняется возврат 100/0, проверка
-stable-трафика и восстановление здоровой конфигурации кандидата. Команда
-выпуска возвращает ненулевой код даже при успешном откате.
+Кандидат сначала проверяется без общего трафика, затем получает 10% запросов.
+За 60 секунд проверяются HTTP-ответы и метрики его backend: не менее 100
+запросов, не более 1% 5xx, свежие samples. Параметры — в
+[config/canary.yaml](config/canary.yaml). Неверное тело ответа, ошибки или
+недостаток данных приводят к возврату 100/0 и ненулевому коду выпуска.
+Обычный deploy также возвращает 100/0 и здоровую базовую конфигурацию.
 
-Успешный выпуск оставляет веса 90/10. `restore-stable` и обычный `deploy`
-возвращают 100/0 и базового здорового кандидата: отклоненная версия при
-повторном deploy не возвращается. Все изменения выполняются через Helm
-под общей блокировкой. После interruption читается фактическое состояние;
-для Helm `pending-*` восстанавливается завершенная ревизия (для Gateway —
-только 100/0). Если безопасной ревизии нет, операция завершается явной ошибкой:
-нужно исследовать `helm history` с тем же kubeconfig и восстановить известную
-принятую ревизию; удаление Helm Secrets вручную не является штатным способом.
+На тестовом стенде доступны `make verify-canary`, `make verify-interruption`
+и `make demo` с `ENV=ubuntu`. Они намеренно создают отказы и восстанавливают
+рабочее состояние. Reboot запускается с внешней управляющей машины:
+`make demo ENV=ubuntu DEMO_ARGS="--section reboot"`.
+[Сценарии и результаты](docs/verification.md).
 
-CA создается автоматически и хранится в `.state/tls/<ENV>/ca.crt`; повтор
-deploy сохраняет сертификаты. Ключи не входят в Git. Проверка TLS без `-k`:
+## Проверенный результат и ограничения
 
-```bash
-curl --noproxy '*' --cacert .state/tls/ubuntu/ca.crt \
-  --resolve 'hello.test:30443:[<VM_IPv6>]' 'https://hello.test:30443/'
-curl --noproxy '*' --cacert .state/tls/ubuntu/ca.crt \
-  --resolve 'hello.test:30443:<VM_IPv4>' 'https://hello.test:30443/backend/canary'
-```
+3 октября 2026 года выполнены две установки на чистые Ubuntu VM: **5 мин 12 с**
+и **5 мин 45 с**. Пройдены 180 локальных тестов, проверки HTTP/TLS, метрик,
+логов, повторного deploy и reboot. В первом полном прогоне дополнительно
+проверены canary, откат, прерывание выпуска и восстановление данных после
+замены pod. [Протокол и машинные результаты](docs/verification.md).
 
-`verify-canary` включает реальные тестовые версии с HTTP 500/неверным телом
-после включения 90/10, отрицательный smoke до подачи трафика и сценарии
-отсутствия/недостатка метрик. Он заканчивает восстановлением 100/0 и полным
-`verify-release`. `demo` дополнительно проверяет замену app pod при трафике,
-изменение версии конфигурации и Helm rollback, историю Prometheus/Loki и
-буфер Fluentd. `verify-interruption` реально прерывает отдельный процесс выпуска
-во время Helm upgrade и проверяет восстановление в том же и следующем запуске;
-этот сценарий также входит в `demo`. Каждый сценарий сохраняет JSON в `artifacts/`; `make evidence`
-включает и вложенные отчеты canary. Это fault-сценарии только для выделенного
-тестового стенда, они временно изменяют его состояние.
-Reboot запускается снаружи целевой VM, чтобы проверяющий процесс пережил
-перезагрузку. Запуск этого сценария на самой VM отклоняется до изменения стенда.
+Один узел не обеспечивает HA. Local PV сохраняют данные при замене pod,
+но не при потере диска; backup не реализован. Prometheus хранит данные
+24 часа с пределом 4 GB, Loki — 24 часа; каждый PV имеет capacity 12 GiB,
+которая не является файловой квотой. Буфер Fluentd ограничен; возможны дубли
+и потеря непрочитанных логов при длительном сбое и ротации файлов.
 
-`verify-release` объединяет проверки MVP и назначенного Gateway/TLS.
-NetworkPolicy, Grafana, alerts и CI остаются отдельными неназначенными задачами;
-поэтому `PROFILE=final` по-прежнему отклоняется. Выпуск canary — конечная
-операция с окном наблюдения, не непрерывный контроллер отката.
+TLS использует локальную CA без автоматической ротации. NetworkPolicy,
+Grafana/Alertmanager и CI с временным кластером в эту версию не входят.
+Поддерживается `PROFILE=mvp`; зарезервированный `PROFILE=final` возвращает
+ошибку. Canary проверяется в рамках операции выпуска, непрерывного
+контроллера отката нет.
 
-## Ограничения
+## Документация
 
-Single-node без HA. Local PV с Retain сохраняют данные при пересоздании pod,
-но не защищают от потери диска/VM; резервное копирование не реализовано.
-Емкость local PV не устанавливает filesystem-квоту на каталог узла.
-Retention Prometheus 24h/4GB, Loki 24h, два PV по 12Gi. Fluentd имеет
-persistent positions и ограниченный буфер, допускает дубли; отсутствие
-потерь при произвольной длительности outage не обещается. HTTP сохраняется
-наряду с HTTPS от локальной CA; автоматическое обновление сертификатов не
-реализовано. Endpoint рассчитан на контролируемую тестовую сеть. Prometheus/Loki —
-ClusterIP, доступны для диагностики через loopback port-forward.
-
-Правила работы — [AGENTS.md](AGENTS.md), технические параметры —
-[контракт](docs/contracts.md), исходные требования —
-[план](docs/implementation-plan.md) и [карточки](docs/agent-sessions.md).
+- [План работ](docs/implementation-plan.md) и [история решений и правок](docs/development.md).
+- [Устройство компонентов](docs/architecture.md), [сеть](docs/networking.md),
+  [эксплуатация](docs/operations.md).
+- [Результаты проверок](docs/verification.md) и [паспорт решения](docs/passport.pdf)
+  ([исходник для печати](docs/passport.html)).
+- Настройки компонентов: [Ansible](ansible/README.md),
+  [Gateway](deploy/gateway/README.md), [мониторинг](deploy/monitoring/README.md),
+  [логи](deploy/logging/README.md).

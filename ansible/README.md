@@ -1,4 +1,4 @@
-# Ubuntu bootstrap MVP-01: dual-stack, IPv6 основной
+# Подготовка Ubuntu и Kubernetes
 
 Команды ниже выполняются из корня checkout после `make tools`. Для прямого
 вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
@@ -7,8 +7,8 @@
 export PATH="$PWD/.cache/tools:$PWD/.venv/bin:$PATH"
 ```
 
-Контракт — `docs/contracts.md` версии 3. Интегратор запускает bootstrap на
-новой выделенной Ubuntu 24.04 amd64 VM: 4 vCPU, nominal 8 GiB RAM, диск
+[Архитектура](../docs/architecture.md). Bootstrap рассчитан на новую
+выделенную Ubuntu 24.04 amd64 VM: 4 vCPU, 8 GiB RAM, диск
 60 GiB. Guard требует минимум 7000 MiB MemTotal, 50 GiB root filesystem,
 35 GiB свободного места для установки и 10 GiB для повторного запуска.
 Нужны Python3, SSH с sudo без пароля, завершенный cloud-init и доступные
@@ -37,7 +37,7 @@ ansible-playbook -i .state/ubuntu/inventory.yaml ansible/health.yaml \
 Пути kubeconfig разрешаются относительно checkout. Файл имеет mode 0600,
 каталог — 0700. Playbooks не используют local current-context; `health.yaml`
 обращается только к `/etc/kubernetes/admin.conf` выбранной VM и пригоден после
-контролируемого reboot интегратором.
+контролируемой перезагрузки.
 
 ## Сеть и предварительные проверки
 
@@ -130,15 +130,15 @@ Kubernetes, не отдельная filesystem quota. Данные делят д
 Снаружи по обеим семьям нужны SSH, API 6443 и HTTP NodePort 30080. Метрики
 и Loki не публикуются; диагностика использует loopback port-forward с явным
 kubeconfig. Host firewall должен пропускать маршрутизацию Pod. Для будущих
-нескольких узлов VXLAN требует UDP4789 обеих семей, но MVP — один узел.
+нескольких узлов VXLAN требует UDP4789 обеих семей, но здесь используется один узел.
 Наружу нужны DNS, NTP и HTTPS для Ubuntu, pkgs.k8s.io, GitHub, get.helm.sh,
 registry.k8s.io, quay.io и Docker Hub с их redirect/CDN.
 
 ## Проверки без VM
 
 ```sh
-export ANSIBLE_LOCAL_TEMP=/tmp/mvp01-ansible
-export ANSIBLE_REMOTE_TEMP=/tmp/mvp01-ansible-remote
+export ANSIBLE_LOCAL_TEMP=/tmp/mts-ansible
+export ANSIBLE_REMOTE_TEMP=/tmp/mts-ansible-remote
 ansible-playbook -i mvp, ansible/bootstrap.yaml --syntax-check \
   -e @config/environments/ubuntu.example.yaml
 ansible-playbook -i mvp, ansible/health.yaml --syntax-check

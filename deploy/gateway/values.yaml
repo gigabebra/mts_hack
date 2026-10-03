@@ -9,7 +9,7 @@ tls:
   listenerPort: 8443
   hostname: hello.test
   secretName: hello-tls
-  # Passed only through an ephemeral local values file by the integrator.
+  # Deploy passes these through a temporary private values file.
   certificate: ""
   privateKey: ""
   caCertificate: ""

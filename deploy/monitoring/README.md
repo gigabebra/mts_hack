@@ -1,4 +1,4 @@
-# Мониторинг MVP
+# Prometheus и сбор метрик
 
 Команды ниже выполняются из корня checkout после `make tools`. Для прямого
 вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
@@ -100,7 +100,7 @@ JSON содержит query/raw_query, инфраструктурные samples,
 exit 1. Baseline должен быть успешным snapshot того же run ID не старше часа.
 Фоновый HTTP-трафик может увеличить общий delta: это проверка scope, а не
 трассировка Request-ID. Минимальное увеличение должно соответствовать числу
-успешных GET/200 общей нагрузки. Labels подтверждены [live-приемкой](../../docs/acceptance/dual-stack-acceptance.md);
+успешных GET/200 общей нагрузки. Labels подтверждены [live-приемкой](../../docs/verification.md);
 ни одного собственного Request-ID label не добавляется.
 
 Fixtures запускаются командой:
@@ -111,4 +111,4 @@ python3 -m unittest discover -s deploy/monitoring/tests -v
 
 Это HTTP серверы на `::1` и `127.0.0.1` с синтетическими ответами. Их pass не подтверждает
 живые scrape, совместимость CRDs/Operator или сохранение истории после
-рестарта Prometheus. Эти проверки выполняет интегратор на выделенной VM.
+рестарта Prometheus. Эти проверки выполняются на выделенной тестовой VM.

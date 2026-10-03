@@ -2,7 +2,7 @@ images:
   loki: docker.io/grafana/loki:3.6.2
   fluentd: docker.io/grafana/fluent-plugin-loki:3.6.2
 
-# Bootstrap prepares this directory; the integrator overrides from environment.
+# Bootstrap prepares this directory; deploy overrides it from the environment.
 dataRoot: /var/lib/mts-stack
 
 loki:

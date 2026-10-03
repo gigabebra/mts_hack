@@ -48,9 +48,10 @@ Smoke проверяет реальный Nginx по обеим семьям, Re
 и runtime security, затем здоровый canary и оба демонстрационных отказа
 с заголовками release/revision. Kubernetes/Gateway приемка выполняется отдельно.
 
-## Расширение FINAL-01
+## HTTPS и два backend
 
-FINAL-01 добавляет HTTPS `8443 → 443 → NodePort 30443` и второй backend.
+HTTPS использует порты `8443 → 443 → NodePort 30443`.
+Для выпуска canary предусмотрен второй backend.
 HTTP остается на `8000 → 80 → NodePort 30080`, без redirect. Значения
 `node_port`, `https_node_port`, `tls_hostname` берет общий deploy из выбранного
 environment; по умолчанию это `30080`, `30443`, `hello.test`.
@@ -79,7 +80,7 @@ Stable сохраняет RollingUpdate и две replicas.
 `terminationGracePeriodSeconds: 30`. На это время Nginx продолжает
 отвечать, пока удаление endpoint распространяется до Traefik. Это
 сокращает окно ошибок при rollout и удалении одного stable pod;
-отсутствие ошибок подтверждает отдельный непрерывный live-тест FINAL-05.
+поведение проверяется нагрузкой во время замены pod в `make demo`.
 Ожидание нового canary по revision и отсутствие retries сохраняются.
 
 Для демонстрации отказов `faultMode: http500` возвращает 500 на `/` и
@@ -108,7 +109,7 @@ Stable сохраняет RollingUpdate и две replicas.
 ждет этот маркер фактически обслуживаемой конфигурации после изменения
 весов, затем начинает строгую выборку без retries. Одних текущих API
 conditions недостаточно: Traefik может еще обслуживать прежнюю конфигурацию.
-FINAL checker требует ожидаемый маркер на IP/hostname запросах, сохраняя
+Проверка TLS/маршрутов требует ожидаемый маркер на IP/hostname запросах, сохраняя
 проверки фактического распределения и release/revision. Детерминированные
 `/backend/<track>` от общих весов не зависят и этот маркер не добавляют.
 Незнакомый HTTP host сохраняет поведение `hello`; `/backend/canary/extra`
@@ -116,8 +117,8 @@ FINAL checker требует ожидаемый маркер на IP/hostname з
 
 `traffic.stableWeight` / `traffic.canaryWeight` по умолчанию `100/0`;
 каждый вес — целое число 0–100, сумма строго 100. Оба пользовательских
-маршрута меняются одним Helm release. Общий release helper интегратора
-владеет весами; checker их не меняет.
+маршрута меняются одним Helm release. Общий `release_control.py`
+управляет весами; checker их не меняет.
 
 TLS завершается на HTTPS listener с `tls.mode: Terminate`. Secret
 `hello-tls` содержит `tls.crt`, `tls.key` и публичный `ca.crt`. Chart
@@ -171,7 +172,7 @@ HTTP status/body/Request-ID/release/revision, транспортная ошиб�
 неполная выборка дают fail. В режиме 100/0 canary должен отсутствовать.
 Условия и веса проверяются повторно после выборки. Общий deadline —
 300 секунд, настраивается `--timeout`; report не сохраняет IP, URL и
-ключи. Приемка обоих режимов не заменяет возврат 100/0 интегратором.
+ключи. Приемка обоих режимов не заменяет явный возврат 100/0.
 
 Дополнительные локальные render/fixture проверки:
 

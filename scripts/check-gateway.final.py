@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only FINAL-01 acceptance: current routes, dual-stack TLS and traffic split."""
+"""Verify current routes, dual-stack TLS and traffic split without changing them."""
 
 import argparse
 import collections

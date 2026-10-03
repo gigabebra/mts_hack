@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify MVP plus the assigned TLS/routing extension, without mutating the stack."""
+"""Verify the base stack, TLS and routing without changing the deployment."""
 import argparse
 import datetime as dt
 import sys
@@ -18,7 +18,7 @@ def main():
     directory.mkdir(parents=True)
     report = {'run_id': run_id, 'revision': command(['git', 'rev-parse', 'HEAD'], capture=True).stdout.strip(),
               'working_tree_dirty': bool(command(['git', 'status', '--porcelain'], capture=True).stdout),
-              'scope': ['mvp', 'FINAL-01'], 'status': 'fail', 'checks': [],
+              'scope': ['mvp', 'tls-routing'], 'status': 'fail', 'checks': [],
               'started_at': dt.datetime.now(dt.timezone.utc).isoformat()}
     try:
         env = environment(args.env)
