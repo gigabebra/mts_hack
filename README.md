@@ -5,18 +5,19 @@ Prometheus измеряет HTTP и состояние узла, Fluentd дос�
 логи в Loki. `make verify` связывает HTTP-ответ и access-log одним Request-ID
 и отдельно подтверждает увеличение агрегированного HTTP counter.
 
-MVP с полноценным dual-stack Kubernetes принят на чистой Ubuntu 24.04.5,
-кодовая ревизия `cc3afc6cab06a4cb441c3f0c705e79cc04910a0f`.
-После дополнительного аудита две проверки усилены; код `8ed0e70`
-повторно проверен на рабочем стенде: lint, deploy/verify, recovery и обе сети
-прошли. [Результаты аудита](docs/reports/MVP-AUDIT.md) отделены от прежней
-чистой установки и ее измерений.
+Полный стек, включая Kubernetes, TLS/Gateway и canary с автооткатом,
+принят на чистой Ubuntu 24.04.5: кодовая ревизия
+`c268c5fb47759db76a661a014ffd56a8974c8f51`, проверка 2026-10-03.
+Один `deploy.sh` установил инструменты, Kubernetes и все компоненты;
+повторные deploy, fault/recovery и reboot прошли.
+[Независимый протокол](docs/acceptance/clean-ubuntu-2026-10-03.md),
+[JSON evidence](docs/acceptance/clean-ubuntu-2026-10-03.json).
 IPv6 — основной; приложение и компоненты доступны также по IPv4.
 [Сетевой контракт и диагностика](docs/networking.md),
-[независимая приемка](docs/acceptance/dual-stack-acceptance.md),
 [реестр](docs/status.md), [черновик паспорта](docs/passport/mvp-draft.md).
-Назначенные TLS/Gateway и выпуск canary с автооткатом приняты на `9ce5f99`:
-[протокол FINAL-01/05](docs/reports/FINAL-INTEGRATION.md), [реестр](docs/status.md).
+История: [чистая приемка MVP](docs/acceptance/dual-stack-acceptance.md),
+[аудит MVP](docs/reports/MVP-AUDIT.md),
+[первая приемка FINAL-01/05](docs/reports/FINAL-INTEGRATION.md).
 Остальные карточки FINAL не назначены. Полный профиль `PROFILE=final`
 пока не поддерживается.
 
@@ -107,14 +108,15 @@ Git. Все команды запускайте из корня репозито
 и HTTP TCP 30080 по IPv6 и IPv4. Для одноузлового стенда сетевой overlay остается внутри VM;
 дополнительные узлы в MVP не поддерживаются.
 
-В чистой dual-stack приемке путь от `make tools` до первого успешного
-`make verify` занял 7 минут 8 секунд; весь прогон из 11 стадий, включая
-повторный bootstrap, два повторных deploy и recovery, — 12 минут 9 секунд.
-Создание VM и установка системных prerequisites сюда не входят.
-После проверки ОС видела 7,76 GiB RAM, доступно было 5,86 GiB;
-диск занимал 6,13 GiB, свободно 50,94 GiB. CPU busy за 30 секунд — 3,59%.
-Это снимок после проверки, не пик нагрузки или нагрузочный тест.
-Точные измерения и длительности — в [evidence](docs/acceptance/dual-stack-evidence.json).
+В чистой приемке 2026-10-03 единый deploy занял 5 минут 12 секунд,
+включая установку недостающих системных prerequisites. Весь основной прогон
+с lint, health, verify-release, двумя повторными deploy и полным demo —
+26 минут 27 секунд; reboot и внешняя проверка выполнены дополнительно.
+Создание VM, передача checkout и подготовка SSH/environment в эти времена
+не входят. Точные стадии — в [evidence](docs/acceptance/clean-ubuntu-2026-10-03.json).
+Исторические измерения памяти/диска/CPU прежнего MVP сохранены отдельно в
+[dual-stack evidence](docs/acceptance/dual-stack-evidence.json);
+минимальные ресурсы и пределы производительности не определялись.
 
 ## Установка и проверка
 

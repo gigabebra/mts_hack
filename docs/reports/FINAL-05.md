@@ -8,21 +8,31 @@ values stable. Ошибка запрещает `accepted`, сохраняет н
 выпуска и запускает штатное восстановление 100/0; явный restore остается доступен.
 
 Изменены `scripts/canary.py`, `tests/canary/test_canary.py`, контракт и этот отчет.
-База — `5937f9f38a555684f398e7425b20b9403c12a970`, исправление в рабочем дереве.
+База — `5937f9f38a555684f398e7425b20b9403c12a970`, исправление включено в
+`c268c5fb47759db76a661a014ffd56a8974c8f51` вместе с единым deploy/bootstrap.
 Проверки исправления:
 
 - `pass`: `.venv/bin/python -m unittest discover -s tests/canary -p 'test_*.py' -v`
   — 51 тест, включая pending/failed Helm, неполные replicas при успешном HTTP,
   деградацию до и после split, отказ CLI с exit 2 и сохранение возможности restore.
-- `pass`: `.venv/bin/python -m unittest discover -s tests/unit -v` — 46 тестов.
+- `pass`: `.venv/bin/python -m unittest discover -s tests/unit -v` — 49 тестов
+  итоговой ревизии, включая fail-closed bootstrap/deploy.
 - `pass`: `.venv/bin/python -m py_compile scripts/canary.py tests/canary/test_canary.py`
   и `git diff --check`.
-- `pass`, live read-only: новый `Runtime.stable_ready` на `ENV=ubuntu`,
+- `pass`, первичная live read-only проверка до коммита: новый `Runtime.stable_ready` на `ENV=ubuntu`,
   пять точных HTTP-ответов stable, веса не изменились. Отчет
   `artifacts/canary/stable-readiness-572f3ce09d50/report.json` содержит
   `working_tree_dirty: true` и SHA256 проверенного `scripts/canary.py`.
-- `not run`: повтор полного live canary/fault/recovery набора после исправления;
-  негативные сценарии проверены fixtures, состояние VM не изменялось.
+- `pass`, новая чистая Ubuntu, код `c268c5f`: все шесть live canary-сценариев,
+  interruption, app/config/PVC/buffer recovery и reboot. Здоровый выпуск
+  подтвердил stable readiness во всех трех точках; 2400 HTTP-запросов,
+  240 ответов canary, backend metric delta 241, ошибок 0. Cleanup 100/0 и
+  последующие verify-release прошли. Негативные состояния самого stable
+  проверены fixtures; отдельная live-инъекция его деградации не выполнялась.
+- `pass`: полный `make lint` на новой Ubuntu — 180 тестов.
+
+Новая приемка: [протокол](../acceptance/clean-ubuntu-2026-10-03.md),
+[доказательства](../acceptance/clean-ubuntu-2026-10-03.json).
 
 Следующий блок относится к прежней live-приемке, а не к повтору всего набора
 после этого исправления.

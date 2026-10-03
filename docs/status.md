@@ -1,11 +1,18 @@
 # Состояние проекта
 
-Изменения от 2026-10-03: stable readiness gate исправлен; единый
-`bash scripts/deploy.sh --env ubuntu` теперь устанавливает инструменты,
-запускает bootstrap Ubuntu/Kubernetes и затем компоненты под одной блокировкой.
-49 unit и 51 canary fixture проходят. Новая чистая установка этой ревизии
-еще не подтверждена: известный SSH-доступ к гипервизору недоступен.
-Историческая приемка ниже не заменяет этот прогон.
+Актуальная чистая приемка от 2026-10-03 — `pass`, код
+`c268c5fb47759db76a661a014ffd56a8974c8f51`.
+На новой Ubuntu 24.04.5 единый `bash scripts/deploy.sh --env ubuntu`
+установил недостающие инструменты, Kubernetes и весь стек за 312,30 с.
+Пройдены 180 тестов lint, health, девять полных MVP verify, шесть TLS/Gateway
+прогонов и отдельная внешняя проверка, два повторных bootstrap/deploy,
+шесть canary-сценариев, interruption, app/PVC/buffer recovery и reboot.
+Stable readiness gate проверен до кандидата, до 90/10 и перед `accepted`;
+негативные состояния stable покрыты regression fixtures.
+[Независимый протокол](acceptance/clean-ubuntu-2026-10-03.md),
+[JSON evidence](acceptance/clean-ubuntu-2026-10-03.json).
+Область — MVP и назначенные FINAL-01/05; подготовка комплекта сдачи не выполнялась.
+Далее сохранена история прежних приемок.
 
 Полноценный dual-stack Kubernetes с основным IPv6 принят на кодовой ревизии
 `cc3afc6cab06a4cb441c3f0c705e79cc04910a0f`. IPv4 доступен приложению и компонентам.
