@@ -2,22 +2,22 @@
 
 Для новой VM без IPv6 используйте `config/environments/ubuntu-ipv4.example.yaml`:
 `network_mode: ipv4`, IPv4 в `node_ip`, IPv4 DNS/NTP и только CIDR с суффиксом
-`_ipv4`. `node_ipv4` wrapper подставляет из `node_ip`, если он не указан.
+`_ipv4`. `node_ipv4` скрипт подставляет из `node_ip`, если он не указан.
 Bootstrap не требует и не включает IPv6; работает и с `ipv6.disable=1`.
-Сетевой режим входит в immutable identity: смена режима существующей VM
+Сетевой режим входит в неизменяемые параметры кластера: смена режима существующей VM
 отклоняется до изменений. Далее описан `dual-stack`, выбранный по умолчанию;
 команды установки и проверок одинаковы для обоих режимов.
 
-Команды ниже выполняются из корня checkout после `make tools`. Для прямого
-вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
+Команды выполняются из корня репозитория после установки или `make tools`.
+Для прямого вызова закрепленных Helm/Ansible/Python настройте PATH:
 
-```sh
+```bash
 export PATH="$PWD/.cache/tools:$PWD/.venv/bin:$PATH"
 ```
 
 [Архитектура](../docs/architecture.md). Bootstrap рассчитан на новую
 выделенную Ubuntu 24.04 amd64 VM: 4 vCPU, 8 GiB RAM, диск
-60 GiB. Guard требует минимум 7000 MiB MemTotal, 50 GiB root filesystem,
+60 GiB. Предварительная проверка требует минимум 7000 MiB MemTotal, 50 GiB root filesystem,
 35 GiB свободного места для установки и 10 GiB для повторного запуска.
 Нужны Python3, SSH с sudo без пароля, завершенный cloud-init и доступные
 DNS/NTP. Установка из Ubuntu Server ISO также поддерживается.
@@ -26,23 +26,23 @@ DNS/NTP. Установка из Ubuntu Server ISO также поддержив
 `<ENV>.local.yaml`. `node_ip` — основной стабильный IPv6, `node_ipv4` — IPv4
 той же VM. Документальные адреса `2001:db8:20::10` и `192.0.2.10` заменяются
 реальными. SSH и kubeconfig используют IPv6 по умолчанию. Inventory содержит
-ровно один явный host в группе `mvp`; wrapper строит его из environment.
+ровно один узел в группе `mvp`; скрипт строит его из конфигурации окружения.
 
-```sh
+```bash
 make bootstrap ENV=ubuntu
 make health ENV=ubuntu
 ```
 
 Прямой запуск с уже подготовленным inventory:
 
-```sh
+```bash
 ansible-playbook -i .state/ubuntu/inventory.yaml ansible/bootstrap.yaml \
   -e @config/environments/ubuntu.local.yaml
 ansible-playbook -i .state/ubuntu/inventory.yaml ansible/health.yaml \
   -e @config/environments/ubuntu.local.yaml
 ```
 
-Пути kubeconfig разрешаются относительно checkout. Файл имеет mode 0600,
+Пути kubeconfig разрешаются относительно корня репозитория. Файл имеет mode 0600,
 каталог — 0700. Playbooks не используют local current-context; `health.yaml`
 обращается только к `/etc/kubernetes/admin.conf` выбранной VM и пригоден после
 контролируемой перезагрузки.
@@ -65,9 +65,9 @@ Service, node IP и уже существующих маршрутов кажд�
 исключаются только Calico routes внутри Pod CIDR подтвержденного кластера.
 
 Immutable identity включает `dual-stack-ipv6-primary`, оба адреса, четыре
-CIDR, версии, DNS/NTP и data_root. Чужой кластер, частичный kubeadm init,
-изменение identity или недоступный existing API вызывают отказ. Старый
-single-stack стенд нельзя преобразовать этим bootstrap: нужна новая чистая
+CIDR, версии, DNS/NTP и data_root. Чужой кластер, незавершенный kubeadm init, изменение параметров
+или недоступный API существующего кластера вызывают отказ. Существующий
+single-stack-кластер нельзя преобразовать этим bootstrap: нужна новая чистая
 VM; автоматических reset, upgrade и переноса старых PVC нет. Даже удаление
 устаревших ограничивающих конфигов разрешено только после identity guard.
 
@@ -106,11 +106,11 @@ control-plane health probes используют штатный loopback. Обр
 закреплены digest. Управляемый Corefile применяется и при repeat; стабильный
 checksum перезапускает CoreDNS только при изменении конфигурации.
 
-Необязательные usage/version checks Felix остаются выключены отдельным
+Необязательные проверки версий и отчеты Felix отключены параметром
 `FELIX_USAGEREPORTINGENABLED=false`. [Default](https://github.com/projectcalico/calico/blob/v3.31.2/felix/config/config_params.go#L424),
 [условие запуска](https://github.com/projectcalico/calico/blob/v3.31.2/felix/daemon/daemon.go#L625)
 и [внешний endpoint](https://github.com/projectcalico/calico/blob/v3.31.2/felix/usagerep/usagerep.go#L34)
-сверены с Calico 3.31.2. Это решение независимо от допустимости IPv4 трафика.
+сверены с Calico 3.31.2. Настройка не зависит от выбранного сетевого режима.
 
 ## Health и сохранение данных
 
@@ -135,16 +135,16 @@ Retain, node affinity. Prometheus: 1000:2000/0770, Loki: 10001:10001/0770,
 Fluentd: root:root/0750. Retain/Helm keep не являются backup; 12Gi — capacity
 Kubernetes, не отдельная filesystem quota. Данные делят диск VM.
 
-Снаружи по обеим семьям нужны SSH, API 6443 и HTTP NodePort 30080. Метрики
+Снаружи по обеим семьям нужны SSH, API 6443, HTTP 30080 и HTTPS 30443. Метрики
 и Loki не публикуются; диагностика использует loopback port-forward с явным
-kubeconfig. Host firewall должен пропускать маршрутизацию Pod. Для будущих
-нескольких узлов VXLAN требует UDP4789 обеих семей, но здесь используется один узел.
+kubeconfig. Межсетевой экран узла должен пропускать маршрутизацию Pod.
+В проекте используется один узел.
 Наружу нужны DNS, NTP и HTTPS для Ubuntu, pkgs.k8s.io, GitHub, get.helm.sh,
 registry.k8s.io, quay.io и Docker Hub с их redirect/CDN.
 
 ## Проверки без VM
 
-```sh
+```bash
 export ANSIBLE_LOCAL_TEMP=/tmp/mts-ansible
 export ANSIBLE_REMOTE_TEMP=/tmp/mts-ansible-remote
 ansible-playbook -i mvp, ansible/bootstrap.yaml --syntax-check \

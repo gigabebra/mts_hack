@@ -1,14 +1,14 @@
-# Dual-stack Gateway, TLS и stable/canary
+# Gateway API, TLS и canary
 
 Общая установка поддерживает также `network_mode: ipv4` для новой VM без IPv6:
 Services становятся `SingleStack` / `[IPv4]`, Nginx и Traefik слушают IPv4,
 Gateway status содержит IPv4 `node_ip`. TLS, canary и все проверки маршрутов
 сохраняются. Далее описаны значения по умолчанию для `dual-stack`.
 
-Команды ниже выполняются из корня checkout после `make tools`. Для прямого
-вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
+Команды выполняются из корня репозитория после установки или `make tools`.
+Для прямого вызова закрепленных Helm/Ansible/Python настройте PATH:
 
-```sh
+```bash
 export PATH="$PWD/.cache/tools:$PWD/.venv/bin:$PATH"
 ```
 
@@ -25,18 +25,18 @@ health. Go listener на Linux принимает обе семьи. Metrics Ser
 `global.sendAnonymousUsage` выключены, чтобы не запускать необязательные
 внешние проверки и отчеты.
 
-`check-gateway.py` требует native IPv6 unicast Gateway status. Параметр
-`--expected-address` дополнительно сравнивает status с точным `node_ip`
-выбранного environment; общий `make verify` передает его автоматически.
-Без этого параметра standalone checker проверяет семейство и допустимость
-адреса, но не его принадлежность конкретному стенду. HTTP origin
+`check-gateway.py` с параметром `--expected-address` сравнивает Gateway
+status с точным IPv6- или IPv4-адресом `node_ip`
+выбранного окружения; общий `make verify` передает его автоматически.
+Без этого параметра отдельный запуск проверяет допустимость IPv6-адреса,
+но не его принадлежность конкретному стенду. HTTP origin
 принимает native IPv6 или IPv4, например
 `--base-url 'http://[2001:db8::10]:30080'` и
 `--base-url 'http://192.0.2.10:30080'`. IPv4-mapped и scoped IPv6 URL
-отклоняются; реальные адреса хранятся только в локальном environment.
+отклоняются; реальные адреса хранятся только в локальной конфигурации окружения.
 HTTP и kubectl обращаются к указанному стенду без унаследованных proxies.
 
-```sh
+```bash
 python3 scripts/check-gateway.test.py
 .venv/bin/python deploy/gateway/tests/test_render.py
 LOCKED_NGINX_IMAGE="$(PYTHONPATH=scripts .venv/bin/python -c \
@@ -53,13 +53,13 @@ Smoke проверяет реальный Nginx по обеим семьям, Re
 и runtime security, затем здоровый canary и оба демонстрационных отказа
 с заголовками release/revision. Kubernetes/Gateway приемка выполняется отдельно.
 
-## HTTPS и два backend
+## Маршруты, HTTPS и два backend
 
 HTTPS использует порты `8443 → 443 → NodePort 30443`.
 Для выпуска canary предусмотрен второй backend.
 HTTP остается на `8000 → 80 → NodePort 30080`, без redirect. Значения
 `node_port`, `https_node_port`, `tls_hostname` берет общий deploy из выбранного
-environment; по умолчанию это `30080`, `30443`, `hello.test`.
+окружения; по умолчанию это `30080`, `30443`, `hello.test`.
 
 | Helm release | Ресурсы | Track | Replicas |
 | --- | --- | --- | --- |
@@ -70,7 +70,7 @@ environment; по умолчанию это `30080`, `30443`, `hello.test`.
 `releaseTrack`. Service selectors включают `app.kubernetes.io/instance`,
 поэтому canary не попадает в stable Service. Stable обновляется с
 `maxUnavailable: 0`, `maxSurge: 1`. Оба нормальных ответа имеют ровно
-12 bytes `Hello World!`, без перевода строки. Nginx всегда возвращает
+12 байт `Hello World!`, без перевода строки. Nginx всегда возвращает
 `X-Release` и `X-Revision`; JSON access получает `release` и `revision`.
 Значение `releaseRevision` ограничено 64 безопасными символами. Это поля
 записи, а не новые Loki labels. Fluentd glob `hello-*` охватывает также
@@ -79,7 +79,7 @@ pod `hello-canary-*`.
 Canary использует `Recreate`: обычное изменение кандидата выполняется
 после изоляции общих маршрутов на 100/0, старый candidate pod завершается
 до запуска нового. Так smoke не чередует ответы двух ревизий кандидата.
-Stable сохраняет RollingUpdate и две replicas.
+Stable сохраняет RollingUpdate и две реплики.
 
 Перед остановкой Nginx pod выполняет `preStop: sleep 5` в пределах
 `terminationGracePeriodSeconds: 30`. На это время Nginx продолжает
@@ -145,7 +145,7 @@ TLS Secret и проверка имени сертификата остаютс�
 
 Чтение и проверка существующей конфигурации:
 
-```sh
+```bash
 .venv/bin/python scripts/check-gateway.final.py --env ubuntu \
   --output artifacts/gateway-final-100-0.json
 # Только после установки 90/10 общим release helper:
@@ -153,7 +153,7 @@ TLS Secret и проверка имени сертификата остаютс�
   --output artifacts/gateway-final-90-10.json
 ```
 
-Checker использует только kubeconfig выбранного environment, сверяет
+Checker использует только kubeconfig выбранного окружения, сверяет
 generation/conditions обеих listeners и всех routes, точные backend refs,
 веса, host/path и TLS Secret reference. HTTP и HTTPS проверяются по обеим
 IP-семьям. Curl использует `--resolve` и `--cacert`, без proxy, redirects,
@@ -168,8 +168,7 @@ retries или `-k`. Отрицательные TLS-пробы требуют о
 увеличивает счетчик при каждом принятом повторе. Это особенность счетчика,
 а не восемь самостоятельных routes. Checker требует ровно `4 × 2 = 8`,
 отдельно проверяет ровно четыре ожидаемых имени routes и по два актуальных
-parent status. Смена закрепленной версии требует повторно проверить эту
-семантику; любое другое значение счетчика сейчас дает fail.
+parent status. Любое другое значение счетчика дает ошибку проверки.
 
 По умолчанию для каждой семьи выполняются 1000 независимых GET `/`
 через HTTP NodePort. При `--split` допустимы 5–15% canary; любой неверный
@@ -181,7 +180,7 @@ HTTP status/body/Request-ID/release/revision, транспортная ошиб�
 
 Дополнительные локальные render/fixture проверки:
 
-```sh
+```bash
 .venv/bin/python deploy/app/tests/test_render.py
 .venv/bin/python deploy/gateway/tests/test_render.py
 .venv/bin/python deploy/gateway/tests/test_final.py

@@ -1,13 +1,13 @@
 # Сеть: IPv6 и IPv4
 
-Сеть выбирается явно в environment до первой установки:
+Сетевой режим задается в локальной конфигурации окружения до первой установки:
 
 | `network_mode` | Адреса VM | Kubernetes / Services | Локальный port-forward |
 | --- | --- | --- | --- |
 | `dual-stack` (по умолчанию) | IPv6 `node_ip` и IPv4 `node_ipv4` | IPv6 первый, `RequireDualStack` | `::1` |
 | `ipv4` | IPv4 `node_ip`; `node_ipv4` можно опустить | Только IPv4, `SingleStack` | `127.0.0.1` |
 
-Для VM без IPv6 возьмите [IPv4 environment](../config/environments/ubuntu-ipv4.example.yaml).
+Для VM без IPv6 возьмите [пример конфигурации IPv4](../config/environments/ubuntu-ipv4.example.yaml).
 Достаточно IPv4 default route, стабильного IPv4 на активном интерфейсе и
 IPv4 DNS/NTP. Используются `pod_cidr_ipv4` и `service_cidr_ipv4`; IPv6 CIDR
 не нужны. Bootstrap не включает IPv6. API, kubelet, SSH, Traefik, Nginx,
@@ -17,7 +17,7 @@ Health проверяет DNS A, Service и прямой Pod IPv4. Verify, TLS, 
 с IPv4 EndpointSlices. На управляющей машине также не требуется IPv6.
 
 Автоматического определения или переключения режима нет. Режим входит в
-неизменяемую identity кластера: для смены нужна чистая VM.
+неизменяемую конфигурацию кластера: для смены нужна чистая VM.
 
 Далее описан режим `dual-stack`. IPv6 — основной адрес Kubernetes API и Gateway, а также первое семейство
 Services. IPv4 параллельно доступен приложению и компонентам. DNS/NTP,
@@ -25,9 +25,9 @@ Services. IPv4 параллельно доступен приложению и �
 
 ## Настройка
 
-В локальном environment задаются адреса одной VM: `node_ip` (IPv6),
+В локальной конфигурации задаются адреса одной VM: `node_ip` (IPv6),
 `node_ipv4` (IPv4), а также `ssh_host`. Оба node IP должны быть стабильными
-и принадлежать активным интерфейсам. Нужны default routes обеих семей.
+и принадлежать активным интерфейсам. Нужны маршруты по умолчанию обеих семей.
 
 | Назначение | Поле | Пример |
 | --- | --- | --- |
@@ -43,7 +43,7 @@ Services. IPv4 параллельно доступен приложению и �
 Kubeadm получает CIDR в порядке IPv6,IPv4, kubelet объявляет оба InternalIP.
 Calico использует два явных VXLAN/NAT pool, BGP выключен. Для сохранения
 SLAAC при включенном IPv6 forwarding на uplink задается `accept_ra=2`.
-Bootstrap не меняет netplan, router или настройки гипервизора.
+Bootstrap не меняет netplan, маршрутизатор или настройки гипервизора.
 
 Собственные Services имеют `ipFamilyPolicy: RequireDualStack` и
 `ipFamilies: [IPv6, IPv4]`. Автоматически созданные `default/kubernetes`,
@@ -64,18 +64,16 @@ Services и Ready EndpointSlices обоих семейств. Адреса Endpo
 При неполадках проверьте Node InternalIP, Pod `status.podIPs`, Service
 `clusterIPs`, EndpointSlice `addressType` и маршруты узла. Сравните
 `curl -6` и `curl -4` с `--noproxy '*'`. IPv6 в URL записывается в скобках.
-В сертификат Kubernetes API включены оба адреса узла; отключать TLS
-verification для доступа по IPv4 не требуется.
+В сертификат Kubernetes API включены оба адреса узла; отключать проверку TLS для доступа по IPv4 не требуется.
 
 С управляющей машины нужны SSH, API 6443, HTTP 30080 и HTTPS 30443 по обеим
-семьям. Host firewall должен пропускать маршрутизацию Pod. Метрики и Loki
+семьям. Межсетевой экран узла должен пропускать маршрутизацию Pod. Метрики и Loki
 доступны через loopback port-forward; для него необходим рабочий `::1`.
 
 ServiceMonitor выбирает IPv6 EndpointSlices, чтобы не собирать один endpoint
 дважды через разные адреса. Общий verify выявляет дубликаты Pod/port/path
 независимо от job и Service. Автоматического переключения scrape на IPv4
-при отказе IPv6 нет. Dual-stack также не делает одноузловой control plane
-отказоустойчивым.
+при отказе IPv6 нет. Один узел control plane не обеспечивает отказоустойчивость.
 
 Подробная реализация — [Ansible](../ansible/README.md);
 результаты — [протокол проверки](verification.md).

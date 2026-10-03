@@ -1,14 +1,14 @@
-# Fluentd и Loki
+# Логирование: Fluentd и Loki
 
 При `network_mode: ipv4` установщик передает chart значение `networkMode: ipv4`:
 Loki и Fluentd слушают `0.0.0.0`, Service Loki имеет `[IPv4]` / `SingleStack`.
 Проверки доставки, буфера и восстановления работают через IPv4, включая
 monitor Fluentd на `127.0.0.1`. Далее описан `dual-stack` по умолчанию.
 
-Команды ниже выполняются из корня checkout после `make tools`. Для прямого
-вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
+Команды выполняются из корня репозитория после установки или `make tools`.
+Для прямого вызова закрепленных Helm/Ansible/Python настройте PATH:
 
-```sh
+```bash
 export PATH="$PWD/.cache/tools:$PWD/.venv/bin:$PATH"
 ```
 
@@ -62,7 +62,7 @@ Positions `/var/lib/fluentd/nginx.pos` и file buffer
 сетевые ошибки; HTTP 4xx кроме 429 не повторяет, поэтому ошибки схемы,
 retention или слишком старых данных требуют проверки логов collector.
 
-```sh
+```bash
 helm lint deploy/logging
 helm template logging deploy/logging --namespace logging
 python3 -m unittest discover -s deploy/logging/tests -p 'test_*.py' -v
@@ -77,9 +77,18 @@ Docker smoke требует IPv6 на Docker host (проверен 29.8.0). С�
 DNS A/AAAA из Fluentd, monitor обеих loopback семей, persistent buffer
 и restart при коротком outage. Это проверка с fixtures, не приемка Kubernetes.
 
-Проверка общего прогона только читает Loki, не создает новый HTTP запрос:
+## Проверка
 
-```sh
+`make verify ENV=ubuntu` отправляет запросы и находит их access/error-записи
+в Loki. Ручные команды приведены в
+[README](../../README.md#проверка-логирования).
+
+Ниже показан вызов скрипта внутри общего сценария: `RUN_ID` и `STARTED_AT`
+содержат идентификатор и время начала проверки, Loki доступен через
+port-forward на указанном порту. В режиме `ipv4` используйте
+`http://127.0.0.1:13100`. Скрипт только читает Loki, не создает HTTP-запрос:
+
+```bash
 python3 scripts/check-logs.py --loki-url 'http://[::1]:13100' \
   --run-id "$RUN_ID" --request-id "$RUN_ID" --error-marker "$RUN_ID-err" \
   --start-time "$STARTED_AT" --timeout 120 --output /tmp/logs-report.json
@@ -90,9 +99,10 @@ python3 scripts/check-logs.py --loki-url 'http://[::1]:13100' \
 GET `/verify/missing/<marker>`. Переданные IDs никогда не заменяются.
 CLI принимает URL с native IPv4 или bracketed IPv6 literal; IPv4-mapped
 и scoped IPv6 адреса отклоняет. CLI проверяет exact ID/method/URI/numeric status, оригинальный JSON message,
-реальный missing-file stderr, labels, source path и CRI timestamp. Report
-создается также при timeout/ошибке и не содержит сырого stderr с адресами.
+реальный missing-file stderr, labels, source path и CRI timestamp. Отчет
+создается также при timeout/ошибке и не содержит исходного stderr с адресами.
 
-На выделенной VM проверяются deploy/verify, новая
-проба при остановленном Loki, restart Fluentd, восстановление Loki и поиск
-той же пробы, повторный deploy с сохранением PVC и прежних records.
+`make verify-recovery ENV=ubuntu` проверяет сохранение истории в PVC,
+доставку записей после недоступности Loki и замены Fluentd, а также
+сохранность позиций чтения. Сценарий временно меняет тестовый стенд;
+[результаты](../../docs/verification.md) учитываются отдельно от локальных тестов.

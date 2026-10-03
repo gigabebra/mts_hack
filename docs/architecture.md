@@ -1,4 +1,4 @@
-# Устройство компонентов
+# Архитектура решения
 
 Версии и контрольные суммы зафиксированы в `config/versions.yaml`, образы —
 в `config/images.lock.yaml`. Архивы проверяются по SHA-256, контейнеры запускаются
@@ -14,7 +14,7 @@ bootstrap и установку компонентов через Helm. Ошиб
 весь запуск. `make bootstrap` и `make health` доступны отдельно.
 
 Локальный `config/environments/<ENV>.local.yaml` задает узел, SSH, kubeconfig,
-адреса, подсети и DNS/NTP. Пути разрешаются относительно корня проекта.
+адреса, подсети и DNS/NTP. Пути разрешаются относительно корня репозитория.
 Команды передают kubeconfig явно; унаследованный `KUBECONFIG` и текущий
 контекст не выбирают целевой кластер. API проверяется по доверенному CA
 и настроенному `node_ip`, без HTTP proxy.
@@ -22,7 +22,7 @@ bootstrap и установку компонентов через Helm. Ошиб
 Bootstrap записывает идентичность кластера: имя и адреса узла, Pod/Service
 CIDR, версии, DNS/NTP и каталог данных. Перед повторным запуском проверяются
 этот файл и реальный узел. Чужой или частично созданный кластер не сбрасывается.
-Смена семейства сети и обновление Kubernetes требуют отдельной процедуры.
+Смена сетевого режима и обновление Kubernetes этим установщиком не поддерживаются.
 
 ## Ресурсы
 
@@ -30,8 +30,8 @@ CIDR, версии, DNS/NTP и каталог данных. Перед повт�
 | --- | --- | --- |
 | default | storage | StorageClass `local-retain`, PV `mts-prometheus`, `mts-loki` |
 | edge | traefik | Deployment/Service `traefik`, Service `traefik-metrics` |
-| demo | app | Deployment/Service/ConfigMap `hello`, stable, две replicas |
-| demo | app-canary | Deployment/Service/ConfigMap `hello-canary`, одна replica |
+| demo | app | Deployment/Service/ConfigMap `hello`, stable, две реплики |
+| demo | app-canary | Deployment/Service/ConfigMap `hello-canary`, одна реплика |
 | demo | gateway | GatewayClass `mts-traefik`, Gateway `gateway`, четыре HTTPRoute, Secret `hello-tls` |
 | monitoring | monitoring | Prometheus Operator, Prometheus, node exporter, kube state metrics |
 | monitoring | monitoring-extras | ServiceMonitor Traefik |
@@ -74,7 +74,7 @@ Ingress и Traefik CRD providers выключены. `GatewayClass.controllerNam
 | hello-canary | Exact `/backend/canary`, rewrite в `/` | Только canary |
 
 Все маршруты принадлежат одному release `gateway`. Значения `tls_hostname`,
-`https_node_port` и `node_port` задаются в environment. CA и сертификат
+`https_node_port` и `node_port` задаются в конфигурации окружения. CA и сертификат
 генерируются автоматически; локальные ключи хранятся в `.state/tls/<ENV>/`
 с правами 0600, каталог — 0700. Secret `hello-tls` содержит `tls.crt`,
 `tls.key` и публичный `ca.crt`. Повторный deploy сохраняет сертификаты;
@@ -90,7 +90,7 @@ missing-file error Nginx. Заголовок `X-Request-ID` сохраняетс
 Nginx работает с UID 101, read-only root filesystem, без capabilities,
 privilege escalation и ServiceAccount token. Writable tmp/cache вынесены
 в отдельные volumes. Stable использует RollingUpdate с `maxUnavailable: 0`;
-перед остановкой pod предусмотрено время на удаление endpoint из Gateway.
+перед остановкой Pod предусмотрено время на удаление endpoint из Gateway.
 Canary обновляется через Recreate при нулевом весе.
 
 ## Метрики и логи
@@ -114,8 +114,7 @@ Fluentd читает `/var/log/containers/hello-*_demo_nginx-*.log`, включ�
 CRI stdout разбирается как JSON access, stderr сохраняет Nginx error.
 Labels Loki ограничены `app`, `namespace`, `container`, `stream`; Request-ID,
 URI, pod и адреса остаются в записи. Positions и файловый буфер сохраняются
-на hostPath. Доставка допускает дубли; потеря логов при произвольном сбое
-не исключается. [Настройки коллектора](../deploy/logging/README.md).
+на hostPath. Доставка допускает дубли; при длительном сбое возможна потеря непрочитанных логов. [Настройки коллектора](../deploy/logging/README.md).
 
 ## Управление выпуском
 
@@ -123,18 +122,17 @@ URI, pod и адреса остаются в записи. Positions и файл
 Deploy, canary и сценарии отказов используют общую блокировку. На одном
 стенде изменения выполняются последовательно.
 
-1. Подтвердить веса 100/0 и готовность stable: Helm status, актуальное поколение,
-   все replicas, закрепленный image и неизменность values.
-2. Установить кандидата с весом 0 и проверить его отдельным маршрутом.
-3. Снова проверить stable и включить 90/10. Дождаться фактического
+1. Скрипт подтверждает веса 100/0 и готовность stable: Helm status, актуальное поколение,
+   все реплики, закрепленный образ и неизменность values.
+2. Устанавливает кандидата с весом 0 и проверяет его отдельным маршрутом.
+3. Снова проверяет stable и включает 90/10. Ожидает фактического
    `X-Traffic-Split`, заданного в той же HTTPRoute, что и веса.
-4. Измерить HTTP и метрики конкретного canary backend. Перед принятием
-   еще раз подтвердить готовность stable и canary.
-5. При отказе или недостатке данных вернуть 100/0, проверить stable-трафик
-   и восстановить здоровую конфигурацию кандидата.
+4. Измеряет HTTP и метрики конкретного canary backend. Перед принятием
+   еще раз подтверждает готовность stable и canary.
+5. При отказе или недостатке данных возвращает 100/0, проверяет stable-трафик
+   и восстанавливает здоровую конфигурацию кандидата.
 
-Параметры окна и порогов — `config/canary.yaml`. В измеряемой HTTP-выборке
-нет retries. Ошибочный ответ, тело, роль или ревизия означают отказ.
+Параметры окна и порогов — `config/canary.yaml`. HTTP-запросы в измеряемой выборке выполняются без повторных попыток. Ошибочный ответ, тело, роль или ревизия означают отказ.
 Недоступные/устаревшие метрики или недостаточная выборка дают `inconclusive`.
 Неуспешный выпуск возвращает ненулевой код даже при успешном откате;
 ошибка отката фиксируется как `rollback_failed`.

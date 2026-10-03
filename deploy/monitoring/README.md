@@ -1,4 +1,4 @@
-# Prometheus и сбор метрик
+# Мониторинг: Prometheus
 
 При `network_mode: ipv4` установщик дополнительно применяет `ipv4-values.yaml`
 после основных values. Services используют `[IPv4]` / `SingleStack`, процессы
@@ -6,16 +6,16 @@
 передается `networkMode: ipv4`, локальный port-forward использует `127.0.0.1`.
 Остальные параметры и проверки метрик одинаковы. Далее — базовый `dual-stack`.
 
-Команды ниже выполняются из корня checkout после `make tools`. Для прямого
-вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
+Команды выполняются из корня репозитория после установки или `make tools`.
+Для прямого вызова закрепленных Helm/Ansible/Python настройте PATH:
 
-```sh
+```bash
 export PATH="$PWD/.cache/tools:$PWD/.venv/bin:$PATH"
 ```
 
 `values.yaml` применяется к архиву kube-prometheus-stack **80.6.0** из
 `config/versions.yaml`; Helm release `monitoring`, namespace `monitoring`.
-Устанавливать CRDs до release `monitoring-extras` из `extras/`. Namespace
+Общий deploy устанавливает CRD до release `monitoring-extras` из `extras/`. Namespace
 `edge` и Service `traefik-metrics` создает общая установка Gateway.
 Сторонние зависимости уже содержатся в закрепленном архиве; `helm dependency
 update` здесь не используется.
@@ -41,11 +41,17 @@ ServiceMonitor Traefik находится в `edge`, имеет label `release=m
 
 ## Проверка
 
-Интегратор открывает loopback port-forward к Service Prometheus, используя
-только явно переданный kubeconfig. До baseline нужен успешный warm-up GET
+`make verify ENV=ubuntu` открывает локальный port-forward к Service Prometheus
+с kubeconfig выбранного окружения. До исходного снимка отправляется GET
 через Gateway: счетчик без единого запроса может еще не существовать.
+Ручные команды targets и PromQL приведены в
+[README](../../README.md#проверка-мониторинга).
 
-```sh
+Ниже показан вызов скрипта внутри общего сценария. `RUN_ID` — идентификатор
+проверки, `BASELINE` и `RESULT` — пути к JSON-отчетам; Prometheus уже доступен
+через port-forward. В режиме `ipv4` используйте `http://127.0.0.1:9090`.
+
+```bash
 python3 scripts/check-metrics.py --mode snapshot \
   --prometheus-url 'http://[::1]:9090' --run-id "$RUN_ID" \
   --timeout 90 --output "$BASELINE"
@@ -64,7 +70,6 @@ Scrape discovery использует EndpointSlice. Helm Services имеют
 `RequireDualStack` / `ipFamilies: [IPv6, IPv4]`. Создаваемый Operator
 headless Service `prometheus-operated` может оставаться SingleStack IPv6.
 Prometheus слушает `[::]:9090` — обычный wildcard обеих семей на Linux.
-Специальные PodIP env и два отдельных IPv6 listener больше не нужны.
 Локальный config-reloader использует штатный `127.0.0.1`; HTTP port-forward
 может использовать любую loopback семью. kube-state-metrics слушает `::`,
 общий post-renderer задает `[::]:8080` Operator и `HOST_IP=::` node-exporter,
@@ -106,15 +111,15 @@ JSON содержит query/raw_query, инфраструктурные samples,
 exit 1. Baseline должен быть успешным snapshot того же run ID не старше часа.
 Фоновый HTTP-трафик может увеличить общий delta: это проверка scope, а не
 трассировка Request-ID. Минимальное увеличение должно соответствовать числу
-успешных GET/200 общей нагрузки. Labels подтверждены [live-приемкой](../../docs/verification.md);
+успешных GET/200 общей нагрузки. Labels подтверждены [проверкой на VM](../../docs/verification.md);
 ни одного собственного Request-ID label не добавляется.
 
-Fixtures запускаются командой:
+Локальные тесты входят в `make lint`; отдельный запуск:
 
-```sh
+```bash
 python3 -m unittest discover -s deploy/monitoring/tests -v
 ```
 
-Это HTTP серверы на `::1` и `127.0.0.1` с синтетическими ответами. Их pass не подтверждает
-живые scrape, совместимость CRDs/Operator или сохранение истории после
-рестарта Prometheus. Эти проверки выполняются на выделенной тестовой VM.
+Тесты используют HTTP-серверы на `::1` и `127.0.0.1` с синтетическими ответами.
+Сбор реальных метрик и сохранение истории после перезапуска Prometheus
+проверяются на выделенной VM.
