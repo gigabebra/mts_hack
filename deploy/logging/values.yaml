@@ -1,3 +1,4 @@
+networkMode: dual-stack
 images:
   loki: docker.io/grafana/loki:3.6.2
   fluentd: docker.io/grafana/fluent-plugin-loki:3.6.2

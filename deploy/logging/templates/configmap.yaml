@@ -6,6 +6,10 @@ metadata:
     app.kubernetes.io/part-of: mts-stack
 data:
   loki.yaml: |
+{{- if eq .Values.networkMode "ipv4" }}
+{{ .Files.Get "files/loki.yaml" | replace "\"::\"" "\"0.0.0.0\"" | indent 4 }}
+{{- else }}
 {{ .Files.Get "files/loki.yaml" | indent 4 }}
+{{- end }}
   fluent.conf: |
 {{ tpl (.Files.Get "files/fluent.conf") . | indent 4 }}

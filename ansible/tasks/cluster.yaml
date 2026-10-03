@@ -109,7 +109,7 @@
   ansible.builtin.copy:
     dest: "{{ remote_state }}/calico.yaml"
     mode: '0600'
-    content: "{{ calico_source.content | b64decode | from_yaml_all | list | mvp_calico(image_lock.images, pod_cidr, node_ip, pod_cidr_ipv4, node_ipv4) | map('to_nice_yaml') | join('---\n') }}"
+    content: "{{ calico_source.content | b64decode | from_yaml_all | list | mvp_calico(image_lock.images, pod_cidr | default(''), node_ip, pod_cidr_ipv4, node_ipv4, network.mode) | map('to_nice_yaml') | join('---\n') }}"
 - name: Apply Calico using server-side apply for large CRDs
   ansible.builtin.command:
     argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=120s, apply, --server-side, --field-manager=mts-bootstrap, -f, "{{ remote_state }}/calico.yaml"]

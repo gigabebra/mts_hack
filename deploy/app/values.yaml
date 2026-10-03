@@ -1,3 +1,4 @@
+networkMode: dual-stack
 image: docker.io/nginxinc/nginx-unprivileged:1.28.0-alpine
 imagePullPolicy: IfNotPresent
 fullnameOverride: hello

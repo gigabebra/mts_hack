@@ -11,7 +11,7 @@ import time
 import urllib.request
 import uuid
 
-from stacklib import ROOT, VERSIONS, command, direct_api_env, environment, forward, http_url, internal_http, kubectl, resource, write_json
+from stacklib import ROOT, VERSIONS, command, direct_api_env, environment, forward, http_url, internal_http, kubectl, resource, write_json, network_profile
 from network_checks import network_evidence
 
 HTTP = internal_http()
@@ -123,14 +123,18 @@ def main():
               'working_tree_dirty': bool(command(['git', 'status', '--porcelain'], capture=True).stdout),
               'started_at': now(), 'versions': VERSIONS, 'checks': [], 'status': 'fail'}
     env = None
+    dual = True
     try:
         if args.profile != 'mvp':
             raise ValueError('Unsupported profile: only mvp is implemented; final checks cannot be skipped')
         env = environment(args.env)
-        report['environment'] = {'name': args.env, 'node_name': env['node_name']}
+        network = network_profile(env.get('network_mode', 'dual-stack'))
+        dual = network['ipv6']
+        report['environment'] = {'name': args.env, 'node_name': env['node_name'], 'network_mode': network['mode']}
         base = http_url(env['node_ip'], env['node_port'])
         check(report, 'readiness', 'Expected node, workloads Ready, PVC Bound', lambda: readiness(env))
-        check(report, 'dual_stack_network', 'IPv6-primary API and dual-stack Node, Pods, Services, EndpointSlices and Calico pools',
+        check(report, 'dual_stack_network' if dual else 'ipv4_network',
+              network['mode'] + ' API, Node, Pods, Services, EndpointSlices and Calico pools',
               lambda: network_evidence(env, directory))
         common = ['--kubeconfig', env['kubeconfig'], '--base-url', base, '--run-id', run_id,
                   '--expected-address', env['node_ip'],
@@ -158,10 +162,12 @@ def main():
             traffic_ok = check(report, 'http', 'Exact response, Request-ID, traffic, true missing-file 404, unmatched route',
                                lambda: component('check-gateway.py', traffic, '--mode', 'traffic', '--requests', '20', *common))
             traffic4 = directory / 'gateway-traffic-ipv4.json'
-            traffic4_ok = check(report, 'http_ipv4', 'Same application behavior over native IPv4',
-                                lambda: component('check-gateway.py', traffic4, '--mode', 'traffic', '--requests', '20', *common4))
+            traffic4_ok = True
+            if dual:
+                traffic4_ok = check(report, 'http_ipv4', 'Same application behavior over native IPv4',
+                                    lambda: component('check-gateway.py', traffic4, '--mode', 'traffic', '--requests', '20', *common4))
             if snap and traffic_ok and traffic4_ok:
-                count = sum(json.loads(p.read_text())['data']['request_count'] for p in (traffic, traffic4))
+                count = sum(json.loads(p.read_text())['data']['request_count'] for p in ([traffic, traffic4] if dual else [traffic]))
                 check(report, 'metrics_delta', 'Fresh scoped counter increases by generated requests without reset',
                       lambda: component('check-metrics.py', directory / 'metrics-verify.json', '--mode', 'verify',
                                         '--prometheus-url', prometheus, '--run-id', run_id, '--baseline', baseline,
@@ -173,16 +179,20 @@ def main():
                   lambda: component('check-logs.py', directory / 'logs.json', '--loki-url', loki,
                                     '--run-id', run_id, '--request-id', run_id, '--error-marker', run_id + '-err',
                                     '--start-time', start, '--timeout', '120'))
-            check(report, 'logs_ipv4', 'IPv4 HTTP Request-ID and independent stderr marker in Loki',
-                  lambda: component('check-logs.py', directory / 'logs-ipv4.json', '--loki-url', loki,
-                                    '--run-id', run_id, '--request-id', run_id + '-v4', '--error-marker', run_id + '-v4-err',
-                                    '--start-time', start, '--timeout', '120'))
+            if dual:
+                check(report, 'logs_ipv4', 'IPv4 HTTP Request-ID and independent stderr marker in Loki',
+                      lambda: component('check-logs.py', directory / 'logs-ipv4.json', '--loki-url', loki,
+                                        '--run-id', run_id, '--request-id', run_id + '-v4', '--error-marker', run_id + '-v4-err',
+                                        '--start-time', start, '--timeout', '120'))
         check(report, 'runtime_security', 'Non-root PID1, zero capabilities, root mount ro, API token absent', lambda: runtime(env))
     except Exception as error:
         report['checks'].append({'name': 'orchestration', 'status': 'fail', 'expected': 'All required checks execute', 'actual': str(error)})
     finally:
         required = {'readiness', 'dual_stack_network', 'gateway_conditions', 'metrics_warmup', 'metrics_baseline',
                     'http', 'http_ipv4', 'metrics_delta', 'logs', 'logs_ipv4', 'runtime_security'}
+        if not dual:
+            required -= {'dual_stack_network', 'http_ipv4', 'logs_ipv4'}
+            required.add('ipv4_network')
         missing = required - {c['name'] for c in report['checks']}
         for name in sorted(missing):
             report['checks'].append({'name': name, 'status': 'fail', 'expected': 'Required MVP check', 'actual': 'Not executed because prerequisite failed'})

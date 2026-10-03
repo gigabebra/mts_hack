@@ -7,8 +7,8 @@ metadata:
     {{- include "app.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
-  ipFamilyPolicy: RequireDualStack
-  ipFamilies: [IPv6, IPv4]
+  ipFamilyPolicy: {{ ternary "SingleStack" "RequireDualStack" (eq .Values.networkMode "ipv4") }}
+  ipFamilies: {{ ternary (list "IPv4") (list "IPv6" "IPv4") (eq .Values.networkMode "ipv4") | toJson }}
   selector:
     app.kubernetes.io/name: hello
     app.kubernetes.io/instance: {{ .Release.Name }}

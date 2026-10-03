@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 import sys
+import argparse
 
 
 def validate_network(pod_cidr, service_cidr, node_ip, routes, existing=False, version=6):
@@ -75,11 +76,20 @@ def validate_address(node_ip, interfaces):
 
 
 def main():
-    pod, service, node, pod4, service4, node4, mode = sys.argv[1:]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--network-mode', choices=('dual-stack', 'ipv4'), default='dual-stack')
+    parser.add_argument('values', nargs=7)
+    args = parser.parse_args()
+    pod, service, node, pod4, service4, node4, mode = args.values
     if mode not in ("existing", "new"):
         raise ValueError("Expected explicit new or existing cluster mode")
     node_interfaces = {}
-    for version, pod_net, service_net, node_address in ((6, pod, service, node), (4, pod4, service4, node4)):
+    networks = [(4, pod4, service4, node4)]
+    if args.network_mode == 'dual-stack':
+        networks.insert(0, (6, pod, service, node))
+    elif ipaddress.IPv4Address(node) != ipaddress.IPv4Address(node4):
+        raise ValueError('IPv4 node addresses must match')
+    for version, pod_net, service_net, node_address in networks:
         routes = json.loads(subprocess.check_output(["ip", "-j", f"-{version}", "route", "show", "table", "all"], text=True))
         validate_network(pod_net, service_net, node_address, routes, mode == "existing", version=version)
         interfaces = json.loads(subprocess.check_output(["ip", "-j", f"-{version}", "address", "show"], text=True))
@@ -88,7 +98,8 @@ def main():
     required_free = (10 if mode == "existing" else 35) * 1024**3
     if disk.total < 50 * 1024**3 or disk.free < required_free:
         raise ValueError("Need >=50 GiB root filesystem and >=35 GiB free initially (10 GiB on repeat)")
-    print(json.dumps({"network": "pass", "network_family": "dual-stack-ipv6-primary", "node_interface": node_interfaces[6],
+    print(json.dumps({"network": "pass", "network_family": 'dual-stack-ipv6-primary' if args.network_mode == 'dual-stack' else 'ipv4-only',
+                      "node_interface": node_interfaces[networks[0][0]],
                       "node_ipv4_interface": node_interfaces[4],
                       "disk": "pass", "mode": mode}))
 

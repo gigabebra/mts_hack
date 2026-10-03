@@ -47,13 +47,27 @@ for release, namespace, chart, values in charts:
     # Secrets rendered by these MVP charts contain no credentials; do not preserve any.
     documents = [x for x in documents if x.get('kind') != 'Secret']
     (outdir / (release + '.yaml')).write_text(yaml.safe_dump_all(documents, sort_keys=False))
+    ipv4_values = list(values)
+    if release in ('app', 'logging', 'monitoring-extras'):
+        ipv4_values += ['--set', 'networkMode=ipv4']
+    elif release == 'traefik':
+        ipv4_values += ['--set', 'service.ipFamilies={IPv4},service.ipFamilyPolicy=SingleStack']
+    elif release == 'monitoring':
+        ipv4_values += ['-f', str(ROOT / 'deploy/monitoring/ipv4-values.yaml')]
+    command([tool('helm'), 'lint', chart, *ipv4_values], capture=False)
+    rendered = command([tool('helm'), 'template', release, chart, '-n', namespace,
+                        '--kube-version', VERSIONS['platform']['kubernetes'], *ipv4_values], capture=True).stdout
+    documents = [lock_document(x, 'ipv4') for x in yaml.safe_load_all(rendered) if x]
+    documents = [x for x in documents if x.get('kind') != 'Secret']
+    (outdir / (release + '-ipv4.yaml')).write_text(yaml.safe_dump_all(documents, sort_keys=False))
 
 command([ROOT / '.venv/bin/ansible-playbook', '-i', 'localhost,', 'ansible/bootstrap.yaml', '--syntax-check'])
 command([ROOT / '.venv/bin/ansible-playbook', '-i', 'localhost,', 'ansible/health.yaml', '--syntax-check'])
 for test in sorted((ROOT / 'deploy').glob('*/tests/test_*.py')):
     command([sys.executable, test], timeout=180)
-command([sys.executable, 'deploy/monitoring/tests/check_render.py', '--helm', tool('helm'),
-         '--chart', ROOT / '.cache/downloads/monitoring.tgz'], timeout=180)
+for mode in ('dual-stack', 'ipv4'):
+    command([sys.executable, 'deploy/monitoring/tests/check_render.py', '--helm', tool('helm'),
+             '--chart', ROOT / '.cache/downloads/monitoring.tgz', '--network-mode', mode], timeout=180)
 command([sys.executable, '-m', 'unittest', 'discover', '-s', 'ansible/tests', '-v'])
 command([sys.executable, 'scripts/check-gateway.test.py'], timeout=180)
 command([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/unit', '-v'], timeout=180)

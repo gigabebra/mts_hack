@@ -1,0 +1,17 @@
+# Copy to ubuntu.local.yaml for a NEW Ubuntu VM with no IPv6.
+# Existing clusters cannot change network mode in place.
+network_mode: ipv4
+node_name: mts-mvp
+node_ip: 192.0.2.10
+# node_ipv4 is optional in this mode and defaults to node_ip.
+ssh_host: 192.0.2.10
+ssh_user: ubuntu
+ssh_private_key_file: ~/.ssh/id_ed25519
+ssh_port: 22
+pod_cidr_ipv4: 10.244.0.0/16
+service_cidr_ipv4: 10.96.0.0/16
+dns_servers: [1.1.1.1, 8.8.8.8]
+ntp_servers: [162.159.200.1, 162.159.200.123]
+node_port: 30080
+kubeconfig: .state/ubuntu/admin.kubeconfig
+data_root: /var/lib/mts-stack

@@ -155,7 +155,7 @@ class IPv6HTTPServer(http.server.ThreadingHTTPServer):
 class MetricsFixtures(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.server = IPv6HTTPServer(("::1", 0), Fixture)
+        cls.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
         cls.ipv4_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
@@ -181,7 +181,7 @@ class MetricsFixtures(unittest.TestCase):
     def invoke(self, mode, *extra):
         output = self.baseline if mode == "snapshot" else Path(self.temp.name) / "result.json"
         command = [sys.executable, str(SCRIPT), "--mode", mode, "--prometheus-url",
-                   f"http://[::1]:{self.server.server_port}", "--run-id", "fixture-run",
+                   f"http://127.0.0.1:{self.server.server_port}", "--run-id", "fixture-run",
                    "--timeout", "0.15", "--output", str(output)]
         if mode == "verify":
             command += ["--baseline", str(self.baseline)]
@@ -208,6 +208,25 @@ class MetricsFixtures(unittest.TestCase):
     def test_ipv4_api_origin_is_allowed(self):
         result = self.invoke("snapshot", "--prometheus-url", f"http://127.0.0.1:{self.ipv4_server.server_port}")
         self.assertEqual(result["status"], "pass", result)
+
+    def test_ipv6_api_origin_when_available(self):
+        import errno
+        try:
+            server = IPv6HTTPServer(('::1', 0), Fixture)
+        except OSError as error:
+            if error.errno in (errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL, errno.EPROTONOSUPPORT, errno.ENODEV):
+                self.skipTest('IPv6 loopback unavailable on this controller')
+            raise
+        with server:
+            server.state = self.server.state
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                result = self.invoke('snapshot', '--prometheus-url', f'http://[::1]:{server.server_port}')
+                self.assertEqual(result['status'], 'pass', result)
+            finally:
+                server.shutdown()
+                thread.join()
 
     def test_ipv4_required_and_optional_targets_are_allowed(self):
         for mode in ("required_ipv4", "extra_ipv4_target"):

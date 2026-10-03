@@ -1,6 +1,7 @@
 # Copy to ubuntu.local.yaml; replace documentation addresses and key path.
 # The wrapper builds an explicit single-host inventory group named mvp.
 node_name: mts-mvp
+network_mode: dual-stack
 node_ip: 2001:db8:20::10
 node_ipv4: 192.0.2.10
 ssh_host: 2001:db8:20::10

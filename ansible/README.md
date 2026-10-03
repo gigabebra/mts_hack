@@ -1,5 +1,13 @@
 # Подготовка Ubuntu и Kubernetes
 
+Для новой VM без IPv6 используйте `config/environments/ubuntu-ipv4.example.yaml`:
+`network_mode: ipv4`, IPv4 в `node_ip`, IPv4 DNS/NTP и только CIDR с суффиксом
+`_ipv4`. `node_ipv4` wrapper подставляет из `node_ip`, если он не указан.
+Bootstrap не требует и не включает IPv6; работает и с `ipv6.disable=1`.
+Сетевой режим входит в immutable identity: смена режима существующей VM
+отклоняется до изменений. Далее описан `dual-stack`, выбранный по умолчанию;
+команды установки и проверок одинаковы для обоих режимов.
+
 Команды ниже выполняются из корня checkout после `make tools`. Для прямого
 вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
 

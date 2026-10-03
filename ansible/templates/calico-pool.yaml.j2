@@ -1,3 +1,4 @@
+{% if network.ipv6 %}
 apiVersion: crd.projectcalico.org/v1
 kind: IPPool
 metadata:
@@ -12,6 +13,7 @@ spec:
   allowedUses: [Workload, Tunnel]
   disableBGPExport: true
 ---
+{% endif %}
 apiVersion: crd.projectcalico.org/v1
 kind: IPPool
 metadata:

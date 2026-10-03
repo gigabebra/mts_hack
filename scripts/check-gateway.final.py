@@ -17,7 +17,7 @@ import tempfile
 import time
 import uuid
 
-from stacklib import ROOT, VERSIONS, environment, http_url, kubectl, write_json
+from stacklib import ROOT, VERSIONS, environment, http_url, kubectl, write_json, network_profile
 
 
 SPEC = importlib.util.spec_from_file_location("mvp_gateway", ROOT / "scripts/check-gateway.py")
@@ -240,7 +240,7 @@ def traffic_checks(env, ca, args, deadline):
         response = curl_probe(env, family, path, request_id, deadline, ca=ca, **kwargs)
         return request_id, response
 
-    for family in (6, 4):
+    for family in network_profile(env.get('network_mode', 'dual-stack'))['versions']:
         for tls in (False, True):
             scheme = "https" if tls else "http"
             for track in ("stable", "canary"):
@@ -295,7 +295,7 @@ def traffic_checks(env, ca, args, deadline):
                         "-subj", "/CN=mts-unrelated-acceptance-ca", "-addext", "basicConstraints=critical,CA:TRUE",
                         "-keyout", str(Path(directory) / "ca.key"), "-out", str(wrong_ca)],
                        check=True, capture_output=True, timeout=min(15, MVP.remaining(deadline)))
-        for family in (6, 4):
+        for family in network_profile(env.get('network_mode', 'dual-stack'))['versions']:
             result = curl_probe(env, family, "/", "wrong-ca-probe", deadline, tls=True, ca=wrong_ca)
             checks.append(check(f"final.ipv{family}.tls.wrong_ca", result.get("curl_exit") == 60,
                                 "curl rejects unrelated CA (exit 60)", result))

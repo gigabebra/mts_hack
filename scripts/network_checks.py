@@ -3,37 +3,39 @@ import ipaddress
 import json
 from urllib.parse import urlsplit
 
-from stacklib import ipv6_host, native_host, kubectl, resource, write_json
+from stacklib import native_host, kubectl, resource, write_json, network_profile, node_addresses
 
 # kubeadm and Prometheus Operator create these; our Helm Services have no exception.
 SYSTEM_SINGLE = {('default', 'kubernetes'), ('kube-system', 'kube-dns'),
                  ('monitoring', 'prometheus-operated')}
 
 
-def pair(values, label):
+def pair(values, label, versions=(6, 4)):
     addresses = [ipaddress.ip_address(native_host(x)) for x in values]
-    if [a.version for a in addresses] != [6, 4]:
-        raise ValueError(label + ' requires native IPv6 then IPv4')
+    if [a.version for a in addresses] != list(versions):
+        raise ValueError(label + ' requires configured native IP families ' + str(list(versions)))
     return addresses
 
 
 def validate_snapshot(env, snapshot):
-    pod_nets = [ipaddress.ip_network(env[k]) for k in ('pod_cidr', 'pod_cidr_ipv4')]
-    service_nets = [ipaddress.ip_network(env[k]) for k in ('service_cidr', 'service_cidr_ipv4')]
-    node_ips = pair([env['node_ip'], env['node_ipv4']], 'Node config')
+    network = network_profile(env.get('network_mode', 'dual-stack'))
+    versions = network['versions']
+    pod_nets = [ipaddress.ip_network(env['pod_cidr' if v == 6 else 'pod_cidr_ipv4']) for v in versions]
+    service_nets = [ipaddress.ip_network(env['service_cidr' if v == 6 else 'service_cidr_ipv4']) for v in versions]
+    node_ips = pair(node_addresses(env), 'Node config', versions)
     server = urlsplit(snapshot['api_server'])
-    if server.scheme != 'https' or ipv6_host(server.hostname) != str(node_ips[0]):
-        raise ValueError('Kubeconfig must connect directly to the configured IPv6 node over HTTPS')
+    if server.scheme != 'https' or native_host(server.hostname) != str(node_ips[0]):
+        raise ValueError('Kubeconfig must connect directly to the configured primary node IP over HTTPS')
     nodes = snapshot['nodes']
     if len(nodes) != 1 or nodes[0]['metadata']['name'] != env['node_name']:
         raise ValueError('Unexpected cluster node')
     actual = [ipaddress.ip_address(native_host(a['address'])) for a in nodes[0]['status']['addresses']
               if a['type'] == 'InternalIP']
-    if len(actual) != 2 or set(actual) != set(node_ips):
-        raise ValueError('Node must advertise both configured InternalIPs')
+    if len(actual) != len(versions) or set(actual) != set(node_ips):
+        raise ValueError('Node must advertise exactly the configured InternalIPs')
     cidrs = [ipaddress.ip_network(c) for c in nodes[0]['spec'].get('podCIDRs', [])]
-    if len(cidrs) != 2 or any(c.version != n.version or not c.subnet_of(n) for c, n in zip(cidrs, pod_nets)):
-        raise ValueError('Node requires IPv6-primary Pod CIDRs within both pools')
+    if len(cidrs) != len(versions) or any(c.version != n.version or not c.subnet_of(n) for c, n in zip(cidrs, pod_nets)):
+        raise ValueError('Node requires configured Pod CIDRs within the matching pools')
     count = {'pods': 0, 'services': 0, 'endpoint_slices': 0, 'endpoints': 0}
     pod_ips = {}
     pod_metadata = {}
@@ -42,9 +44,9 @@ def validate_snapshot(env, snapshot):
         if status.get('phase') in ('Succeeded', 'Failed'):
             continue
         label = pod['metadata']['namespace'] + '/' + pod['metadata']['name']
-        addresses = pair([x['ip'] for x in status.get('podIPs', [])], 'Pod ' + label)
+        addresses = pair([x['ip'] for x in status.get('podIPs', [])], 'Pod ' + label, versions)
         if status.get('podIP') != str(addresses[0]):
-            raise ValueError('Pod primary IP must match its first IPv6 address: ' + label)
+            raise ValueError('Pod primary IP must match its first configured address: ' + label)
         if pod.get('spec', {}).get('hostNetwork'):
             if addresses != node_ips:
                 raise ValueError('Host-network Pod must use both node IPs: ' + label)
@@ -59,9 +61,9 @@ def validate_snapshot(env, snapshot):
         key = (service['metadata']['namespace'], service['metadata']['name'])
         spec = service['spec']
         families = spec.get('ipFamilies')
-        single = families == ['IPv6'] and spec.get('ipFamilyPolicy') == 'SingleStack' and key in SYSTEM_SINGLE
-        if not single and (families != ['IPv6', 'IPv4'] or spec.get('ipFamilyPolicy') != 'RequireDualStack'):
-            raise ValueError('Service requires IPv6-primary RequireDualStack: ' + '/'.join(key))
+        single = network['ipv6'] and families == ['IPv6'] and spec.get('ipFamilyPolicy') == 'SingleStack' and key in SYSTEM_SINGLE
+        if not single and (families != network['families'] or spec.get('ipFamilyPolicy') != network['policy']):
+            raise ValueError('Service requires ' + network['policy'] + ' with configured families: ' + '/'.join(key))
         if spec.get('type') == 'ExternalName':
             raise ValueError('ExternalName is outside this verified stack')
         addresses = spec.get('clusterIPs', [])
@@ -70,8 +72,8 @@ def validate_snapshot(env, snapshot):
         if addresses != ['None']:
             if len(addresses) != len(families):
                 raise ValueError('Service missing an address family')
-            for address, network in zip(addresses, service_nets):
-                if ipaddress.ip_address(native_host(address)) not in network:
+            for address, service_network in zip(addresses, service_nets):
+                if ipaddress.ip_address(native_host(address)) not in service_network:
                     raise ValueError('Service IP outside configured family/range')
         for address in spec.get('externalIPs', []):
             native_host(address)
@@ -116,15 +118,15 @@ def validate_snapshot(env, snapshot):
         if service['families'] == ['IPv6', 'IPv4'] and ready['IPv6'] != ready['IPv4']:
             raise ValueError('Service families resolve to different Pod UIDs: ' + '/'.join(key))
     pools = snapshot['calico_pools']
-    if len(pools) != 2 or {ipaddress.ip_network(p['spec']['cidr']) for p in pools} != set(pod_nets):
-        raise ValueError('Exactly the configured IPv6 and IPv4 Calico pools are required')
+    if len(pools) != len(versions) or {ipaddress.ip_network(p['spec']['cidr']) for p in pools} != set(pod_nets):
+        raise ValueError('Exactly the configured Calico pools are required')
     if any(p['spec'].get('vxlanMode') != 'Always' or not p['spec'].get('natOutgoing') or
            p['spec'].get('disabled', False) for p in pools):
         raise ValueError('Both Calico pools require enabled VXLAN Always and outgoing NAT')
     if not all(count.values()):
         raise ValueError('Network evidence is incomplete')
-    return {'families': ['IPv6', 'IPv4'], 'primary': 'IPv6', 'api_transport': 'HTTPS over IPv6',
-            'node_internal_ip_count': 2, 'calico_pool_count': 2, 'calico_vxlan_mode': 'Always',
+    return {'families': network['families'], 'primary': network['primary'], 'api_transport': 'HTTPS over ' + network['primary'],
+            'node_internal_ip_count': len(versions), 'calico_pool_count': len(versions), 'calico_vxlan_mode': 'Always',
             'system_single_stack_services': sorted(exceptions), **count}
 
 

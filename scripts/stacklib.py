@@ -11,6 +11,7 @@ import time
 import urllib.request
 
 import yaml
+from network_config import network_profile, node_addresses
 
 ROOT = Path(__file__).resolve().parent.parent
 VERSIONS = yaml.safe_load((ROOT / 'config/versions.yaml').read_text())
@@ -50,6 +51,10 @@ def tool(name):
 def environment(name):
     path = ROOT / 'config/environments' / (name + '.local.yaml')
     env = yaml.safe_load(path.read_text())
+    env.setdefault('network_mode', 'dual-stack')
+    network = network_profile(env['network_mode'])
+    if not network['ipv6']:
+        env.setdefault('node_ipv4', env.get('node_ip'))
     for key in ('node_name', 'node_ip', 'node_ipv4', 'ssh_host', 'ssh_user', 'kubeconfig'):
         if not env.get(key):
             raise ValueError(f'{path}: missing {key}')
@@ -58,19 +63,31 @@ def environment(name):
     env.setdefault('tls_hostname', 'hello.test')
     env.setdefault('data_root', '/var/lib/mts-stack')
     env.setdefault('ssh_port', 22)
-    env.setdefault('pod_cidr', 'fd4d:5453:1000:100::/56')
-    env.setdefault('service_cidr', 'fd4d:5453:1000:200::/112')
+    if network['ipv6']:
+        env.setdefault('pod_cidr', 'fd4d:5453:1000:100::/56')
+        env.setdefault('service_cidr', 'fd4d:5453:1000:200::/112')
     env.setdefault('pod_cidr_ipv4', '10.244.0.0/16')
     env.setdefault('service_cidr_ipv4', '10.96.0.0/16')
-    ipv6_host(env['node_ip'])
-    if ipaddress.IPv6Address(env['node_ip']).is_loopback:
+    primary = ipaddress.ip_address(native_host(env['node_ip']))
+    if primary.version != network['versions'][0]:
+        raise ValueError('node_ip must use ' + network['primary'] + ' for ' + env['network_mode'])
+    if primary.is_loopback:
         raise ValueError('node_ip must be reachable outside the node, not loopback')
     node4 = ipaddress.ip_address(native_host(env['node_ipv4']))
     if node4.version != 4 or node4.is_loopback:
         raise ValueError('node_ipv4 must be a reachable native IPv4 address')
+    if not network['ipv6'] and primary != node4:
+        raise ValueError('In ipv4 mode node_ip and node_ipv4 must be the same address')
+    env.setdefault('ntp_servers', ['2606:4700:f1::123'] if network['ipv6'] else ['162.159.200.1'])
+    if not network['ipv6']:
+        for key in ('dns_servers', 'ntp_servers'):
+            if not env.get(key) or any(ipaddress.ip_address(x).version != 4 for x in env[key]):
+                raise ValueError(key + ' must contain explicit IPv4 servers in ipv4 mode')
     native_host(env['ssh_host'])
     for key, family in [('pod_cidr', 6), ('service_cidr', 6),
                         ('pod_cidr_ipv4', 4), ('service_cidr_ipv4', 4)]:
+        if family not in network['versions']:
+            continue
         if ipaddress.ip_network(env[key]).version != family:
             raise ValueError(f'{key} must be an IPv{family} network')
     for key in ('kubeconfig', 'ssh_private_key_file'):
@@ -141,35 +158,37 @@ def locked_image(ref):
     return ref.rsplit(':', 1)[0] + '@' + IMAGES[ref]
 
 
-def lock_document(node):
+def lock_document(node, network_mode='dual-stack'):
+    network = network_profile(network_mode)
+    bind = '[::]' if network['ipv6'] else '0.0.0.0'
     if isinstance(node, dict):
         if node.get('name') == 'traefik' and 'image' in node:
-            node['args'] = [arg.replace('.address=:', '.address=[::]:')
+            node['args'] = [arg.replace('.address=:', '.address=' + bind + ':')
                             if arg.lower().startswith('--entrypoints.') else arg
                             for arg in node.get('args', [])]
         if node.get('name') == 'kube-prometheus-stack' and 'image' in node:
             node['args'] = list(dict.fromkeys(
-                arg.replace('--web.listen-address=:', '--web.listen-address=[::]:')
+                arg.replace('--web.listen-address=:', '--web.listen-address=' + bind + ':')
                 for arg in node.get('args', [])))
         if node.get('name') == 'node-exporter' and 'image' in node:
             for item in node.get('env', []):
                 if item.get('name') == 'HOST_IP':
-                    item['value'] = '::'
+                    item['value'] = network['bind_address']
         if node.get('kind') == 'Service' and node.get('apiVersion') == 'v1':
             spec = node.setdefault('spec', {})
             if spec.get('type') != 'ExternalName':
-                if spec.get('ipFamilies', ['IPv6', 'IPv4']) != ['IPv6', 'IPv4']:
-                    raise ValueError('Services require IPv6-primary dual-stack')
-                spec['ipFamilies'] = ['IPv6', 'IPv4']
-                spec['ipFamilyPolicy'] = 'RequireDualStack'
+                if spec.get('ipFamilies', network['families']) != network['families']:
+                    raise ValueError('Services require families ' + str(network['families']))
+                spec['ipFamilies'] = network['families']
+                spec['ipFamilyPolicy'] = network['policy']
         for key, value in node.items():
             if key == 'image' and isinstance(value, str):
                 node[key] = locked_image(value)
             else:
-                lock_document(value)
+                lock_document(value, network_mode)
     elif isinstance(node, list):
         for item in node:
-            lock_document(item)
+            lock_document(item, network_mode)
     return node
 
 
@@ -191,10 +210,11 @@ def write_json(path, data):
 @contextlib.contextmanager
 def forward(env, namespace, service, remote_port, directory):
     # kubectl chooses an unused loopback port atomically.
+    loopback = network_profile(env.get('network_mode', 'dual-stack'))['loopback']
     log = Path(directory) / f'port-forward-{namespace}.log'
     with log.open('w+') as stream:
         process = subprocess.Popen([tool('kubectl'), '--kubeconfig', env['kubeconfig'],
-                                    '-n', namespace, 'port-forward', '--address=::1',
+                                    '-n', namespace, 'port-forward', '--address=' + loopback,
                                     'service/' + service, ':' + str(remote_port)],
                                    stdout=stream, stderr=stream, text=True, env=direct_api_env())
         try:
@@ -203,9 +223,10 @@ def forward(env, namespace, service, remote_port, directory):
             while time.monotonic() < until:
                 stream.flush()
                 text = log.read_text()
-                match = re.search(r'Forwarding from \[::1\]:(\d+)', text)
+                host = '[::1]' if ':' in loopback else loopback
+                match = re.search(r'Forwarding from ' + re.escape(host) + r':(\d+)', text)
                 if match:
-                    yield http_url('::1', match.group(1))
+                    yield http_url(loopback, match.group(1))
                     return
                 if process.poll() is not None:
                     raise RuntimeError('port-forward failed: ' + text[-2000:])

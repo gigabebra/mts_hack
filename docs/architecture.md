@@ -17,7 +17,7 @@ bootstrap и установку компонентов через Helm. Ошиб
 адреса, подсети и DNS/NTP. Пути разрешаются относительно корня проекта.
 Команды передают kubeconfig явно; унаследованный `KUBECONFIG` и текущий
 контекст не выбирают целевой кластер. API проверяется по доверенному CA
-и адресу настроенного IPv6-узла, без HTTP proxy.
+и настроенному `node_ip`, без HTTP proxy.
 
 Bootstrap записывает идентичность кластера: имя и адреса узла, Pod/Service
 CIDR, версии, DNS/NTP и каталог данных. Перед повторным запуском проверяются
@@ -37,7 +37,11 @@ CIDR, версии, DNS/NTP и каталог данных. Перед повт�
 | monitoring | monitoring-extras | ServiceMonitor Traefik |
 | logging | logging | Loki Deployment/Service/PVC и Fluentd DaemonSet |
 
-IPv6 является основным, IPv4 доступен параллельно. Calico использует два
+При `network_mode: ipv4` весь стек использует IPv4: один Calico VXLAN/NAT pool,
+Services с `SingleStack` / `[IPv4]`, API на IPv4 и port-forward на `127.0.0.1`.
+Режим выбирается до первой установки, поддержка IPv6 в ядре не нужна.
+
+В режиме `dual-stack` IPv6 является основным, IPv4 доступен параллельно. Calico использует два
 VXLAN/NAT pool, kube-proxy работает в обычном режиме. Собственные Services:
 `RequireDualStack`, `ipFamilies: [IPv6, IPv4]`. Системные исключения и
 проверка EndpointSlices описаны в [сетевой инструкции](networking.md).

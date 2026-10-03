@@ -20,6 +20,15 @@ def render(release="app", **values):
 
 
 class AppRender(unittest.TestCase):
+    def test_ipv4_service_and_nginx_need_no_ipv6_socket(self):
+        docs = render(networkMode='ipv4')
+        self.assertEqual(docs['Service']['spec']['ipFamilies'], ['IPv4'])
+        self.assertEqual(docs['Service']['spec']['ipFamilyPolicy'], 'SingleStack')
+        config = docs['ConfigMap']['data']['nginx.conf']
+        self.assertIn('listen 0.0.0.0:8080;', config)
+        self.assertNotIn('[::]', config)
+        self.assertNotIn('ipv6only', config)
+
     def test_releases_are_disjoint_and_stable_identity_is_preserved(self):
         stable = render(releaseRevision="stable-1")
         canary = render("app-canary", fullnameOverride="hello-canary", releaseTrack="canary", replicas=1,

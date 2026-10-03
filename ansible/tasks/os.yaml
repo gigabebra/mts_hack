@@ -30,9 +30,15 @@
     dest: /etc/ssh/sshd_config.d/00-mts-network.conf
     mode: '0644'
     content: |
+      {% if network.ipv6 %}
       AddressFamily any
+      {% else %}
+      AddressFamily inet
+      {% endif %}
       ListenAddress 0.0.0.0
+      {% if network.ipv6 %}
       ListenAddress ::
+      {% endif %}
       Port {{ ssh_port | default(22) }}
   register: ssh_network_config
 - name: Validate complete SSH configuration before restarting its listener
@@ -55,8 +61,12 @@
     content: |
       [Socket]
       ListenStream=
+      {% if network.ipv6 %}
       ListenStream=[::]:{{ ssh_port | default(22) }}
       BindIPv6Only=both
+      {% else %}
+      ListenStream=0.0.0.0:{{ ssh_port | default(22) }}
+      {% endif %}
   register: ssh_network_socket
 - name: Confirm SSH restart preserves established child sessions
   ansible.builtin.command: systemctl show ssh.service --property=KillMode --value
@@ -102,8 +112,8 @@
     mode: '0644'
     content: |
       [Time]
-      NTP={{ ntp_servers | default(['2606:4700:f1::123']) | mvp_servers | join(' ') }}
-      FallbackNTP={{ ntp_servers | default(['2606:4700:f1::123']) | mvp_servers | join(' ') }}
+      NTP={{ ntp_servers | default(['2606:4700:f1::123'] if network_mode | default('dual-stack') == 'dual-stack' else ['162.159.200.1']) | mvp_servers(network_mode | default('dual-stack')) | join(' ') }}
+      FallbackNTP={{ ntp_servers | default(['2606:4700:f1::123'] if network_mode | default('dual-stack') == 'dual-stack' else ['162.159.200.1']) | mvp_servers(network_mode | default('dual-stack')) | join(' ') }}
   register: ntp_network_config
 - name: Remove former NTP family restrictions
   ansible.builtin.file:
@@ -174,17 +184,19 @@
     dest: /etc/sysctl.d/99-mts-kubernetes.conf
     mode: '0644'
     content: |
+      net.bridge.bridge-nf-call-iptables = 1
+      net.ipv4.ip_forward = 1
+      {% if network.ipv6 %}
       # Accept router advertisements before enabling forwarding, including
       # the existing uplink (default applies only to newly created devices).
       net.ipv6.conf.all.accept_ra = 2
       net.ipv6.conf.default.accept_ra = 2
       net/ipv6/conf/{{ node_interface }}/accept_ra = 2
-      net.bridge.bridge-nf-call-iptables = 1
       net.bridge.bridge-nf-call-ip6tables = 1
-      net.ipv4.ip_forward = 1
       net.ipv6.bindv6only = 0
       net.ipv6.conf.all.forwarding = 1
       net.ipv6.conf.default.forwarding = 1
+      {% endif %}
   register: sysctl_config
 - name: Apply required sysctls
   ansible.builtin.command: sysctl --load=/etc/sysctl.d/99-mts-kubernetes.conf

@@ -56,9 +56,11 @@ port-forward. Публичное доменное имя, частный registr
 - Чистая Ubuntu 24.04 amd64: 4 vCPU, 8 GiB RAM, диск 60 GiB. Это проверенная
   конфигурация, минимальные ресурсы отдельно не определялись.
 - SSH-пользователь с `sudo -n`; завершенный cloud-init при использовании cloud image.
-- Стабильные IPv6 и IPv4 узла, рабочие DNS/NTP. Подсети Pod и Service не должны
+- Стабильный IPv4 узла; для режима `dual-stack` также нужен IPv6. Рабочие
+  DNS/NTP. Подсети Pod и Service не должны
   пересекаться с локальной сетью и VPN. [Подробности сети](docs/networking.md).
-- Управляющая Ubuntu 24.04 с доступом к обеим семьям адресов, включая `::1`.
+- Управляющая Ubuntu 24.04 с доступом к выбранным семьям адресов.
+  Для `ipv4` достаточно IPv4 и `127.0.0.1`; для `dual-stack` нужен также `::1`.
   Ею может быть сама VM, если настроено SSH-подключение к ней.
 - Доступ к Ubuntu repositories, pkgs.k8s.io, GitHub, Docker Hub, quay.io,
   registry.k8s.io, PyPI/files.pythonhosted.org, get.helm.sh и dl.k8s.io.
@@ -78,7 +80,18 @@ Kubernetes или CNI. Приложение рассчитано на контр
    cp config/environments/ubuntu.example.yaml config/environments/ubuntu.local.yaml
    ```
 
-   Укажите имя узла, IPv6 `node_ip`, IPv4 `node_ipv4`, SSH host/user/key/port,
+   **Если на новой VM нет IPv6**, используйте другой пример:
+
+   ```bash
+   cp config/environments/ubuntu-ipv4.example.yaml config/environments/ubuntu.local.yaml
+   ```
+
+   В нем задано `network_mode: ipv4`, а `node_ip` — IPv4 VM. `node_ipv4`
+   можно не указывать: он равен `node_ip`. IPv6-адреса, IPv6-маршрут и даже
+   поддержка IPv6 в ядре не нужны. DNS/NTP укажите IPv4-адресами.
+
+   Режим по умолчанию — `network_mode: dual-stack`: IPv6 `node_ip`, IPv4 `node_ipv4`.
+   Укажите имя узла, адреса выбранного режима, SSH host/user/key/port,
    путь к kubeconfig, DNS/NTP и свободные Pod/Service CIDR. Файл игнорируется Git.
    Адреса в YAML записываются без квадратных скобок.
 3. Проверьте SSH host key и доступ: `ssh <user>@<VM> sudo -n true`.
@@ -97,6 +110,8 @@ Kubernetes или CNI. Приложение рассчитано на контр
 Отдельный запуск bootstrap перед deploy не требуется. Ошибка на этом этапе
 останавливает установку. Повторный запуск проверяет принадлежность кластера
 заданному environment; автоматического сброса чужого кластера нет.
+Сетевой режим выбирается перед первой установкой. Менять его у существующего
+кластера нельзя: проверка identity остановит установку; нужна чистая VM.
 
 ## Проверка
 
@@ -108,7 +123,7 @@ make verify-idempotency ENV=ubuntu
 make evidence ENV=ubuntu
 ```
 
-`verify-release` проверяет готовность компонентов, обе сети, HTTP, TLS,
+`verify-release` проверяет готовность компонентов, сети выбранного режима, HTTP, TLS,
 Prometheus, Fluentd/Loki и ограничения процесса Nginx. `make verify ENV=ubuntu`
 запускает базовую часть без расширенных TLS-маршрутов. JSON-отчеты сохраняются
 в `artifacts/`, в том числе при ошибке. Ненулевой код означает провал проверки;
@@ -124,6 +139,12 @@ TLS-сертификаты при повторном deploy сохраняютс
 curl -6 --noproxy '*' -g -i -H 'X-Request-ID: manual-check-01' 'http://[<VM_IPv6>]:30080/'
 curl -4 --noproxy '*' -i -H 'X-Request-ID: manual-check-02' 'http://<VM_IPv4>:30080/'
 curl --noproxy '*' --cacert .state/tls/ubuntu/ca.crt --resolve 'hello.test:30443:[<VM_IPv6>]' 'https://hello.test:30443/'
+```
+
+В режиме `ipv4` используйте IPv4-команду HTTP, а для HTTPS:
+
+```bash
+curl -4 --noproxy '*' --cacert .state/tls/ubuntu/ca.crt --resolve 'hello.test:30443:<VM_IPv4>' 'https://hello.test:30443/'
 ```
 
 В ответе присутствуют `X-Request-ID`, `X-Release` и `X-Revision`.
@@ -156,6 +177,16 @@ make restore-stable ENV=ubuntu
 [Сценарии и результаты](docs/verification.md).
 
 ## Проверенный результат и ограничения
+
+4 октября 2026 года (МСК) завершен полный прогон `ipv4` на новой Ubuntu VM
+с отключенным в ядре IPv6 (`ipv6.disable=1`). Чистая установка — **6 мин 33 с**;
+прошли HTTP/TLS, метрики/логи, два повторных deploy, canary/rollback,
+прерывание выпуска, восстановление данных и reboot. Из 195 локальных тестов
+193 прошли, два теста IPv6 loopback пропущены из-за отсутствия IPv6.
+На отдельной Ubuntu с IPv6 прошли все 195 тестов и сквозная проверка
+существующего dual-stack стенда новым кодом.
+[Протокол IPv4-only](docs/verification.md#ipv4-only-на-vm-без-ipv6) и
+[машинный отчет](docs/evidence/ipv4-validation.json).
 
 3 октября 2026 года выполнены две установки на чистые Ubuntu VM: **5 мин 12 с**
 и **5 мин 45 с**. Пройдены 180 локальных тестов, проверки HTTP/TLS, метрик,

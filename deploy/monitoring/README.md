@@ -1,5 +1,11 @@
 # Prometheus и сбор метрик
 
+При `network_mode: ipv4` установщик дополнительно применяет `ipv4-values.yaml`
+после основных values. Services используют `[IPv4]` / `SingleStack`, процессы
+слушают IPv4, ServiceMonitor выбирают IPv4 EndpointSlices. Для `extras/`
+передается `networkMode: ipv4`, локальный port-forward использует `127.0.0.1`.
+Остальные параметры и проверки метрик одинаковы. Далее — базовый `dual-stack`.
+
 Команды ниже выполняются из корня checkout после `make tools`. Для прямого
 вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
 

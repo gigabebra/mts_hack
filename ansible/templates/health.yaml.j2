@@ -11,7 +11,7 @@ spec:
   containers:
     - name: http
       image: {{ images.busybox | mvp_image(image_lock.images) | to_json }}
-      command: [sh, -ec, 'mkdir -p /tmp/www; printf MTS_POD_HTTP_OK >/tmp/www/index.html; httpd -p "[$POD_IP]:8080" -h /tmp/www; exec httpd -f -p 0.0.0.0:8080 -h /tmp/www']
+      command: [sh, -ec, 'mkdir -p /tmp/www; printf MTS_POD_HTTP_OK >/tmp/www/index.html; {% if network.ipv6 %}httpd -p "[$POD_IP]:8080" -h /tmp/www; {% endif %}exec httpd -f -p 0.0.0.0:8080 -h /tmp/www']
       env:
         - name: POD_IP
           valueFrom:
@@ -30,8 +30,8 @@ metadata:
   labels:
     mts-health-run: {{ health_uuid.stdout }}
 spec:
-  ipFamilyPolicy: RequireDualStack
-  ipFamilies: [IPv6, IPv4]
+  ipFamilyPolicy: {{ network.policy }}
+  ipFamilies: {{ network.families | to_json }}
   selector:
     mts-health: {{ health_uuid.stdout }}
   ports: [{port: 8080, targetPort: 8080}]

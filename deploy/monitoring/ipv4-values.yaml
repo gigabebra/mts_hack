@@ -1,0 +1,45 @@
+# Applied after values.yaml only for network_mode: ipv4.
+prometheusOperator:
+  service:
+    ipDualStack:
+      ipFamilies: [IPv4]
+      ipFamilyPolicy: SingleStack
+prometheus:
+  service:
+    ipDualStack:
+      ipFamilies: [IPv4]
+      ipFamilyPolicy: SingleStack
+  serviceMonitor:
+    relabelings:
+      - sourceLabels: [__meta_kubernetes_endpointslice_address_type]
+        action: keep
+        regex: IPv4
+  prometheusSpec:
+    additionalArgs:
+      - name: web.listen-address
+        value: "0.0.0.0:9090"
+prometheus-node-exporter:
+  service:
+    ipDualStack:
+      ipFamilies: [IPv4]
+      ipFamilyPolicy: SingleStack
+  prometheus:
+    monitor:
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_endpointslice_address_type]
+          action: keep
+          regex: IPv4
+kube-state-metrics:
+  extraArgs:
+    - "--host=0.0.0.0"
+    - "--telemetry-host=0.0.0.0"
+  service:
+    ipDualStack:
+      ipFamilies: [IPv4]
+      ipFamilyPolicy: SingleStack
+  prometheus:
+    monitor:
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_endpointslice_address_type]
+          action: keep
+          regex: IPv4

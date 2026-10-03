@@ -1,3 +1,4 @@
+networkMode: dual-stack
 traefik:
   namespace: edge
   serviceLabels:

@@ -1,6 +1,25 @@
 # Сеть: IPv6 и IPv4
 
-IPv6 — основной адрес Kubernetes API и Gateway, а также первое семейство
+Сеть выбирается явно в environment до первой установки:
+
+| `network_mode` | Адреса VM | Kubernetes / Services | Локальный port-forward |
+| --- | --- | --- | --- |
+| `dual-stack` (по умолчанию) | IPv6 `node_ip` и IPv4 `node_ipv4` | IPv6 первый, `RequireDualStack` | `::1` |
+| `ipv4` | IPv4 `node_ip`; `node_ipv4` можно опустить | Только IPv4, `SingleStack` | `127.0.0.1` |
+
+Для VM без IPv6 возьмите [IPv4 environment](../config/environments/ubuntu-ipv4.example.yaml).
+Достаточно IPv4 default route, стабильного IPv4 на активном интерфейсе и
+IPv4 DNS/NTP. Используются `pod_cidr_ipv4` и `service_cidr_ipv4`; IPv6 CIDR
+не нужны. Bootstrap не включает IPv6. API, kubelet, SSH, Traefik, Nginx,
+Loki, Fluentd и мониторинг используют IPv4; Calico создает один IPv4 pool.
+Health проверяет DNS A, Service и прямой Pod IPv4. Verify, TLS, canary и
+восстановление проверяют тот же набор функций через IPv4. Метрики собираются
+с IPv4 EndpointSlices. На управляющей машине также не требуется IPv6.
+
+Автоматического определения или переключения режима нет. Режим входит в
+неизменяемую identity кластера: для смены нужна чистая VM.
+
+Далее описан режим `dual-stack`. IPv6 — основной адрес Kubernetes API и Gateway, а также первое семейство
 Services. IPv4 параллельно доступен приложению и компонентам. DNS/NTP,
 локальные проверки и внешние загрузки могут использовать обе семьи.
 

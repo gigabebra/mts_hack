@@ -32,9 +32,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--helm", required=True)
     parser.add_argument("--chart", required=True)
+    parser.add_argument('--network-mode', choices=('dual-stack', 'ipv4'), default='dual-stack')
     args = parser.parse_args()
-    objects = render(args.helm, "monitoring", args.chart, "-f", str(ROOT / "deploy/monitoring/values.yaml"))
-    extras = render(args.helm, "monitoring-extras", ROOT / "deploy/monitoring/extras")
+    dual = args.network_mode == 'dual-stack'
+    family = 'IPv6' if dual else 'IPv4'
+    bind = '::' if dual else '0.0.0.0'
+    values = ['-f', str(ROOT / 'deploy/monitoring/values.yaml')]
+    if not dual:
+        values += ['-f', str(ROOT / 'deploy/monitoring/ipv4-values.yaml')]
+    objects = render(args.helm, "monitoring", args.chart, *values)
+    extras = render(args.helm, "monitoring-extras", ROOT / "deploy/monitoring/extras",
+                    '--set', 'networkMode=' + args.network_mode)
     lock = yaml.safe_load((ROOT / "config/images.lock.yaml").read_text())["images"]
     images = set(walk(objects))
     assert len(images) == 4, images
@@ -53,15 +61,15 @@ def main():
             assert all(isinstance(arg, str) for arg in container.get("args", [])), container["args"]
             assert container["resources"]["requests"] and container["resources"]["limits"]
     services = [obj for obj in objects if obj["kind"] == "Service"]
-    assert services and all(obj["spec"].get("ipFamilies") == ["IPv6", "IPv4"]
-                            and obj["spec"].get("ipFamilyPolicy") == "RequireDualStack" for obj in services)
+    assert services and all(obj["spec"].get("ipFamilies") == (['IPv6', 'IPv4'] if dual else ['IPv4'])
+                            and obj["spec"].get("ipFamilyPolicy") == ('RequireDualStack' if dual else 'SingleStack') for obj in services)
     assert [arg for arg in args if arg.startswith("--localhost=")] == ["--localhost=127.0.0.1"]
     ksm = next(obj for obj in workloads if obj["metadata"]["name"] == "monitoring-kube-state-metrics")
     ksm_args = ksm["spec"]["template"]["spec"]["containers"][0]["args"]
-    assert "--host=::" in ksm_args and "--telemetry-host=::" in ksm_args
+    assert '--host=' + bind in ksm_args and '--telemetry-host=' + bind in ksm_args
     prometheus = next(obj for obj in objects if obj["kind"] == "Prometheus")["spec"]
     assert prometheus["serviceDiscoveryRole"] == "EndpointSlice"
-    assert [arg['value'] for arg in prometheus['additionalArgs'] if arg['name'] == 'web.listen-address'] == ['[::]:9090']
+    assert [arg['value'] for arg in prometheus['additionalArgs'] if arg['name'] == 'web.listen-address'] == ['[::]:9090' if dual else '0.0.0.0:9090']
     assert not prometheus.get('containers')
     assert prometheus["scrapeInterval"] == "15s" and prometheus["scrapeTimeout"] == "10s"
     assert prometheus["retention"] == "24h" and prometheus["retentionSize"] == "4GB"
@@ -82,7 +90,7 @@ def main():
     assert monitor["spec"]["selector"]["matchLabels"] == {
         "app.kubernetes.io/name": "traefik", "app.kubernetes.io/instance": "traefik-edge"}
     family_filter = {"sourceLabels": ["__meta_kubernetes_endpointslice_address_type"],
-                     "action": "keep", "regex": "IPv6"}
+                     "action": "keep", "regex": family}
     assert monitor["spec"]["endpoints"] == [
         {"port": "metrics", "path": "/metrics", "interval": "15s", "scrapeTimeout": "10s",
          "relabelings": [family_filter]}]

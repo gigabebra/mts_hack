@@ -1,0 +1,757 @@
+{
+  "schema_version": 1,
+  "status": "pass",
+  "generated_at": "2026-10-03T21:25:19.748482+00:00",
+  "scope": "Fresh IPv4-only Ubuntu installation, local tests, HTTP/TLS/metrics/logs, two redeploys, full canary/fault/recovery demo and external controlled reboot",
+  "base_revision": "d5c48cfe1d67f645fddcba2fb886fbb059bf9ebc",
+  "working_tree_modified": true,
+  "network_mode": "ipv4",
+  "platform": {
+    "ubuntu": "24.04.5 LTS amd64",
+    "vcpus": 4,
+    "memory_mib": 8192,
+    "disk_gib": 60,
+    "kernel": "6.8.0-142-generic"
+  },
+  "pristine": {
+    "prior_cluster_paths": {
+      "/etc/kubernetes": false,
+      "/etc/mts-stack": false,
+      "/var/lib/kubelet": false,
+      "/var/lib/containerd": false,
+      "/home/ubuntu/mts-stack": false
+    },
+    "tools_before_deploy": {
+      "git": "/usr/bin/git",
+      "make": null,
+      "curl": "/usr/bin/curl",
+      "python3": "/usr/bin/python3",
+      "kubeadm": null,
+      "kubelet": null,
+      "kubectl": null,
+      "containerd": null,
+      "helm": null,
+      "ansible-playbook": null
+    },
+    "ipv6_disabled_before_project_install": true,
+    "first_project_install_command": [
+      "bash",
+      "scripts/deploy.sh",
+      "--env",
+      "ubuntu"
+    ]
+  },
+  "ipv6_absence_and_source_verification": {
+    "status": "pass",
+    "captured_at": "2026-10-03T21:23:37.042736+00:00",
+    "boot_id": "8b83ab14-946c-436d-a1f8-628acfb3a485",
+    "tested_file_count": 101,
+    "manifest_sha256": "3fade2a4a581c7f55fe9433b4d4c11302dc806d8b6aa4621d9e3c00302585489",
+    "ipv6_addresses": [],
+    "kernel_ipv6_disabled": true,
+    "ipv6_socket_errno": 97
+  },
+  "local_tests": {
+    "ipv4_ubuntu": {
+      "total": 195,
+      "skipped": 2
+    },
+    "dual_stack_ubuntu": {
+      "total": 195,
+      "skipped": 0
+    },
+    "ipv4_skips": [
+      "IPv6-only loopback HTTP transport",
+      "IPv6-only loopback Prometheus API transport"
+    ],
+    "helm_modes": [
+      "dual-stack",
+      "ipv4"
+    ]
+  },
+  "stages": [
+    {
+      "name": "deploy",
+      "command": [
+        "bash",
+        "scripts/deploy.sh",
+        "--env",
+        "ubuntu"
+      ],
+      "started_at": "2026-10-03T20:53:55.826095+00:00",
+      "exit_code": 0,
+      "seconds": 393.41,
+      "finished_at": "2026-10-03T21:00:29.234009+00:00"
+    },
+    {
+      "name": "lint",
+      "command": [
+        "make",
+        "lint"
+      ],
+      "started_at": "2026-10-03T21:00:29.235541+00:00",
+      "exit_code": 0,
+      "seconds": 20.53,
+      "finished_at": "2026-10-03T21:00:49.761339+00:00"
+    },
+    {
+      "name": "health",
+      "command": [
+        "make",
+        "health",
+        "ENV=ubuntu"
+      ],
+      "started_at": "2026-10-03T21:00:49.762094+00:00",
+      "exit_code": 0,
+      "seconds": 47.9,
+      "finished_at": "2026-10-03T21:01:37.663756+00:00"
+    },
+    {
+      "name": "verify-release",
+      "command": [
+        "make",
+        "verify-release",
+        "ENV=ubuntu"
+      ],
+      "started_at": "2026-10-03T21:01:37.664235+00:00",
+      "exit_code": 0,
+      "seconds": 26.15,
+      "finished_at": "2026-10-03T21:02:03.811615+00:00"
+    },
+    {
+      "name": "idempotency",
+      "command": [
+        "make",
+        "verify-idempotency",
+        "ENV=ubuntu"
+      ],
+      "started_at": "2026-10-03T21:02:03.812236+00:00",
+      "exit_code": 0,
+      "seconds": 297.81,
+      "finished_at": "2026-10-03T21:07:01.625923+00:00"
+    },
+    {
+      "name": "demo",
+      "command": [
+        "make",
+        "demo",
+        "ENV=ubuntu"
+      ],
+      "started_at": "2026-10-03T21:07:01.626406+00:00",
+      "exit_code": 0,
+      "seconds": 886.9,
+      "finished_at": "2026-10-03T21:21:48.525717+00:00"
+    },
+    {
+      "name": "evidence",
+      "command": [
+        "make",
+        "evidence",
+        "ENV=ubuntu"
+      ],
+      "started_at": "2026-10-03T21:21:48.526284+00:00",
+      "exit_code": 0,
+      "seconds": 0.27,
+      "finished_at": "2026-10-03T21:21:48.791338+00:00"
+    }
+  ],
+  "canary_acceptance": [
+    {
+      "checks": [
+        {
+          "name": "healthy",
+          "status": "pass",
+          "expected_decision": "accepted",
+          "actual_decision": "accepted",
+          "release_exit_code": 0,
+          "traffic_enabled": true,
+          "duration_seconds": 102.766,
+          "first_bad_at": null,
+          "rollback_seconds": null,
+          "run_id": "20261003T210718Z-fad496bf-healthy",
+          "release_verification_exit_code": 0
+        },
+        {
+          "name": "http500",
+          "status": "pass",
+          "expected_decision": "rejected",
+          "actual_decision": "rejected",
+          "release_exit_code": 2,
+          "traffic_enabled": true,
+          "duration_seconds": 108.045,
+          "first_bad_at": "2026-10-03T21:10:00.175435+00:00",
+          "rollback_seconds": 13.067,
+          "run_id": "20261003T210718Z-fad496bf-http500"
+        },
+        {
+          "name": "wrong-body",
+          "status": "pass",
+          "expected_decision": "rejected",
+          "actual_decision": "rejected",
+          "release_exit_code": 2,
+          "traffic_enabled": true,
+          "duration_seconds": 104.007,
+          "first_bad_at": "2026-10-03T21:11:43.594766+00:00",
+          "rollback_seconds": 12.672,
+          "run_id": "20261003T210718Z-fad496bf-wrong-body"
+        },
+        {
+          "name": "wrong-body-preflight",
+          "status": "pass",
+          "expected_decision": "rejected",
+          "actual_decision": "rejected",
+          "release_exit_code": 2,
+          "traffic_enabled": false,
+          "duration_seconds": 22.113,
+          "first_bad_at": null,
+          "rollback_seconds": 10.888,
+          "run_id": "20261003T210718Z-fad496bf-wrong-body-preflight"
+        },
+        {
+          "name": "metrics-unavailable",
+          "status": "pass",
+          "expected_decision": "inconclusive",
+          "actual_decision": "inconclusive",
+          "release_exit_code": 2,
+          "traffic_enabled": true,
+          "duration_seconds": 149.502,
+          "first_bad_at": null,
+          "rollback_seconds": 15.256,
+          "run_id": "20261003T210718Z-fad496bf-metrics-unavailable"
+        },
+        {
+          "name": "insufficient-sample",
+          "status": "pass",
+          "expected_decision": "inconclusive",
+          "actual_decision": "inconclusive",
+          "release_exit_code": 2,
+          "traffic_enabled": true,
+          "duration_seconds": 115.502,
+          "first_bad_at": null,
+          "rollback_seconds": 14.795,
+          "run_id": "20261003T210718Z-fad496bf-insufficient-sample"
+        }
+      ],
+      "cleanup": {
+        "status": "pass",
+        "decision": "restored",
+        "run_id": "20261003T210718Z-fad496bf-cleanup",
+        "release_verification_exit_code": 0
+      }
+    }
+  ],
+  "interruption_acceptance": [
+    {
+      "checks": [
+        {
+          "name": "same-run",
+          "pending_before_signal": {
+            "status": "pending-upgrade",
+            "helm_revision": 19,
+            "requested_image_observed": true
+          },
+          "writer_exit_code": 2,
+          "interrupted_report": "artifacts/canary/interrupt-7789a06ba0ea-same-run/report.json",
+          "status": "pass",
+          "restore_report": "artifacts/canary/interrupt-7789a06ba0ea-same-run-restore/report.json",
+          "tls_certificate_preserved": true,
+          "weights": {
+            "stable": 100,
+            "canary": 0
+          }
+        },
+        {
+          "name": "next-run",
+          "pending_before_signal": {
+            "status": "pending-upgrade",
+            "helm_revision": 23,
+            "requested_image_observed": true
+          },
+          "writer_exit_code": 143,
+          "pending_after_writer_exit": "pending-upgrade",
+          "status": "pass",
+          "restore_report": "artifacts/canary/interrupt-7789a06ba0ea-next-run-restore/report.json",
+          "tls_certificate_preserved": true,
+          "weights": {
+            "stable": 100,
+            "canary": 0
+          }
+        }
+      ]
+    }
+  ],
+  "external_reboot": {
+    "status": "pass",
+    "command": [
+      "make",
+      "demo",
+      "ENV=ipv4-acceptance",
+      "DEMO_ARGS=--section reboot"
+    ],
+    "exit_code": 0,
+    "seconds": 142.22,
+    "started_at": "2026-10-03T21:22:35.172591+00:00",
+    "finished_at": "2026-10-03T21:24:57.390946+00:00",
+    "report": "artifacts/demo/demo-bfdcb82afbfe/report.json",
+    "checks": [
+      {
+        "name": "controlled_reboot",
+        "status": "pass",
+        "boot_id_changed": true,
+        "api_ready_seconds": 35.04
+      },
+      {
+        "name": "health_after_reboot",
+        "status": "pass"
+      },
+      {
+        "name": "final_verify",
+        "status": "pass"
+      }
+    ],
+    "generated_reports": [
+      "artifacts/demo/demo-bfdcb82afbfe/report.json",
+      "artifacts/release/release-61454d7450d5/gateway.json",
+      "artifacts/release/release-61454d7450d5/report.json",
+      "artifacts/verify/release-61454d7450d5/report.json"
+    ]
+  },
+  "immutable_network_mode_guard": {
+    "status": "pass",
+    "attempted_change": "ipv4 to dual-stack",
+    "check_mode": true,
+    "rejected_before_os_changes": true,
+    "ansible_exit_code": 2,
+    "seconds": 5.93
+  },
+  "dual_stack_live_regression": {
+    "status": "pass",
+    "exit_code": 0,
+    "scope": "Read-only live dual-stack regression using modified code; no deploy or fault injection",
+    "seconds": 16.76
+  },
+  "ipv4_tls_gateway_reports": [
+    {
+      "path": "artifacts/release/release-0bdd7e616e4e/gateway.json",
+      "sha256": "d7ec2220328bd9e97fdfc0821292909017695c01a8c4333b529af2a112e73509",
+      "check_count": 140,
+      "samples": {
+        "ipv4": {
+          "requested": 1000,
+          "stable": 900,
+          "canary": 100,
+          "canary_share": 0.1,
+          "errors": 0,
+          "first_error": null
+        }
+      }
+    },
+    {
+      "path": "artifacts/release/release-33b15ca2a3c5/gateway.json",
+      "sha256": "22c6a7fddf94e747bef1133380f87e15f82486f6adb97b5c76ee18e5b277ce15",
+      "check_count": 140,
+      "samples": {
+        "ipv4": {
+          "requested": 100,
+          "stable": 100,
+          "canary": 0,
+          "canary_share": 0.0,
+          "errors": 0,
+          "first_error": null
+        }
+      }
+    },
+    {
+      "path": "artifacts/release/release-7a8991682722/gateway.json",
+      "sha256": "9db90feaeb2607df47e51feaa59e26327af4b06c588e1b44b93bd430b985a1d5",
+      "check_count": 140,
+      "samples": {
+        "ipv4": {
+          "requested": 100,
+          "stable": 100,
+          "canary": 0,
+          "canary_share": 0.0,
+          "errors": 0,
+          "first_error": null
+        }
+      }
+    },
+    {
+      "path": "artifacts/release/release-9e55fa422f9a/gateway.json",
+      "sha256": "7558701cbf05eb2f09ecfbee5508f698403a9c2afcf1cfa3a1ca0e70732cd18f",
+      "check_count": 140,
+      "samples": {
+        "ipv4": {
+          "requested": 100,
+          "stable": 100,
+          "canary": 0,
+          "canary_share": 0.0,
+          "errors": 0,
+          "first_error": null
+        }
+      }
+    },
+    {
+      "path": "artifacts/release/release-d89b6817bbd4/gateway.json",
+      "sha256": "69ba0cab73ccdae2d0133acc93bbacf634671dc9e6f093cfd6aaec3245b47ae4",
+      "check_count": 140,
+      "samples": {
+        "ipv4": {
+          "requested": 100,
+          "stable": 100,
+          "canary": 0,
+          "canary_share": 0.0,
+          "errors": 0,
+          "first_error": null
+        }
+      }
+    }
+  ],
+  "reports": [
+    {
+      "path": "artifacts/canary/acceptance-20261003T210718Z-fad496bf/cleanup/report.json",
+      "sha256": "97cc67bdc699ee7d2c644a898a6b085b6fa468636d9970768fed131bd7d4d143",
+      "status": "pass",
+      "kind": null,
+      "decision": "restored",
+      "check_count": 0
+    },
+    {
+      "path": "artifacts/canary/acceptance-20261003T210718Z-fad496bf/healthy/report.json",
+      "sha256": "a2c31c13067aa101dd9420ff99f5293b4653441f64e781dd1ee42de171b2b2e8",
+      "status": "pass",
+      "kind": null,
+      "decision": "accepted",
+      "check_count": 0
+    },
+    {
+      "path": "artifacts/canary/acceptance-20261003T210718Z-fad496bf/http500/report.json",
+      "sha256": "4dbcc297b6989b5cae7474392e0a0b00d2694938c7b372e82450efbf7755263b",
+      "status": "fail",
+      "kind": null,
+      "decision": "rejected",
+      "check_count": 0
+    },
+    {
+      "path": "artifacts/canary/acceptance-20261003T210718Z-fad496bf/insufficient-sample/report.json",
+      "sha256": "374390cc05410a59d853bf5d03b4a73595c14fdae39d7c3f50c455837f7f13ef",
+      "status": "fail",
+      "kind": null,
+      "decision": "inconclusive",
+      "check_count": 0
+    },
+    {
+      "path": "artifacts/canary/acceptance-20261003T210718Z-fad496bf/metrics-unavailable/report.json",
+      "sha256": "9413b1470eee2a96ea3d266d3cbdb174dd6c195ad89d5b54ad73048500e821a2",
+      "status": "fail",
+      "kind": null,
+      "decision": "inconclusive",
+      "check_count": 0
+    },
+    {
+      "path": "artifacts/canary/acceptance-20261003T210718Z-fad496bf/report.json",
+      "sha256": "714bc699a32df42324ba719414f2561b6959ad364147f1a79a6c8de52061ebd6",
+      "status": "pass",
+      "kind": "live_canary_acceptance",
+      "decision": null,
+      "check_count": 6
+    },
+    {
+      "path": "artifacts/canary/acceptance-20261003T210718Z-fad496bf/wrong-body/report.json",
+      "sha256": "3995719e216082e81a35a20fe4de39e7a4a21352b75b4f3938861b43d22b9cc5",
+      "status": "fail",
+      "kind": null,
+      "decision": "rejected",
+      "check_count": 0
+    },
+    {
+      "path": "artifacts/canary/acceptance-20261003T210718Z-fad496bf/wrong-body-preflight/report.json",
+      "sha256": "25c3e796834475db2585b091ba6562cf9099cf910434805477781e22bc1df618",
+      "status": "fail",
+      "kind": null,
+      "decision": "rejected",
+      "check_count": 0
+    },
+    {
+      "path": "artifacts/canary/interrupt-7789a06ba0ea/report.json",
+      "sha256": "0d757ec4ca629aa8cf3286245cdf5aad0fc01ec0789c8645f6ceb1a4961933cd",
+      "status": "pass",
+      "kind": "live_helm_interruption",
+      "decision": null,
+      "check_count": 2
+    },
+    {
+      "path": "artifacts/canary/interrupt-7789a06ba0ea-baseline/report.json",
+      "sha256": "43a44f00deac63fbe671478245a3dc57a29c275ebfeb359b14d94e3d27da9f80",
+      "status": "pass",
+      "kind": null,
+      "decision": "restored",
+      "check_count": 0
+    },
+    {
+      "path": "artifacts/canary/interrupt-7789a06ba0ea-cleanup/report.json",
+      "sha256": "1ba86eb667993d5d3548e7a4e83bb1a351ba4ea3b48a45c70c0248494c26aadd",
+      "status": "pass",
+      "kind": null,
+      "decision": "restored",
+      "check_count": 0
+    },
+    {
+      "path": "artifacts/canary/interrupt-7789a06ba0ea-next-run-restore/report.json",
+      "sha256": "9f30d14b3e14fb6e8d49fd33f7d469d14bcca5a055c5d41217ad8b430279ee48",
+      "status": "pass",
+      "kind": null,
+      "decision": "restored",
+      "check_count": 0
+    },
+    {
+      "path": "artifacts/canary/interrupt-7789a06ba0ea-same-run/report.json",
+      "sha256": "3bcfb0bab7ebe48122e041d9df7a310bb8c95c8130f9f86109fe9272fa056182",
+      "status": "fail",
+      "kind": null,
+      "decision": "interrupted",
+      "check_count": 0
+    },
+    {
+      "path": "artifacts/canary/interrupt-7789a06ba0ea-same-run-restore/report.json",
+      "sha256": "edbea33d3bae6c2b850740b1ee96f40b4df4075840825daa1f2091822e57c729",
+      "status": "pass",
+      "kind": null,
+      "decision": "restored",
+      "check_count": 0
+    },
+    {
+      "path": "artifacts/demo/demo-7e4dcb312564/report.json",
+      "sha256": "fd86dcf6d485682e94302dccdafb2845dd3d723c9b05a71b2c1c44698fa756f5",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 9
+    },
+    {
+      "path": "artifacts/idempotency/20261003T210203Z-ab0c581e/report.json",
+      "sha256": "1b04c9842077b22a63a6f80affa0a0ac9c2d5c1b658b9da90150cc8ed99d9b73",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 2
+    },
+    {
+      "path": "artifacts/recovery/recovery-058008e27b7c/report.json",
+      "sha256": "1d92b04aab23f7c211b60f58843aa17e99f93b928ffac726fc3cbf2be13044e1",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 5
+    },
+    {
+      "path": "artifacts/release/release-0bdd7e616e4e/report.json",
+      "sha256": "5740df14536cf7ab23f4c136429b09435fd6f21a082f1b46fd0650cd43c33709",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 2
+    },
+    {
+      "path": "artifacts/release/release-33b15ca2a3c5/report.json",
+      "sha256": "27571a3a5345aee856dfe171a8b46915a73d263c6accde89e1b7fa88e11c6ed7",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 2
+    },
+    {
+      "path": "artifacts/release/release-7a8991682722/report.json",
+      "sha256": "7d3c8fd0cc9ca3789b80d01d1df1343d8b4d7b50168c8fbacfde6311e6f78c6c",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 2
+    },
+    {
+      "path": "artifacts/release/release-9e55fa422f9a/report.json",
+      "sha256": "737ac85853ed7cd897d31352219feb0640b814368208ca52fd8528871d97fb68",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 2
+    },
+    {
+      "path": "artifacts/release/release-d89b6817bbd4/report.json",
+      "sha256": "48eb1bde58b590967aba962ce86cde82a5bf1168578a0def76294a7953bca6e3",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 2
+    },
+    {
+      "path": "artifacts/verify/20261003T210203Z-ab0c581e-1/report.json",
+      "sha256": "022f1dcbab2676464dfc8e10388c0cac8caa4655efdc63ac5e236e367d777c1d",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 9
+    },
+    {
+      "path": "artifacts/verify/20261003T210203Z-ab0c581e-2/report.json",
+      "sha256": "6f0eda8f9c5405768390d4e64404efc686fd63c677ff6ab4a82f83305ba05b94",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 9
+    },
+    {
+      "path": "artifacts/verify/recovery-058008e27b7c-after/report.json",
+      "sha256": "9e44b463f9bf0db24113ba67f8a4a228dcb909e313e78cdc1466f711ecb8fa3d",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 9
+    },
+    {
+      "path": "artifacts/verify/release-0bdd7e616e4e/report.json",
+      "sha256": "844a562355b9ab5af3e036bf6003491a5fe7726277ce50c817f150faadf296f7",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 9
+    },
+    {
+      "path": "artifacts/verify/release-33b15ca2a3c5/report.json",
+      "sha256": "4fb57a5f89d7c7e7080b89d4d9fd3ac728c29f572110278da5c2d6fe28547ac1",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 9
+    },
+    {
+      "path": "artifacts/verify/release-7a8991682722/report.json",
+      "sha256": "ba1c4220d96a9bc297389f8f5d12f4cc2a08eeeb67d87f6f373db78b298dc671",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 9
+    },
+    {
+      "path": "artifacts/verify/release-9e55fa422f9a/report.json",
+      "sha256": "6d238b3d00bdef102c0e1c3de598b680682a866214667d75b50086b79a0797e5",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 9
+    },
+    {
+      "path": "artifacts/verify/release-d89b6817bbd4/report.json",
+      "sha256": "9712623fd59776994fb4a473fb9c44dcca7244da2a389f83eecfe1a7050b8251",
+      "status": "pass",
+      "kind": null,
+      "decision": null,
+      "check_count": 9
+    }
+  ],
+  "tested_files_sha256": {
+    "ansible/bootstrap.yaml": "5c08ffa1d31e6b98c9e47b04c3b7a81f5df710913459169453dbbac78e953fb4",
+    "ansible/files/containerd.service": "767c6c8a81b9f5936243ff14ed764579e9250310fad8ad89c3f97fe69816407b",
+    "ansible/files/coredns.Corefile": "7d762ce7d39ee02b9e4c51c7ca796377d3db0ac88947903637532e8e3ff79999",
+    "ansible/files/preflight.py": "b7571feaed544d9ded03f0992ce120753b88a5c7fc698de4bdd3c5c216337550",
+    "ansible/filter_plugins/mvp.py": "3f92dde864852c170728e8c4982ad69d719a5ab44f9ce494dd258254f86d5038",
+    "ansible/health.yaml": "9ce8f6e7a783df36dd6a5d1a6e6c1a478cc623bdf7a983c957f549315aff5eb3",
+    "ansible/render.yaml": "e55761ca3b8f327c6c74dce604c7d1407c06501047657eb75813dc5fc85d46d2",
+    "ansible/tasks/cluster.yaml": "acdf4d5dc725270df2470ce4e4d923b981c80720068036f593714fa89121fc4d",
+    "ansible/tasks/health.yaml": "0305af9b18de3b428bd7767695ad029a9b001904b6609807d1fcbfe0650d298f",
+    "ansible/tasks/os.yaml": "9e9f5350e8d6314ec24fa886eabe5ae7f45c431d18bf5c1ebf55742bd39bebf1",
+    "ansible/tasks/runtime.yaml": "dd0df1a89162c44946ad59cc98d031dc3cd12453c14015004e1a5db7a3b4889a",
+    "ansible/templates/calico-pool.yaml.j2": "b6a9a629910d9bf6215eb30dec3a6144cdf85cfb9b96560e49b955f86ec36eb1",
+    "ansible/templates/containerd.toml.j2": "cbc6038c2e8475b929c1981f65cac3e633d60b3903ca3bf89f3818fb2bb5168e",
+    "ansible/templates/corednsdeployment+strategic.yaml.j2": "8a681ab8d0e762b00bb998c0bc075d8e4ae791ab5720af379627200435ab7717",
+    "ansible/templates/health-client.yaml.j2": "eb28e8745422820c170d3c1b808765ddf09e1b8bf76d74a5137c872d6a5809b6",
+    "ansible/templates/health.yaml.j2": "0ae70e11ed4b5b042ef717b387cb36d894b8fdbd318f54e4268997f2b057d7f1",
+    "ansible/templates/kubeadm.yaml.j2": "9b078d44b1910a4ee0dbbd55b33b3869251c5967d1cc5594a46ff3c3a696cbbf",
+    "ansible/tests/test_bootstrap.py": "b0d74397778b4d6e2d91112fb4ee7415b2269cf567364b7dd89e575d071ec887",
+    "config/canary.yaml": "e58892a9bea9a169e2d27681832935a0671e534b05b1e68b4c6415baf3b79e36",
+    "config/environments/ubuntu-ipv4.example.yaml": "e4598f766ffd2edb64d53389e30f857e2d08c6ed166ea80ce23a5c499bebc598",
+    "config/environments/ubuntu.example.yaml": "acb0a3bb741b2ed270407a25213f4215ead08d0e4b29433616e262f12c616c53",
+    "config/images.lock.yaml": "905c5fde0254c82c973f5d263ab62c4ec57525c932fd54292352d3dfa744c560",
+    "config/versions.yaml": "14b7f0ef352f8b8b00d2210f1b99d52727a91b2f759f9eea8a18baf16de170bf",
+    "deploy/app/Chart.yaml": "b95caf5efb773e980c4b4cdbd4d9eb17acad47c2bac481b8b3ca0e5337f96cf7",
+    "deploy/app/files/nginx.conf": "c935bc7fd48a14e6bb4929f817b6b3a8a20954bf12c526296ec49a23174a6d1a",
+    "deploy/app/templates/_helpers.tpl": "2eca2aed09aa3fe8663fe08452588c7e11d979701cb1535694a9cb9a156158aa",
+    "deploy/app/templates/configmap.yaml": "42f089315a6b6281a79ac6fd2bd8e418eacf88e1361c2680c00f9a0db5d632c5",
+    "deploy/app/templates/deployment.yaml": "1047fbe8c0123daa001af4141e3059f8f6d7035046fb4709bf9b9c2fde94da7b",
+    "deploy/app/templates/service.yaml": "68680e1795cd734d1a3ea8f7891f12084faeed4111beae2c45bf6b607a324840",
+    "deploy/app/tests/test_render.py": "c34028bd1a799757ab493f90dc82ae89ff38c5fe2fdbc494b0f84bbb0fc5c7f4",
+    "deploy/app/values.schema.json": "66ecbbcefd43571fc6e5040f2ad4ec2a694f2c41e1267f7cd75d43069a1e43a9",
+    "deploy/app/values.yaml": "433dca987c305717238ad94f472119632e665bcbe6bc77eee6dcb674c6d1e579",
+    "deploy/gateway/Chart.yaml": "1b3c36c860ecfb73e629cf24d696222960e0e41e8ff956e2609da6d70550f39e",
+    "deploy/gateway/templates/_helpers.tpl": "754c93ec1b28bfee4620d3bec029b30b37853a066939db31e2678fe35fc06fb6",
+    "deploy/gateway/templates/gateway.yaml": "41fa550b5b42eb0ce0bcc8ad9218365194f83295807f07edc0a4337faac4c0c1",
+    "deploy/gateway/templates/tls.yaml": "900639cd2742375e2faae3951269f52b3d8602fa9688e1e55481e8299888620f",
+    "deploy/gateway/tests/test_final.py": "fa4df9fa8db337ebef245d8ac6be815b718b1672287353731902bb17859cd51b",
+    "deploy/gateway/tests/test_render.py": "037c96de82402b1104f5a9b25ddca3fcd71aa9dfbd87787623a92f7d0b8a9069",
+    "deploy/gateway/traefik-values.yaml": "9d6dea87a9983e35428d9ad752e8e157ff42c1d15814e5c9bc461ba83c4928e3",
+    "deploy/gateway/values.schema.json": "852ecc8a228eb36e94eaad632667afc69c01bb3bfe1e8cfd2c9c7583838ffd68",
+    "deploy/gateway/values.yaml": "6cdd152d68b0d1b7c250ecb88290085f16c830997e02d79fe50f9012a52ad166",
+    "deploy/logging/Chart.yaml": "acae36be1602f9f9a179c8a062b574dcf0759b140585c4338be5ef623be5e902",
+    "deploy/logging/files/fluent.conf": "90c4def6b630e82f6fcb32600a63f0f71518627bee68bac27556b5ee179497d0",
+    "deploy/logging/files/loki.yaml": "57f306f204bcfad81a66201e0c7f988b3eb51693fc3086a34bcfdc1d1dbdcb5a",
+    "deploy/logging/templates/configmap.yaml": "ac2addf4de5db8ffb04c7cea1fea37baa27563a0a77cdd263610bba1f67e6106",
+    "deploy/logging/templates/fluentd.yaml": "62bb52c13ea7b76ab3a578dd7a42c5b1e542f718ff073a92a7ab907633f533c3",
+    "deploy/logging/templates/loki.yaml": "768d63f3dedab6e0c3de36ee76078b49492446f713cb0ced30aeb5fa75f4eb5f",
+    "deploy/logging/tests/docker_smoke.py": "1f3b04e0378ae371edac53122a7eff214f423569698b7c6fc518a73b67b846d9",
+    "deploy/logging/tests/test_check_logs.py": "0b23125de70572e2cd24b1fcba0042c4826a305f6f01a0a7310cba5e544ad342",
+    "deploy/logging/values.schema.json": "07f44c63e841bb162d0a318d57eccde12f6a213412ca00ced9753fec43f4eee6",
+    "deploy/logging/values.yaml": "7d2a22e41eb9dc5a04d54e5451b8e24c35eeddd31c448dde7cc0ec776c1a63e3",
+    "deploy/monitoring/extras/Chart.yaml": "8afbbe09a018361dbc660daac6fee87b3bba740410d19972e780b77da66c99e5",
+    "deploy/monitoring/extras/templates/servicemonitor.yaml": "343739c756664f5bfde2591c0fd4813d5acf77fb6e97921b53a4f827893af123",
+    "deploy/monitoring/extras/values.yaml": "589b6f72c3d6b99f1eb985dfa625a08779b929463018d651ea8a50101ce00056",
+    "deploy/monitoring/ipv4-values.yaml": "54b3ffbd9a5d8377bd198f39e4c8cabd64730826a30f0da9871dc2e44d00eaac",
+    "deploy/monitoring/tests/check_render.py": "1d4abd0d2c6613996735da7aca4f43578ccca6d787c7455329eb6af4bcb64675",
+    "deploy/monitoring/tests/test_check_metrics.py": "538843b9ff8b3860f9a290e5cf7237b443b36f035c361054797b7abe4eef80e3",
+    "deploy/monitoring/values.yaml": "1e0f24915636b61e5530ae05e7c4d65164fa1411c641b95b60c97c5713c8610c",
+    "deploy/storage/Chart.yaml": "635aed86c122a4ee591b15a803f7920f0b6b05dab6da496808172a889eee5737",
+    "deploy/storage/templates/storage.yaml": "e70d8e903b527f8435ee6b986a5d0d8a266d0b7cdfdbaa4af6ed40c18fef799c",
+    "deploy/storage/values.schema.json": "c72e4756750a8641efa111b74a470c5401720206d88586c72d1bb2313fd2c22c",
+    "deploy/storage/values.yaml": "0f40dc311a8eb4c3a7daff5cebcd8dcb532f3f203194f103c7b9d66d9e304bec",
+    "scripts/bootstrap.py": "b80625ebbf7c5ceb5f973626f6b21b05736d0052add45094a9f13dbdffdbfaf8",
+    "scripts/canary.py": "d8e39fd7a78abdedd0fd6b66cada5c87cd0d4c5eef697e9c5a3cd18b2e30767c",
+    "scripts/canary_metrics.py": "ff38d86d87083fb86a21054850bfb0446ec46596836e1904279152a811ecf06e",
+    "scripts/check-gateway.container.py": "d73da189216e8e20a14dee06a0a300f1ce43dc95e4d3b8f9424363bc96d50e4a",
+    "scripts/check-gateway.final.py": "5f16e13f9f1091cf15672d9b808b22795b929a0522b3d463cd91879fc2ae4d3d",
+    "scripts/check-gateway.py": "66868d4204400fbb0b5a7340970cbdc8d3f859e042220709fae431d9404547d8",
+    "scripts/check-gateway.test.py": "7404dcc42846df61faaac96ed9301c13a35acc41c062cd00dfed52dc0d901be2",
+    "scripts/check-logs.py": "0cfa8a966119b9fc6e909811e99231db76b69c89da77438aa1c7a22b45be00ce",
+    "scripts/check-metrics.py": "077fa392e4e1cb7efec42a1bdccbd1163a9bea01e8f8046555d641f336696376",
+    "scripts/deploy.py": "6777699178caa3ae684b2ebf7f473121b178f38fd6aef3209ed88b13ebacc39e",
+    "scripts/deploy.sh": "6a5a2e35d6fac8473b402d29692cf515d3283e0c83f249e23c3e76d75df6ea6d",
+    "scripts/evidence.py": "d8998fd69444e5a1caff012d7d7276fd9856ca5757c8f96fa03039b41dde165e",
+    "scripts/lint.py": "b34aaacd341d09a087ddc0d286d23b2b01d100936b55998ef03f70f6345507b6",
+    "scripts/lock-images.py": "384fd953de3f44616bc0f723b25e45788e2b373b8fc6f6174dd5fbd7d083aae8",
+    "scripts/network_checks.py": "a7eb1ccf7d2b0a51aec5efa424e1a30c4691e756cc96bc97601bbd49ec0b85ee",
+    "scripts/network_config.py": "2497e011796cb61338b4546c7b18383cfc2d0aa2074adf7d4e57e4465cabbc98",
+    "scripts/post-render.py": "0a593c53ff895c2d7fa1549a34e0e1b08d6efcf76ab827a4c9872577982aec8b",
+    "scripts/process_control.py": "5a5fd5dac0644e01ebb1c6bcfadbd3bc0b73249d218c50a1cdc827acd7e0245c",
+    "scripts/release_control.py": "db275c246e759721520900b652ebb4c86e4fb36cdf699d3fa94dca3e45ebbf4a",
+    "scripts/setup-tools.sh": "e3671d82290324df67f5b93b6abdb37667bf71137aff262c7ac211ea5bdd0086",
+    "scripts/stacklib.py": "d454830a19c23210d9cc535e9301cfbf57b5c31f54f1fd9111a57d2d7521a49d",
+    "scripts/tools.py": "f70fb8b3ea38c173e3204a0d45e0ab3f503eb7f8447d432afa7ac65e8585957a",
+    "scripts/verify-idempotency.py": "260a924ebbb01ff5108015fa0777527260fffabd2c53485860fbb1963dcfe198",
+    "scripts/verify-release.py": "ced9df7564f8b4e05b990e823209ef37ee699694b65cde37a668c99371d23618",
+    "scripts/verify.py": "724e677890344ff74d3ec42e789b60c4e3a09448e128a6162d1b40bfeaaa00d6",
+    "tests/canary/interrupt.py": "41a6a2972154e550444edad8443d3db3e90eebfb274206a08ce57075cb8250da",
+    "tests/canary/test_canary.py": "af99d03dab5ebd5210c5f5650b57bc16e2991073a9be27cd3cd8bf89479077b1",
+    "tests/canary/test_interrupt.py": "288577cc618bd55d354e9740d9af19d80c8d2035c66924a38d23160d2308273d",
+    "tests/canary/verify.py": "b54447010ac5612657478ee5184073326fdadb7916095a07b588d7fb125e337c",
+    "tests/e2e/mvp-recovery.py": "b77f6da69835fe7f642c6df22f0bbb4b95c41d5ff7524fd3a9ad57d1b7d0c3a2",
+    "tests/e2e/release-demo.py": "da76dc1eaf96e220e08305240193c25463044c61017a84300e598313a365d256",
+    "tests/unit/test_demo.py": "0bc2c62f50f79eda1a6498d33fa59ae8c35dd919039f027d573cab00371dbc20",
+    "tests/unit/test_deploy.py": "3b5df38cc1d9037e15ed1994e31f45f6b77c90cb902c1b080e1f58076c9473d1",
+    "tests/unit/test_images.py": "15c72e7ba004847ea116be434578633f3086fa98353bb1372b2474d27ce29fcc",
+    "tests/unit/test_ipv4.py": "d7a48e4744c7c93dd2ab082a838a85bb7763351afb3fd94482fb1316e6497a6e",
+    "tests/unit/test_network.py": "c0f7295510e8be295c5f5d9e5a8616250bde2588c5fc9cd9a291afdd08c88521",
+    "tests/unit/test_recovery.py": "6f92d1e2391176f694710add248eb747c3b627cc2df11d47db52338ac1d1b39e",
+    "tests/unit/test_recovery_positions.py": "c59e4f7c6069b5fa5bd141ae05dc32bdbad09872bbd98ea0fa72a89c95e024a1",
+    "tests/unit/test_release.py": "b7aa586ca0e56581e797e57cfcf6e519ec79011790d89a6a736836099792fc9e"
+  },
+  "artifact_directory": ".state/ipv4-acceptance/collected",
+  "evidence_archive": "artifacts/evidence/ipv4-validation-20261004.tar.gz"
+}

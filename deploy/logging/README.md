@@ -1,5 +1,10 @@
 # Fluentd и Loki
 
+При `network_mode: ipv4` установщик передает chart значение `networkMode: ipv4`:
+Loki и Fluentd слушают `0.0.0.0`, Service Loki имеет `[IPv4]` / `SingleStack`.
+Проверки доставки, буфера и восстановления работают через IPv4, включая
+monitor Fluentd на `127.0.0.1`. Далее описан `dual-stack` по умолчанию.
+
 Команды ниже выполняются из корня checkout после `make tools`. Для прямого
 вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
 

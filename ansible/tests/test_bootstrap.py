@@ -9,7 +9,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "filter_plugins"))
-from mvp import calico, image, pin_images, servers, dual_ips  # noqa: E402
+from mvp import calico, image, pin_images, servers, dual_ips, network_profile  # noqa: E402
 
 spec = importlib.util.spec_from_file_location("preflight", ROOT / "files/preflight.py")
 preflight = importlib.util.module_from_spec(spec)
@@ -230,7 +230,7 @@ class DualStackRender(unittest.TestCase):
         repo = ROOT.parent
         variables = yaml.safe_load((repo / "config/versions.yaml").read_text())
         variables.update(yaml.safe_load((repo / "config/environments/ubuntu.example.yaml").read_text()))
-        variables.update(remote_state="/etc/mts-stack", health_uuid={"stdout": "fixture"},
+        variables.update(network=network_profile(), remote_state="/etc/mts-stack", health_uuid={"stdout": "fixture"},
                          health_server_ipv6="fd4d:5453:1000:100::20", health_service_ipv6="fd4d:5453:1000:200::20",
                          health_kubernetes_ipv6="fd4d:5453:1000:200::1",
                          health_server_ipv4="10.244.0.20", health_service_ipv4="10.96.0.20",

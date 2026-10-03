@@ -38,6 +38,15 @@ def usable_ipv6(value):
     return address
 
 
+def usable_ip(value):
+    address = ipaddress.ip_address(value)
+    if address.version == 6:
+        return usable_ipv6(value)
+    if address.is_unspecified or address.is_loopback or address.is_multicast or address.is_link_local:
+        raise ValueError('Gateway address must be a usable native unicast address')
+    return address
+
+
 def conditions_checks(resources, expected_address=None):
     """Evaluate a single observed snapshot; absent/stale/False is never success."""
     checks = []
@@ -78,18 +87,18 @@ def conditions_checks(resources, expected_address=None):
     condition_checks("gateway", gw.get("status", {}).get("conditions", []), generation,
                      ["Accepted", "Programmed"])
     addresses = gw.get("status", {}).get("addresses", [])
-    expected = usable_ipv6(expected_address) if expected_address is not None else None
+    expected = usable_ip(expected_address) if expected_address is not None else None
     valid_addresses = []
     for address in addresses:
         try:
-            value = usable_ipv6(address.get("value", ""))
+            value = (usable_ip if expected is not None else usable_ipv6)(address.get("value", ""))
             valid_addresses.append(address.get("type") == "IPAddress"
                                    and (expected is None or value == expected))
         except ValueError:
             valid_addresses.append(False)
     # Do not store node addresses in the evidence report.
     checks.append(check("gateway.address", bool(valid_addresses) and all(valid_addresses),
-                        "usable native IPv6 status address matching the configured node" if expected is not None
+                        "usable native status address matching the configured node" if expected is not None
                         else "at least one usable native IPv6 status address",
                         {"count": len(addresses), "valid": valid_addresses,
                          "expected_address_checked": expected is not None}))
@@ -241,7 +250,7 @@ def parse_args(argv):
     parser.add_argument("--kubeconfig", required=True)
     parser.add_argument("--kubectl", default="kubectl")
     parser.add_argument("--base-url")
-    parser.add_argument("--expected-address", help="Require Gateway status to equal this primary IPv6 node address")
+    parser.add_argument("--expected-address", help="Require Gateway status to equal this primary IPv6 or IPv4 node address")
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--request-id")
     parser.add_argument("--error-marker")
@@ -250,7 +259,7 @@ def parse_args(argv):
     parser.add_argument("--output", required=True)
     args = parser.parse_args(argv)
     if args.expected_address is not None:
-        args.expected_address = str(usable_ipv6(args.expected_address))
+        args.expected_address = str(usable_ip(args.expected_address))
     if not math.isfinite(args.timeout) or args.timeout <= 0 or args.timeout > 3600:
         raise ValueError("--timeout must be finite and in (0, 3600]")
     if not 1 <= args.requests <= 10000:

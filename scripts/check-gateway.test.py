@@ -117,6 +117,12 @@ class ConditionTests(unittest.TestCase):
 
 class IPv6TransportTests(unittest.TestCase):
     def test_request_uses_ipv6_loopback(self):
+        self.probe_loopback(6)
+
+    def test_request_uses_ipv4_loopback(self):
+        self.probe_loopback(4)
+
+    def probe_loopback(self, version):
         class Server(http.server.ThreadingHTTPServer):
             address_family = socket.AF_INET6
 
@@ -136,15 +142,24 @@ class IPv6TransportTests(unittest.TestCase):
                 self.end_headers()
                 self.wfile.write(b"Hello World!")
 
-        with Server(("::1", 0), Handler) as server:
+        import errno
+        host = '::1' if version == 6 else '127.0.0.1'
+        try:
+            server = (Server if version == 6 else http.server.ThreadingHTTPServer)((host, 0), Handler)
+        except OSError as error:
+            if version == 6 and error.errno in (errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL, errno.EPROTONOSUPPORT, errno.ENODEV):
+                self.skipTest('IPv6 loopback unavailable on this controller')
+            raise
+        with server:
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             try:
-                result = GATEWAY.request(f"http://[::1]:{server.server_port}", "/", "ipv6-fixture",
+                origin = f'http://[{host}]:{server.server_port}' if version == 6 else f'http://{host}:{server.server_port}'
+                result = GATEWAY.request(origin, "/", "transport-fixture",
                                          time.monotonic() + 3)
                 self.assertTrue(result["body_exact"])
-                self.assertEqual(result["request_id"], "ipv6-fixture")
-                self.assertEqual(server.peer, "::1")
+                self.assertEqual(result["request_id"], "transport-fixture")
+                self.assertEqual(server.peer, host)
             finally:
                 server.shutdown()
                 thread.join()
@@ -249,7 +264,7 @@ class ReportTests(unittest.TestCase):
             self.assertEqual(command[command.index("--kubeconfig") + 1], str(self.kubeconfig.resolve()))
 
     def test_expected_address_cli_rejects_invalid_input_and_wrong_status(self):
-        for address in ("::", "::1", "ff02::1", "fe80::1", "192.0.2.10", "::ffff:192.0.2.10", "2001:db8::10%eth0"):
+        for address in ("::", "::1", "ff02::1", "fe80::1", "0.0.0.0", "127.0.0.1", "224.0.0.1", "::ffff:192.0.2.10", "2001:db8::10%eth0"):
             with self.subTest(address=address):
                 code, report = self.run_fixture(args=self.args + ["--expected-address", address])
                 self.assertEqual(code, 1)
@@ -265,6 +280,13 @@ class ReportTests(unittest.TestCase):
             mismatch = self.args + ["--mode", "conditions", "--expected-address", "2001:db8::99"]
             self.assertEqual(GATEWAY.main(mismatch), 1)
         self.assertEqual(json.loads(self.output.read_text())["status"], "fail")
+
+    def test_ipv4_gateway_matches_only_the_explicit_primary_address(self):
+        resources = snapshot()
+        resources['gateway']['status']['addresses'][0]['value'] = '192.0.2.10'
+        for address, passed in (('192.0.2.10', True), ('192.0.2.11', False), ('2001:db8::10', False)):
+            checks = GATEWAY.conditions_checks(resources, address)
+            self.assertEqual(all(c['status'] == 'pass' for c in checks), passed)
 
     def test_kubectl_does_not_inherit_ipv4_proxy_environment(self):
         resources = snapshot()

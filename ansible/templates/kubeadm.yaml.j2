@@ -9,7 +9,7 @@ nodeRegistration:
   imagePullPolicy: Never
   kubeletExtraArgs:
     - name: node-ip
-      value: {{ (node_ip ~ ',' ~ node_ipv4) | to_json }}
+      value: {{ (node_ip ~ ',' ~ node_ipv4 if network.ipv6 else node_ip) | to_json }}
 patches:
   directory: {{ remote_state }}/patches
 ---
@@ -18,28 +18,32 @@ kind: ClusterConfiguration
 clusterName: mts-mvp
 kubernetesVersion: v{{ platform.kubernetes }}
 networking:
-  podSubnet: {{ (pod_cidr ~ ',' ~ pod_cidr_ipv4) | to_json }}
-  serviceSubnet: {{ (service_cidr ~ ',' ~ service_cidr_ipv4) | to_json }}
+  podSubnet: {{ (pod_cidr ~ ',' ~ pod_cidr_ipv4 if network.ipv6 else pod_cidr_ipv4) | to_json }}
+  serviceSubnet: {{ (service_cidr ~ ',' ~ service_cidr_ipv4 if network.ipv6 else service_cidr_ipv4) | to_json }}
   dnsDomain: cluster.local
 apiServer:
   extraArgs:
     - name: bind-address
-      value: "::"
+      value: {{ network.bind_address | to_json }}
   certSANs:
     - {{ node_ip | to_json }}
+{% if network.ipv6 %}
     - {{ node_ipv4 | to_json }}
+{% endif %}
     - {{ node_name | to_json }}
 controllerManager:
   extraArgs:
+{% if network.ipv6 %}
     - name: node-cidr-mask-size-ipv6
       value: "64"
+{% endif %}
     - name: node-cidr-mask-size-ipv4
       value: "24"
 ---
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
 cgroupDriver: systemd
-address: "::"
+address: {{ network.bind_address | to_json }}
 resolvConf: {{ (remote_state ~ '/resolv.conf') | to_json }}
 failSwapOn: true
 containerLogMaxSize: 10Mi
@@ -51,6 +55,6 @@ mode: iptables
 bindAddress: {{ node_ip | to_json }}
 healthzBindAddress: "127.0.0.1:10256"
 metricsBindAddress: "127.0.0.1:10249"
-nodePortAddresses: [{{ (node_ip ~ '/128') | to_json }}, {{ (node_ipv4 ~ '/32') | to_json }}]
+nodePortAddresses: {{ ([node_ip ~ '/128', node_ipv4 ~ '/32'] if network.ipv6 else [node_ipv4 ~ '/32']) | to_json }}
 iptables:
   localhostNodePorts: false

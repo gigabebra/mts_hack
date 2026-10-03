@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
-from stacklib import ROOT, VERSIONS, command, http_url, internal_http, kubectl, locked_image, resource, tool
+from stacklib import ROOT, VERSIONS, command, http_url, internal_http, kubectl, locked_image, resource, tool, network_profile
 
 
 def _observed(env, kind, name):
@@ -38,7 +38,7 @@ def assert_target(env):
     url = urlsplit(cluster['server'])
     if (url.scheme != 'https' or ipaddress.ip_address(url.hostname) != ipaddress.ip_address(env['node_ip'])
             or cluster.get('proxy-url') or cluster.get('insecure-skip-tls-verify')):
-        raise ValueError('Explicit kubeconfig must use the configured IPv6 node and verified TLS')
+        raise ValueError('Explicit kubeconfig must use the configured primary node IP and verified TLS')
     nodes = resource(env, 'nodes')['items']
     if len(nodes) != 1 or nodes[0]['metadata']['name'] != env['node_name']:
         raise ValueError('Refusing mutation of an unexpected cluster')
@@ -47,6 +47,7 @@ def assert_target(env):
 
 
 def install(env, release, namespace, chart, values=None, overrides=None, timeout=600):
+    network = network_profile(env.get('network_mode', 'dual-stack'))
     if namespace == 'demo' and release in ('app', 'app-canary', 'gateway'):
         recover_pending(env, release)
     argv = [tool('helm'), 'upgrade', '--install', release, chart,
@@ -55,6 +56,16 @@ def install(env, release, namespace, chart, values=None, overrides=None, timeout
             '--wait', '--atomic', '--timeout', str(timeout) + 's', '--history-max', '5', '--hide-notes']
     if values:
         argv += ['-f', ROOT / values]
+    argv += ['--post-renderer-args=--network-mode=' + network['mode']]
+    if release == 'monitoring' and not network['ipv6']:
+        argv += ['-f', ROOT / 'deploy/monitoring/ipv4-values.yaml']
+    # Mode is part of the environment and cannot be overridden by a candidate.
+    overrides = dict(overrides or {})
+    if release in ('app', 'app-canary', 'logging', 'monitoring-extras'):
+        overrides['networkMode'] = network['mode']
+    if release == 'traefik':
+        overrides['service'] = {**overrides.get('service', {}),
+                                'ipFamilies': network['families'], 'ipFamilyPolicy': network['policy']}
     state = ROOT / '.state'
     state.mkdir(exist_ok=True)
     # Helm TLS values contain a private key. Never retain or print the file.

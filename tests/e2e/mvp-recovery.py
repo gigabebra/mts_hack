@@ -12,7 +12,7 @@ import urllib.request
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
-from stacklib import ROOT, command, deployment_lock, environment, forward, http_url, internal_http, kubectl, resource, write_json
+from stacklib import ROOT, command, deployment_lock, environment, forward, http_url, internal_http, kubectl, resource, write_json, network_profile
 
 HTTP = internal_http()
 
@@ -63,7 +63,8 @@ def collector_state(env):
     for line in position_text.splitlines():
         path, offset, inode = line.split('\t')
         positions[(path, int(inode, 16))] = int(offset, 16)
-    ruby = 'j=JSON.parse(Net::HTTP.get(URI("http://[::1]:24220/api/plugins.json"))); puts JSON.generate(j["plugins"].find{|p| p["plugin_id"]=="nginx_cri"})'
+    url = http_url(network_profile(env.get('network_mode', 'dual-stack'))['loopback'], 24220) + '/api/plugins.json'
+    ruby = 'j=JSON.parse(Net::HTTP.get(URI(' + json.dumps(url) + '))); puts JSON.generate(j["plugins"].find{|p| p["plugin_id"]=="nginx_cri"})'
     metrics = json.loads(kubectl(env, '-n', 'logging', 'exec', 'daemonset/fluentd', '-c', 'fluentd',
                                 '--', 'ruby', '-rnet/http', '-rjson', '-e', ruby, capture=True).stdout)
     return positions, metrics['emit_records']

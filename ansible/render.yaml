@@ -8,6 +8,7 @@
     - ../config/versions.yaml
     - ../config/environments/ubuntu.example.yaml
   vars:
+    network: "{{ network_mode | default('dual-stack') | mvp_network }}"
     remote_state: /etc/mts-stack
     output_dir: /tmp/mts-bootstrap-render
     health_uuid: {stdout: 00000000-0000-4000-8000-000000000000}
@@ -16,6 +17,7 @@
     health_service_ipv6: fd4d:5453:1000:200::20
     health_service_ipv4: 10.96.0.20
     health_kubernetes_ipv6: fd4d:5453:1000:200::1
+    health_kubernetes_ipv4: 10.96.0.1
     coredns_corefile: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/files/coredns.Corefile', rstrip=False) }}"
   tasks:
     - name: Load accepted image lock
@@ -45,4 +47,4 @@
       ansible.builtin.copy:
         dest: "{{ output_dir }}/calico.yaml"
         mode: '0600'
-        content: "{{ lookup('ansible.builtin.file', calico_source_file) | from_yaml_all | list | mvp_calico(image_lock.images, pod_cidr, node_ip, pod_cidr_ipv4, node_ipv4) | map('to_nice_yaml') | join('---\n') }}"
+        content: "{{ lookup('ansible.builtin.file', calico_source_file) | from_yaml_all | list | mvp_calico(image_lock.images, pod_cidr | default(''), node_ip, pod_cidr_ipv4, node_ipv4, network.mode) | map('to_nice_yaml') | join('---\n') }}"

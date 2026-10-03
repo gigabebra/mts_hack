@@ -23,4 +23,4 @@ spec:
       relabelings:
         - sourceLabels: [__meta_kubernetes_endpointslice_address_type]
           action: keep
-          regex: IPv6
+          regex: {{ ternary "IPv4" "IPv6" (eq .Values.networkMode "ipv4") }}

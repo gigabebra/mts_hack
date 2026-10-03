@@ -42,21 +42,21 @@
     - name: Require both workload Service families with IPv6 primary
       ansible.builtin.assert:
         that:
-          - health_workload_service.spec.ipFamilies == ['IPv6', 'IPv4']
-          - health_workload_service.spec.ipFamilyPolicy == 'RequireDualStack'
-          - health_kubernetes_service.spec.ipFamilies[0] == 'IPv6'
-          - "':' in health_kubernetes_service.spec.clusterIP"
+          - health_workload_service.spec.ipFamilies == network.families
+          - health_workload_service.spec.ipFamilyPolicy == network.policy
+          - health_kubernetes_service.spec.ipFamilies[0] == network.primary
     - name: Validate actual Pod and Service addresses and their primary family
       ansible.builtin.set_fact:
-        health_server_addresses: "{{ (health_server.stdout | from_json).status.podIPs | map(attribute='ip') | list | mvp_dual_ips }}"
-        health_service_addresses: "{{ health_workload_service.spec.clusterIPs | mvp_dual_ips }}"
+        health_server_addresses: "{{ (health_server.stdout | from_json).status.podIPs | map(attribute='ip') | list | mvp_network_ips(network.mode) }}"
+        health_service_addresses: "{{ health_workload_service.spec.clusterIPs | mvp_network_ips(network.mode) }}"
     - name: Record actual addresses for AAAA and A and direct HTTP probes
       ansible.builtin.set_fact:
-        health_server_ipv6: "{{ health_server_addresses.ipv6 }}"
+        health_server_ipv6: "{{ health_server_addresses.ipv6 | default('') }}"
         health_server_ipv4: "{{ health_server_addresses.ipv4 }}"
-        health_service_ipv6: "{{ health_service_addresses.ipv6 }}"
+        health_service_ipv6: "{{ health_service_addresses.ipv6 | default('') }}"
         health_service_ipv4: "{{ health_service_addresses.ipv4 }}"
         health_kubernetes_ipv6: "{{ health_kubernetes_service.spec.clusterIP }}"
+        health_kubernetes_ipv4: "{{ health_kubernetes_service.spec.clusterIP }}"
     - name: Render the client with the observed dual-stack destinations
       ansible.builtin.template:
         src: health-client.yaml.j2
@@ -74,7 +74,7 @@
         argv: [kubectl, --kubeconfig, "{{ admin_config }}", -n, default, logs, "job/mts-health-{{ health_uuid.stdout }}", --all-containers]
       register: health_result
       changed_when: false
-      failed_when: "'MTS_DUAL_AAAA_A_SERVICE_AND_DIRECT_POD_OK' not in health_result.stdout"
+      failed_when: "('MTS_DUAL_AAAA_A_SERVICE_AND_DIRECT_POD_OK' if network.ipv6 else 'MTS_IPV4_A_SERVICE_AND_DIRECT_POD_OK') not in health_result.stdout"
     - name: Read the successful client's actual Pod addresses
       ansible.builtin.command:
         argv: [kubectl, --kubeconfig, "{{ admin_config }}", --request-timeout=20s, -n, default, get, pods, -l, "mts-health-client={{ health_uuid.stdout }}", -o, json]
@@ -84,7 +84,7 @@
       ansible.builtin.assert:
         that:
           - (health_clients.stdout | from_json)['items'] | length == 1
-          - ((health_clients.stdout | from_json)['items'][0].status.podIPs | map(attribute='ip') | list | mvp_dual_ips) | length == 2
+          - ((health_clients.stdout | from_json)['items'][0].status.podIPs | map(attribute='ip') | list | mvp_network_ips(network.mode)) | length == network.families | length
   rescue:
     - name: Collect bounded client probe output
       ansible.builtin.command:

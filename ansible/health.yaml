@@ -6,6 +6,7 @@
   vars_files:
     - ../config/versions.yaml
   vars:
+    network: "{{ network_mode | default('dual-stack') | mvp_network }}"
     admin_config: /etc/kubernetes/admin.conf
     remote_state: /etc/mts-stack
   tasks:

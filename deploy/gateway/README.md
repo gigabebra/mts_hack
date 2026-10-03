@@ -1,5 +1,10 @@
 # Dual-stack Gateway, TLS и stable/canary
 
+Общая установка поддерживает также `network_mode: ipv4` для новой VM без IPv6:
+Services становятся `SingleStack` / `[IPv4]`, Nginx и Traefik слушают IPv4,
+Gateway status содержит IPv4 `node_ip`. TLS, canary и все проверки маршрутов
+сохраняются. Далее описаны значения по умолчанию для `dual-stack`.
+
 Команды ниже выполняются из корня checkout после `make tools`. Для прямого
 вызова закрепленных Helm/Ansible/Python подготовьте PATH в этом терминале:
 
