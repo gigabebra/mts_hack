@@ -5,7 +5,7 @@ import datetime as dt
 import sys
 import uuid
 
-from stacklib import ROOT, command, environment, write_json
+from stacklib import ROOT, code_identity, command, environment, write_json
 from release_control import assert_target, current_weights
 
 
@@ -16,8 +16,7 @@ def main():
     run_id = 'release-' + uuid.uuid4().hex[:12]
     directory = ROOT / 'artifacts/release' / run_id
     directory.mkdir(parents=True)
-    report = {'run_id': run_id, 'revision': command(['git', 'rev-parse', 'HEAD'], capture=True).stdout.strip(),
-              'working_tree_dirty': bool(command(['git', 'status', '--porcelain'], capture=True).stdout),
+    report = {'run_id': run_id, **code_identity(),
               'scope': ['mvp', 'tls-routing'], 'status': 'fail', 'checks': [],
               'started_at': dt.datetime.now(dt.timezone.utc).isoformat()}
     try:

@@ -6,7 +6,7 @@ import hashlib
 import json
 import sys
 import uuid
-from stacklib import ROOT, command, environment, resource, write_json
+from stacklib import ROOT, code_identity, command, environment, resource, write_json
 
 
 def snapshot(env):
@@ -38,7 +38,7 @@ def main():
     run_id = dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8]
     path = ROOT / 'artifacts/idempotency' / run_id / 'report.json'
     report = {'schema_version': 1, 'run_id': run_id, 'status': 'fail', 'checks': [],
-              'revision': command(['git', 'rev-parse', 'HEAD'], capture=True).stdout.strip()}
+              **code_identity()}
     try:
         env = environment(args.env)
         baseline = snapshot(env)

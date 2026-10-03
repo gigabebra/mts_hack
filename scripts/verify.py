@@ -11,7 +11,7 @@ import time
 import urllib.request
 import uuid
 
-from stacklib import ROOT, VERSIONS, command, direct_api_env, environment, forward, http_url, internal_http, kubectl, resource, write_json, network_profile
+from stacklib import ROOT, VERSIONS, code_identity, command, direct_api_env, environment, forward, http_url, internal_http, kubectl, resource, write_json, network_profile
 from network_checks import network_evidence
 
 HTTP = internal_http()
@@ -119,8 +119,7 @@ def main():
     directory = ROOT / 'artifacts/verify' / run_id
     directory.mkdir(parents=True, exist_ok=False)
     report = {'schema_version': 1, 'run_id': run_id, 'request_id': run_id, 'profile': args.profile,
-              'revision': command(['git', 'rev-parse', 'HEAD'], capture=True).stdout.strip(),
-              'working_tree_dirty': bool(command(['git', 'status', '--porcelain'], capture=True).stdout),
+              **code_identity(),
               'started_at': now(), 'versions': VERSIONS, 'checks': [], 'status': 'fail'}
     env = None
     dual = True

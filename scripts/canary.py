@@ -17,27 +17,12 @@ import urllib.request
 import uuid
 
 import canary_metrics as metrics
-from stacklib import (ROOT, deployment_lock, environment, forward, http_url, internal_http,
+from stacklib import (ROOT, code_identity, deployment_lock, environment, forward, http_url, internal_http,
                       locked_image, resource, write_json)
 
 
 def timestamp():
     return dt.datetime.now(dt.timezone.utc).isoformat()
-
-
-def code_identity():
-    """Read the checkout containing this script, independently of artifact ROOT."""
-    repository = Path(__file__).resolve().parent.parent
-    try:
-        revision = subprocess.run(["git", "rev-parse", "--verify", "HEAD"], cwd=repository,
-                                  capture_output=True, check=True, text=True, timeout=10).stdout.strip()
-        if not re.fullmatch(r"[0-9a-f]{40,64}", revision):
-            raise ValueError("invalid Git revision")
-        dirty = subprocess.run(["git", "status", "--porcelain"], cwd=repository,
-                               capture_output=True, check=True, text=True, timeout=10).stdout
-        return {"revision": revision, "working_tree_dirty": bool(dirty)}
-    except Exception as error:
-        return {"revision": None, "working_tree_dirty": None, "code_identity_error": type(error).__name__}
 
 
 def safe_error(error):
@@ -363,8 +348,6 @@ def run_locked(ops, *, run_id, revision, image=None, fault_mode="none", action="
         write_json(path, report)
 
     try:
-        if report["revision"] is None:
-            raise Rejected("cannot establish the executing Git revision")
         ops.assert_target()
         stable = ops.values("app")
         if not stable.get("releaseRevision"):

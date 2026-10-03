@@ -10,7 +10,7 @@ if [[ $(uname -s) != Linux || $(uname -m) != x86_64 ]]; then
 fi
 
 missing=()
-for program in git make curl openssl python3 ssh; do
+for program in make curl openssl python3 ssh; do
     command -v "$program" >/dev/null 2>&1 || missing+=("$program")
 done
 if ! python3 -c 'import ensurepip, venv' >/dev/null 2>&1; then
@@ -25,10 +25,14 @@ if (( ${#missing[@]} )); then
     fi
     privilege=()
     if (( EUID != 0 )); then
+        if ! command -v sudo >/dev/null 2>&1 || ! sudo -n true; then
+            echo 'Installing missing packages requires passwordless sudo on this controller. Install the prerequisites as an administrator, then rerun as your regular user.' >&2
+            exit 1
+        fi
         privilege=(sudo -n)
     fi
     "${privilege[@]}" apt-get update
-    "${privilege[@]}" apt-get install -y ca-certificates git make curl openssl python3 python3-venv openssh-client
+    "${privilege[@]}" apt-get install -y ca-certificates make curl openssl python3 python3-venv openssh-client
 fi
 
 if [[ ! -x .venv/bin/python ]]; then

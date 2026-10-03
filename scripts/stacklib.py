@@ -6,6 +6,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import time
 import urllib.request
@@ -16,6 +17,26 @@ from network_config import network_profile, node_addresses
 ROOT = Path(__file__).resolve().parent.parent
 VERSIONS = yaml.safe_load((ROOT / 'config/versions.yaml').read_text())
 IMAGES = yaml.safe_load((ROOT / 'config/images.lock.yaml').read_text())['images']
+
+
+def code_identity():
+    """Optional Git metadata for reports; source copies need neither Git nor .git."""
+    # Use the code location even when a caller redirects ROOT for its artifacts.
+    repository = Path(__file__).resolve().parent.parent
+    unknown = {'revision': None, 'working_tree_dirty': None}
+    # Do not accidentally attribute a source copy to an enclosing repository.
+    if not (repository / '.git').exists():
+        return unknown
+    try:
+        revision = subprocess.run(['git', 'rev-parse', '--verify', 'HEAD'], cwd=repository,
+                                  capture_output=True, check=True, text=True, timeout=5).stdout.strip()
+        if not re.fullmatch(r'[0-9a-f]{40,64}', revision):
+            return unknown
+        dirty = subprocess.run(['git', 'status', '--porcelain'], cwd=repository,
+                               capture_output=True, check=True, text=True, timeout=5).stdout
+        return {'revision': revision, 'working_tree_dirty': bool(dirty)}
+    except (OSError, subprocess.SubprocessError):
+        return unknown
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):

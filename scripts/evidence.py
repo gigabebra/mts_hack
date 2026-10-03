@@ -4,7 +4,7 @@ import argparse
 import datetime as dt
 import json
 import tarfile
-from stacklib import ROOT, command, write_json
+from stacklib import ROOT, code_identity, write_json
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--env', default='ubuntu')
@@ -20,7 +20,7 @@ reports += sorted((ROOT / 'artifacts/release').glob('*/gateway.json'))
 if not reports:
     parser.error('No reports exist. Run make verify first, including failed runs.')
 index = {'generated_at': stamp, 'environment': args.env,
-         'revision': command(['git', 'rev-parse', 'HEAD'], capture=True).stdout.strip(),
+         **code_identity(),
          'reports': [str(path.relative_to(ROOT)) for path in reports]}
 index_path = destination.parent / (stamp + '-index.json')
 write_json(index_path, index)

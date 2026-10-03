@@ -12,7 +12,7 @@ import urllib.request
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
-from stacklib import ROOT, command, deployment_lock, environment, forward, http_url, internal_http, kubectl, resource, write_json, network_profile
+from stacklib import ROOT, code_identity, command, deployment_lock, environment, forward, http_url, internal_http, kubectl, resource, write_json, network_profile
 
 HTTP = internal_http()
 
@@ -169,7 +169,7 @@ def main():
     run_id = 'recovery-' + uuid.uuid4().hex[:12]
     directory = ROOT / 'artifacts/recovery' / run_id
     directory.mkdir(parents=True)
-    report = {'run_id': run_id, 'revision': command(['git', 'rev-parse', 'HEAD'], capture=True).stdout.strip(),
+    report = {'run_id': run_id, **code_identity(),
               'status': 'fail', 'checks': [], 'started_at': time.time()}
     base = http_url(env['node_ip'], env['node_port'])
     try:

@@ -14,7 +14,7 @@ import urllib.request
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
-from stacklib import ROOT, command, deployment_lock, environment, http_url, internal_http, kubectl, resource, tool, write_json
+from stacklib import ROOT, code_identity, command, deployment_lock, environment, http_url, internal_http, kubectl, resource, tool, write_json
 from release_control import assert_target, helm_info, helm_values, install, set_weights
 from process_control import terminate_tree
 
@@ -199,7 +199,7 @@ def main():
     run_id = 'demo-' + uuid.uuid4().hex[:12]
     directory = ROOT / 'artifacts/demo' / run_id
     directory.mkdir(parents=True)
-    report = {'run_id': run_id, 'revision': command(['git', 'rev-parse', 'HEAD'], capture=True).stdout.strip(),
+    report = {'run_id': run_id, **code_identity(),
               'scope': args.section, 'status': 'fail', 'checks': [], 'started_at': dt.datetime.now(dt.timezone.utc).isoformat()}
 
     def stage(name, argv, timeout=2400):

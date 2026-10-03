@@ -144,8 +144,8 @@ class EngineFixtures(unittest.TestCase):
         self.assertEqual(self.ops.weights(), {"stable": 90, "canary": 10})
         self.assertGreaterEqual(result["http_observation"]["releases"]["canary"], 100)
         self.assertTrue(self.ops.stopped_metrics)
-        self.assertRegex(result["revision"], r"^[0-9a-f]{40,64}$")
-        self.assertIsInstance(result["working_tree_dirty"], bool)
+        for key, value in canary.code_identity().items():
+            self.assertEqual(result[key], value)
         for key in ("stable_ready", "stable_ready_before_split", "stable_ready_after"):
             self.assertEqual(result[key]["ready_replicas"], 2)
             self.assertEqual(result[key]["helm"]["status"], "deployed")
@@ -215,10 +215,24 @@ class EngineFixtures(unittest.TestCase):
         self.assertNotIn(("stable_ready",), self.ops.calls)
 
     def test_code_identity_is_independent_of_artifact_directory(self):
+        expected = canary.code_identity()
         with patch.object(canary, "ROOT", Path(self.temp.name)):
             identity = canary.code_identity()
-        self.assertRegex(identity["revision"], r"^[0-9a-f]{40,64}$")
-        self.assertIsInstance(identity["working_tree_dirty"], bool)
+        self.assertEqual(identity, expected)
+
+    def test_git_metadata_is_optional_for_release_restore_and_rejection(self):
+        for kwargs, decision in [({}, "accepted"), ({"action": "restore"}, "restored"),
+                                 ({"fault_mode": "wrong-body"}, "rejected")]:
+            with self.subTest(decision=decision):
+                self.ops = FakeOps(self.temp.name)
+                with patch.object(canary, "code_identity", return_value={"revision": None, "working_tree_dirty": None}):
+                    result = self.run_release(**kwargs)
+                self.assertEqual(result["decision"], decision)
+                self.assertEqual(result["status"], "fail" if decision == "rejected" else "pass")
+                self.assertIsNone(result["revision"])
+                self.assertIsNone(result["working_tree_dirty"])
+                self.assertEqual(self.ops.weights(), {"stable": 90, "canary": 10} if decision == "accepted"
+                                 else {"stable": 100, "canary": 0})
 
     def test_bad_body_is_rejected_before_traffic(self):
         result = self.run_release(fault_mode="wrong-body")
