@@ -1,5 +1,32 @@
 # FINAL-05: выпуск canary и автоматический возврат
 
+Дополнение 2026-10-03: исправлен найденный аудитом пропуск readiness stable.
+Перед установкой кандидата, включением 90/10 и принятием выпуска требуется
+Helm status `deployed`, актуальное поколение `hello` и все заданные
+updated/ready/available replicas. Проверяются закрепленный образ и неизменность
+values stable. Ошибка запрещает `accepted`, сохраняет ненулевой результат
+выпуска и запускает штатное восстановление 100/0; явный restore остается доступен.
+
+Изменены `scripts/canary.py`, `tests/canary/test_canary.py`, контракт и этот отчет.
+База — `5937f9f38a555684f398e7425b20b9403c12a970`, исправление в рабочем дереве.
+Проверки исправления:
+
+- `pass`: `.venv/bin/python -m unittest discover -s tests/canary -p 'test_*.py' -v`
+  — 51 тест, включая pending/failed Helm, неполные replicas при успешном HTTP,
+  деградацию до и после split, отказ CLI с exit 2 и сохранение возможности restore.
+- `pass`: `.venv/bin/python -m unittest discover -s tests/unit -v` — 46 тестов.
+- `pass`: `.venv/bin/python -m py_compile scripts/canary.py tests/canary/test_canary.py`
+  и `git diff --check`.
+- `pass`, live read-only: новый `Runtime.stable_ready` на `ENV=ubuntu`,
+  пять точных HTTP-ответов stable, веса не изменились. Отчет
+  `artifacts/canary/stable-readiness-572f3ce09d50/report.json` содержит
+  `working_tree_dirty: true` и SHA256 проверенного `scripts/canary.py`.
+- `not run`: повтор полного live canary/fault/recovery набора после исправления;
+  негативные сценарии проверены fixtures, состояние VM не изменялось.
+
+Следующий блок относится к прежней live-приемке, а не к повтору всего набора
+после этого исправления.
+
 Интеграция назначенной области завершена: `done`, код `9ce5f99`, live-приемка
 2026-10-02. [Общий протокол](FINAL-INTEGRATION.md) и
 [JSON evidence](../acceptance/final-01-05.json). Alerts остаются в FINAL-02.

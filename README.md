@@ -80,13 +80,11 @@ GUA), IPv4 того же узла, рабочие DNS/NTP и обе семьи �
 DNS/NTP могут использовать любую рабочую семью. IPv4 разрешен и для внутренних соединений.
 Не открывайте NodePort в Internet для MVP.
 
-На управляющей Ubuntu 24.04 (это может быть та же VM при доступном SSH):
+На управляющей Ubuntu 24.04 (это может быть та же VM при доступном SSH)
+нужны исходники проекта и настроенный локальный environment:
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y git make curl openssl python3 python3-venv openssh-client
 cd <checkout>
-make tools
 cp config/environments/ubuntu.example.yaml config/environments/ubuntu.local.yaml
 ```
 
@@ -95,8 +93,14 @@ cp config/environments/ubuntu.example.yaml config/environments/ubuntu.local.yaml
 IP задавайте без скобок; URL содержит IPv6 в `[скобках]`.
 Этот файл игнорируется
 Git. Все команды запускайте из корня репозитория. SSH host key нужно проверить
-и принять до bootstrap обычным SSH-подключением. `make tools` устанавливает
-инструменты в `.venv` и `.cache/tools`, без Nix и без root на управляющей машине.
+и принять до bootstrap обычным SSH-подключением. Начальный deploy автоматически
+устанавливает недостающие системные prerequisites управляющей Ubuntu через
+`sudo -n apt-get`, затем закрепленные инструменты в `.venv` и `.cache/tools`.
+Если prerequisites уже установлены, локальный root не нужен. Nix не требуется.
+Для получения checkout через Git на чистой машине сначала установите Git:
+`sudo apt-get update && sudo apt-get install -y git`; также можно передать
+уже клонированный репозиторий. Kubernetes, containerd, Helm и Ansible заранее
+устанавливать не нужно.
 
 До установки должен проходить `ssh <user>@<VM> sudo -n true`. На VM необходимы
 исходящий HTTPS/DNS/NTP; с управляющей машины — SSH, Kubernetes API TCP 6443
@@ -115,10 +119,24 @@ Git. Все команды запускайте из корня репозито
 ## Установка и проверка
 
 ```bash
+bash scripts/deploy.sh --env ubuntu
+```
+
+При наличии make эквивалентный вход — `make deploy ENV=ubuntu`.
+Команда готовит локальные инструменты,
+выполняет bootstrap чистой Ubuntu и устанавливает весь стек: Kubernetes,
+containerd, Calico, storage, Gateway API/Traefik, Prometheus, Fluentd/Loki,
+stable/canary Nginx и TLS. Отдельный `make bootstrap` перед deploy не требуется.
+Bootstrap и установка компонентов выполняются последовательно под одной
+блокировкой. Ошибка bootstrap останавливает установку; прежний kubeconfig
+не используется для продолжения после ошибки.
+
+После установки:
+
+```bash
 make lint
-make bootstrap ENV=ubuntu
-make deploy ENV=ubuntu
 make verify ENV=ubuntu
+make verify-release ENV=ubuntu
 make verify-idempotency ENV=ubuntu
 make evidence ENV=ubuntu
 ```
@@ -152,7 +170,8 @@ loopback port-forward к Prometheus/Loki и закрывает их при за�
 `verify-release` и `verify-canary`.
 
 Повторный `make bootstrap` проверяет прежнюю идентичность узла. Команда
-`verify-idempotency` дважды запускает deploy, сравнивает UIDs ресурсов,
+`make deploy` повторяет тот же bootstrap перед обновлением компонентов.
+`verify-idempotency` дважды запускает полный deploy, сравнивает UIDs ресурсов,
 PVC bindings и содержимое существующих прикладных secrets, каждый раз
 выполняет полный verify. Helm release history исключена из сравнения.
 `make evidence` упаковывает JSON-отчеты; kubeconfig/inventory/Secrets не собирает.

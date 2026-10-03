@@ -153,8 +153,12 @@ mount containers + pods read-only, разбирает CRI regexp, JSON stdout и
 Все image поля рендера переводит в digest общий post-renderer по lock;
 неподдерживаемые динамические images задаются отдельно в values.
 
-Вход: `make tools`, `make lint`, `make bootstrap ENV=ubuntu`, `make deploy
-ENV=ubuntu`, `make verify ENV=ubuntu PROFILE=mvp`, `make verify-idempotency
+Вход с чистой Ubuntu: `bash scripts/deploy.sh --env ubuntu` или
+`make deploy ENV=ubuntu`, если make уже установлен. Скрипт готовит локальные
+инструменты, затем под одной deployment_lock выполняет bootstrap ОС/Kubernetes
+и установку компонентов. Ошибка bootstrap не позволяет перейти к Helm.
+`make tools`, `make lint`, `make bootstrap ENV=ubuntu` доступны отдельно.
+Проверки: `make verify ENV=ubuntu PROFILE=mvp`, `make verify-idempotency
 ENV=ubuntu`, `make evidence ENV=ubuntu`. Обязательные инструменты ставятся
 локально, Nix не требуется. Компонентные checks — Python stdlib, запускаются
 как процессы и возвращают JSON в `--output`, exit 0 только при успехе.
@@ -258,6 +262,13 @@ Secret принадлежит Helm gateway и содержит tls.crt/tls.key �
 в трафик при повторе. Принятый canary остается на 10% только до явного restore
 или следующего обычного deploy. Состояние маршрутов читается из кластера;
 локальный отчет не является источником фактических весов.
+
+Перед установкой кандидата, включением 90/10 и решением `accepted`
+проверяется stable: Helm status `deployed`, актуальное поколение Deployment,
+все заданные replicas обновлены/готовы/доступны, образ и values соответствуют
+исходной ревизии. Неготовность запрещает выпуск и запускает штатное
+восстановление 100/0. Явный `restore` остается доступным при незавершенном
+stable rollout; он проверяет HTTP и возврат трафика, но не чинит сам stable.
 
 Параметры окна/частоты/порогов — `config/canary.yaml`: 60 секунд наблюдения,
 не менее 100 canary запросов, error rate не более 1%, свежесть sample <=45s.

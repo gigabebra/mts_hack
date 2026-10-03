@@ -139,6 +139,35 @@ class Runtime:
     def install(self, values):
         return self.control.install_candidate(self.env, values)
 
+    def stable_ready(self, values):
+        """A responding stable Pod is insufficient evidence of a completed rollout."""
+        helm = self.info("app")
+        if helm.get("status") != "deployed":
+            raise Rejected("stable Helm release is not deployed; finish or recover its rollout before releasing canary")
+        if values.get("releaseTrack") != "stable" or values.get("fullnameOverride", "hello") != "hello":
+            raise Rejected("stable release identity does not match the contracted Deployment")
+        replicas = values.get("replicas", 2)
+        if type(replicas) is not int or replicas < 1:
+            raise Rejected("stable release must require a positive replica count")
+        deployment = resource(self.env, "deployment", "hello", "-n", "demo")
+        status, spec = deployment.get("status", {}), deployment["spec"]
+        if (deployment["metadata"].get("deletionTimestamp")
+                or status.get("observedGeneration") != deployment["metadata"]["generation"]
+                or spec.get("replicas") != replicas
+                or any(status.get(field, 0) != replicas for field in
+                       ("replicas", "updatedReplicas", "readyReplicas", "availableReplicas"))):
+            raise Rejected("stable rollout is not fully ready at its current generation")
+        containers = spec["template"]["spec"]["containers"]
+        if len(containers) != 1 or containers[0].get("image") != locked_image(values["image"]):
+            raise Rejected("stable Deployment does not use the expected locked image")
+        actual = self.values("app")
+        for key in ("image", "releaseRevision", "releaseTrack", "faultMode", "responseBody", "fullnameOverride", "replicas"):
+            if actual.get(key) != values.get(key):
+                raise Rejected("stable release values changed during the canary operation")
+        return {"helm": helm, "ready_replicas": replicas,
+                "generation": deployment["metadata"]["generation"],
+                "image": locked_image(values["image"]), "revision": values["releaseRevision"]}
+
     def ready(self, values):
         deployment = resource(self.env, "deployment", "hello-canary", "-n", "demo")
         status, spec = deployment.get("status", {}), deployment["spec"]
@@ -375,6 +404,7 @@ def run_locked(ops, *, run_id, revision, image=None, fault_mode="none", action="
             accepted = True
             report.update(status="pass", decision="restored")
             return report
+        report["stable_ready"] = ops.stable_ready(stable)
         candidate = ops.defaults()
         candidate.update(releaseRevision=revision, faultMode=fault_mode)
         if image:
@@ -392,6 +422,7 @@ def run_locked(ops, *, run_id, revision, image=None, fault_mode="none", action="
         ops.start_metrics(deadline)
         baseline = ops.snapshot(smoke_finished, deadline)
         report["metrics_baseline"] = metrics.public_snapshot(baseline)
+        report["stable_ready_before_split"] = ops.stable_ready(stable)
         report["split_weights"] = ops.set_weights(90, 10)
         event("traffic_90_10_confirmed")
         budget = after_split(ops, copy.deepcopy(candidate), report) if after_split else None
@@ -415,6 +446,7 @@ def run_locked(ops, *, run_id, revision, image=None, fault_mode="none", action="
         if report["metrics_decision"]["status"] != "pass":
             raise Rejected("canary 5xx error rate exceeds the allowed threshold")
         report["candidate_ready_after"] = ops.ready(candidate)
+        report["stable_ready_after"] = ops.stable_ready(stable)
         report["weights_after"] = ops.weights()
         if report["weights_after"] != {"stable": 90, "canary": 10}:
             raise Rejected("route weights changed during observation")

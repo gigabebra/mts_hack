@@ -3,6 +3,7 @@ import copy
 import contextlib
 import hashlib
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import sys
@@ -13,6 +14,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import canary
 import canary_metrics as metrics
+
+REAL_RUNTIME = canary.Runtime
 
 _harness_spec = importlib.util.spec_from_file_location("canary_harness", Path(__file__).with_name("verify.py"))
 harness = importlib.util.module_from_spec(_harness_spec)
@@ -56,6 +59,13 @@ class FakeOps:
         self.current = {"stable": 90, "canary": 10}  # interrupted predecessor
         self.app = {"image": "locked-fixture", "releaseTrack": "stable", "releaseRevision": "stable-v1",
                     "responseBody": "Hello World!", "faultMode": "none", "fullnameOverride": "hello", "replicas": 2}
+        self.env = {}
+        self.stable_deployment = {
+            "metadata": {"generation": 3},
+            "spec": {"replicas": 2, "template": {"spec": {"containers": [{"image": self.app["image"]}]}}},
+            "status": {"observedGeneration": 3, "replicas": 2, "updatedReplicas": 2,
+                       "readyReplicas": 2, "availableReplicas": 2}}
+        self.stable_helm_status = "deployed"
         self.candidate = self.defaults()
         self.calls, self.requests, self.snapshots = [], 0, 0
         self.metrics_down, self.rollback_failure, self.identity_wrong = False, False, False
@@ -67,7 +77,7 @@ class FakeOps:
         return copy.deepcopy(self.app if release == "app" else self.candidate if release == "app-canary" else
                              {"traffic": {"stableWeight": self.current["stable"], "canaryWeight": self.current["canary"]}})
     def info(self, release):
-        return {"revision": 1, "status": "deployed"}
+        return {"revision": 1, "status": self.stable_helm_status if release == "app" else "deployed"}
     def defaults(self):
         return {"image": "locked-fixture", "releaseTrack": "canary", "releaseRevision": "accepted-base",
                 "responseBody": "Hello World!", "faultMode": "none", "fullnameOverride": "hello-canary", "replicas": 1}
@@ -84,6 +94,14 @@ class FakeOps:
         self.candidate = copy.deepcopy(values)
     def ready(self, values):
         return {"ready_replicas": 1, "revision": values["releaseRevision"]}
+    def stable_ready(self, values):
+        self.calls.append(("stable_ready",))
+        # Exercise the production stable gate with a Kubernetes API fixture.
+        with patch.object(canary, "resource", return_value=self.stable_deployment) as resource, \
+             patch.object(canary, "locked_image", side_effect=lambda image: image):
+            result = REAL_RUNTIME.stable_ready(self, values)
+        resource.assert_called_once_with(self.env, "deployment", "hello", "-n", "demo")
+        return result
     def request(self, path, request_id):
         self.requests += 1
         role = "canary" if path == "/backend/canary" or path == "/" and self.current["canary"] and self.requests % 10 == 0 else "stable"
@@ -128,6 +146,73 @@ class EngineFixtures(unittest.TestCase):
         self.assertTrue(self.ops.stopped_metrics)
         self.assertRegex(result["revision"], r"^[0-9a-f]{40,64}$")
         self.assertIsInstance(result["working_tree_dirty"], bool)
+        for key in ("stable_ready", "stable_ready_before_split", "stable_ready_after"):
+            self.assertEqual(result[key]["ready_replicas"], 2)
+            self.assertEqual(result[key]["helm"]["status"], "deployed")
+        self.assertEqual(self.ops.calls.count(("stable_ready",)), 3)
+
+    def test_incomplete_stable_helm_release_rejected_before_candidate_install(self):
+        for status in ("pending-install", "pending-upgrade", "pending-rollback", "failed", "unknown", None):
+            with self.subTest(status=status):
+                self.ops = FakeOps(self.temp.name)
+                self.ops.stable_helm_status = status
+                result = self.run_release()
+                self.assertEqual(result["decision"], "rejected")
+                self.assertEqual(result["status"], "fail")
+                self.assertIn("stable Helm release is not deployed", result["reason"])
+                self.assertNotIn("candidate_requested", result)
+                self.assertNotIn(("weights", 90, 10), self.ops.calls)
+                self.assertFalse(self.ops.started_metrics)
+                self.assertEqual(result["rollback"]["status"], "pass")
+                self.assertEqual(self.ops.weights(), {"stable": 100, "canary": 0})
+
+    def test_degraded_stable_rejected_despite_successful_http(self):
+        self.ops.stable_deployment["status"].update(readyReplicas=1, availableReplicas=1)
+        result = self.run_release()
+        self.assertEqual(result["stable_smoke"]["passed"], 5)
+        self.assertEqual(result["decision"], "rejected")
+        self.assertIn("stable rollout is not fully ready", result["reason"])
+        self.assertNotIn("candidate_requested", result)
+        self.assertNotIn(("weights", 90, 10), self.ops.calls)
+        self.assertEqual(result["rollback"]["status"], "pass")
+
+    def test_stable_degrades_during_candidate_preparation_before_split(self):
+        snapshot = self.ops.snapshot
+        def degrade(after, deadline):
+            self.ops.stable_deployment["status"]["availableReplicas"] = 1
+            return snapshot(after, deadline)
+        self.ops.snapshot = degrade
+        result = self.run_release()
+        self.assertIn("candidate_smoke", result)
+        self.assertIn("stable_ready", result)
+        self.assertEqual(result["decision"], "rejected")
+        self.assertNotIn(("weights", 90, 10), self.ops.calls)
+        self.assertEqual(result["rollback"]["status"], "pass")
+
+    def test_stable_loses_readiness_or_completed_helm_status_after_split(self):
+        for fault in ("replicas", "helm"):
+            with self.subTest(fault=fault):
+                self.ops = FakeOps(self.temp.name)
+                def degrade(ops, *_):
+                    if fault == "replicas":
+                        ops.stable_deployment["status"]["readyReplicas"] = 1
+                    else:
+                        ops.stable_helm_status = "pending-upgrade"
+                result = self.run_release(after_split=degrade)
+                self.assertEqual(result["http_observation"]["status"], "pass")
+                self.assertEqual(result["metrics_decision"]["status"], "pass")
+                self.assertEqual(result["decision"], "rejected")
+                self.assertEqual(result["status"], "fail")
+                self.assertEqual(result["rollback"]["status"], "pass")
+                self.assertEqual(self.ops.weights(), {"stable": 100, "canary": 0})
+
+    def test_restore_remains_available_with_degraded_pending_stable(self):
+        self.ops.stable_helm_status = "pending-upgrade"
+        self.ops.stable_deployment["status"]["readyReplicas"] = 1
+        result = self.run_release(action="restore")
+        self.assertEqual(result["decision"], "restored")
+        self.assertEqual(self.ops.weights(), {"stable": 100, "canary": 0})
+        self.assertNotIn(("stable_ready",), self.ops.calls)
 
     def test_code_identity_is_independent_of_artifact_directory(self):
         with patch.object(canary, "ROOT", Path(self.temp.name)):
@@ -247,6 +332,22 @@ class EngineFixtures(unittest.TestCase):
              patch.object(canary, "deployment_lock", return_value=contextlib.nullcontext()):
             self.assertEqual(canary.main(), 2)
         self.assertEqual(self.ops.weights(), {"stable": 100, "canary": 0})
+        result = json.loads((self.ops.directory / "report.json").read_text())
+        self.assertIn("dedicated canary smoke failed", result["reason"])
+
+    def test_cli_returns_nonzero_when_stable_is_pending(self):
+        self.ops.stable_helm_status = "pending-upgrade"
+        with patch.object(sys, "argv", ["canary.py", "--env", "fixture", "--run-id", "fixture-pending"]), \
+             patch.object(canary, "ROOT", Path(self.temp.name)), \
+             patch.object(canary, "environment", return_value={}), \
+             patch.object(canary.importlib, "import_module", return_value=types.SimpleNamespace(settings=lambda _: {})), \
+             patch.object(canary, "Runtime", return_value=self.ops), \
+             patch.object(canary, "deployment_lock", return_value=contextlib.nullcontext()):
+            self.assertEqual(canary.main(), 2)
+        self.assertNotIn(("weights", 90, 10), self.ops.calls)
+        self.assertEqual(self.ops.weights(), {"stable": 100, "canary": 0})
+        result = json.loads((self.ops.directory / "report.json").read_text())
+        self.assertIn("stable Helm release is not deployed", result["reason"])
 
     def test_missing_metrics_before_split_also_restores_candidate(self):
         self.ops.metrics_down = True
@@ -284,6 +385,48 @@ class EngineFixtures(unittest.TestCase):
         result = self.run_release(after_split=lambda *_: 20)
         result["test_fault"] = {"scenario": "metrics-unavailable", "status": "injected"}
         self.assertEqual(harness.acceptance("metrics-unavailable", result)["status"], "fail")
+
+
+class StableReadinessFixtures(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.ops = FakeOps(self.temp.name)
+        self.expected = copy.deepcopy(self.ops.app)
+
+    def test_current_generation_requires_all_updated_ready_available_replicas(self):
+        self.assertEqual(self.ops.stable_ready(self.expected)["generation"], 3)
+        healthy = copy.deepcopy(self.ops.stable_deployment)
+        for field in ("observedGeneration", "replicas", "updatedReplicas", "readyReplicas", "availableReplicas"):
+            for value in (None, 0, 1, 4):
+                with self.subTest(field=field, value=value):
+                    self.ops.stable_deployment = copy.deepcopy(healthy)
+                    self.ops.stable_deployment["status"][field] = value
+                    with self.assertRaisesRegex(canary.Rejected, "stable rollout is not fully ready"):
+                        self.ops.stable_ready(self.expected)
+
+    def test_changed_scale_or_deleting_deployment_is_not_ready(self):
+        self.ops.stable_deployment["spec"]["replicas"] = 1
+        with self.assertRaisesRegex(canary.Rejected, "not fully ready"):
+            self.ops.stable_ready(self.expected)
+        self.ops.stable_deployment["spec"]["replicas"] = 2
+        self.ops.stable_deployment["metadata"]["deletionTimestamp"] = "2026-10-03T00:00:00Z"
+        with self.assertRaisesRegex(canary.Rejected, "not fully ready"):
+            self.ops.stable_ready(self.expected)
+
+    def test_wrong_image_and_changed_release_cannot_count_as_ready_stable(self):
+        self.ops.stable_deployment["spec"]["template"]["spec"]["containers"][0]["image"] = "other-image"
+        with self.assertRaisesRegex(canary.Rejected, "expected locked image"):
+            self.ops.stable_ready(self.expected)
+        self.ops.stable_deployment["spec"]["template"]["spec"]["containers"][0]["image"] = self.expected["image"]
+        self.ops.app["releaseRevision"] = "different-stable"
+        with self.assertRaisesRegex(canary.Rejected, "values changed"):
+            self.ops.stable_ready(self.expected)
+
+    def test_missing_or_zero_replicas_cannot_pass_as_a_completed_rollout(self):
+        for count in (0, -1, None, True):
+            with self.subTest(count=count), self.assertRaisesRegex(canary.Rejected, "positive replica count"):
+                self.ops.stable_ready(dict(self.expected, replicas=count))
 
 
 class MetricsFixtures(unittest.TestCase):

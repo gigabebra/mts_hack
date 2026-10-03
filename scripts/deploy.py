@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Install the locked MVP in order, using one explicit target and one writer."""
+"""Bootstrap Ubuntu/Kubernetes, then install the locked stack under one lock."""
 import argparse
 import os
 import sys
 from pathlib import Path
 import yaml
+from bootstrap import bootstrap
 from stacklib import (ROOT, VERSIONS, command, deployment_lock, download,
                       environment, kubectl, resource, tool)
 from release_control import assert_target, candidate_defaults, ensure_tls, install, install_candidate, set_weights, wait_routes
@@ -67,14 +68,15 @@ def deploy(env):
     print('Deploy complete. Run make verify ENV=' + env['_name'])
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--env', default='ubuntu')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     os.environ['PATH'] = str(ROOT / '.venv/bin') + ':' + str(ROOT / '.cache/tools') + ':' + os.environ['PATH']
     env = environment(args.env)
     env['_name'] = args.env
     with deployment_lock(args.env):
+        bootstrap(env)
         deploy(env)
 
 

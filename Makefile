@@ -7,9 +7,7 @@ export ANSIBLE_SSH_CONTROL_PATH_DIR := $(CURDIR)/.state/ansible/cp
 
 .PHONY: tools lint bootstrap health deploy verify verify-idempotency verify-recovery evidence deploy-canary restore-stable verify-canary verify-interruption verify-release demo
 tools:
-	python3 -m venv .venv
-	.venv/bin/python -m pip install -r requirements.txt
-	$(PYTHON) scripts/tools.py
+	bash scripts/setup-tools.sh
 
 lint:
 	$(PYTHON) scripts/lint.py
@@ -21,7 +19,7 @@ health:
 	$(PYTHON) scripts/bootstrap.py --env $(ENV) --health-only
 
 deploy:
-	$(PYTHON) scripts/deploy.py --env $(ENV)
+	bash scripts/deploy.sh --env $(ENV)
 
 verify:
 	$(PYTHON) scripts/verify.py --env $(ENV) --profile $(PROFILE)

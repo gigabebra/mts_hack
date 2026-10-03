@@ -10,6 +10,8 @@ from stacklib import ROOT, VERSIONS, command, download, lock_document, tool
 
 os.environ['PATH'] = str(ROOT / '.venv/bin') + ':' + str(ROOT / '.cache/tools') + ':' + os.environ['PATH']
 os.chdir(ROOT)
+for path in sorted((ROOT / 'scripts').glob('*.sh')):
+    command(['bash', '-n', path])
 for path in list((ROOT / 'scripts').glob('*.py')) + list((ROOT / 'ansible').rglob('*.py')):
     py_compile.compile(str(path), doraise=True)
 
