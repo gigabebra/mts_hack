@@ -12,6 +12,9 @@ Prometheus измеряет HTTP и состояние узла, Fluentd дос�
 повторные deploy, fault/recovery и reboot прошли.
 [Независимый протокол](docs/acceptance/clean-ubuntu-2026-10-03.md),
 [JSON evidence](docs/acceptance/clean-ubuntu-2026-10-03.json).
+Дополнительная [чистая установка ревизии](docs/reports/CLEAN-INSTALL-RECHECK-2026-10-03.md)
+`27d775b` подтверждена на новой VM: 5 минут 45 секунд, без ручных
+установочных шагов; повторные deploy, внешние проверки и reboot прошли.
 IPv6 — основной; приложение и компоненты доступны также по IPv4.
 [Сетевой контракт и диагностика](docs/networking.md),
 [реестр](docs/status.md), [черновик паспорта](docs/passport/mvp-draft.md).

@@ -1,0 +1,336 @@
+{
+  "schema_version": 1,
+  "status": "pass",
+  "date": "2026-10-03",
+  "scope": "Integrator repeat: fresh installation, live verification, idempotency, controlled reboot",
+  "tested_revision": "27d775b76a5ae0021911293de137a4c3d5efc53c",
+  "working_tree_dirty": false,
+  "code_changes_required": false,
+  "os": "Ubuntu 24.04.5 LTS amd64",
+  "resources": {
+    "vcpus": 4,
+    "ram_mib": 8192,
+    "disk_gib": 60
+  },
+  "source": {
+    "revision": "27d775b76a5ae0021911293de137a4c3d5efc53c",
+    "source_sha256": "b01984fa227538880788f6a28db6e279e95a141de4579a49b4531a3ce10af19c",
+    "tracked_files": 145,
+    "dirty": false
+  },
+  "pristine": {
+    "status": "pass",
+    "cluster_paths_absent": true,
+    "kubernetes_runtime_helm_ansible_absent": true,
+    "make_absent": true,
+    "python_venv_absent": true,
+    "tools_cache_state_transferred": false
+  },
+  "installation_command": [
+    "bash",
+    "scripts/deploy.sh",
+    "--env",
+    "ubuntu"
+  ],
+  "manual_installation_steps": [],
+  "preparation": [
+    "New cloud VM with SSH/sudo access and qemu-guest-agent",
+    "Verified fresh source archive",
+    "Explicit local environment and authenticated SSH host keys"
+  ],
+  "stages": [
+    {
+      "name": "deploy",
+      "command": [
+        "bash",
+        "scripts/deploy.sh",
+        "--env",
+        "ubuntu"
+      ],
+      "started_at": "2026-10-03T18:14:54.656968+00:00",
+      "exit_code": 0,
+      "seconds": 345.15,
+      "finished_at": "2026-10-03T18:20:39.805928+00:00"
+    },
+    {
+      "name": "lint",
+      "command": [
+        "make",
+        "lint"
+      ],
+      "started_at": "2026-10-03T18:20:39.806383+00:00",
+      "exit_code": 0,
+      "seconds": 16.05,
+      "finished_at": "2026-10-03T18:20:55.861095+00:00"
+    },
+    {
+      "name": "health",
+      "command": [
+        "make",
+        "health",
+        "ENV=ubuntu"
+      ],
+      "started_at": "2026-10-03T18:20:55.861398+00:00",
+      "exit_code": 0,
+      "seconds": 45.87,
+      "finished_at": "2026-10-03T18:21:41.735400+00:00"
+    },
+    {
+      "name": "verify-release",
+      "command": [
+        "make",
+        "verify-release",
+        "ENV=ubuntu"
+      ],
+      "started_at": "2026-10-03T18:21:41.735965+00:00",
+      "exit_code": 0,
+      "seconds": 26.68,
+      "finished_at": "2026-10-03T18:22:08.418058+00:00"
+    },
+    {
+      "name": "idempotency",
+      "command": [
+        "make",
+        "verify-idempotency",
+        "ENV=ubuntu"
+      ],
+      "started_at": "2026-10-03T18:22:08.418389+00:00",
+      "exit_code": 0,
+      "seconds": 326.6,
+      "finished_at": "2026-10-03T18:27:35.022499+00:00"
+    },
+    {
+      "name": "evidence",
+      "command": [
+        "make",
+        "evidence",
+        "ENV=ubuntu"
+      ],
+      "started_at": "2026-10-03T18:27:35.023911+00:00",
+      "exit_code": 0,
+      "seconds": 0.11,
+      "finished_at": "2026-10-03T18:27:35.138851+00:00"
+    }
+  ],
+  "lint": {
+    "status": "pass",
+    "unittest_tests": 180,
+    "unittest_suites": 9,
+    "helm_charts": 7
+  },
+  "cli_checks": {
+    "status": "pass",
+    "help_cases": 1,
+    "invalid_argument_cases": 5
+  },
+  "mvp_verifications": {
+    "status": "pass",
+    "runs": 4,
+    "top_level_checks_each": 11
+  },
+  "metrics": [
+    {
+      "run_id": "20261003T182208Z-be3d175c-1",
+      "before": 261.0,
+      "after": 310.0,
+      "increase": 49.0,
+      "min_increase": 48.0
+    },
+    {
+      "run_id": "20261003T182208Z-be3d175c-2",
+      "before": 312.0,
+      "after": 361.0,
+      "increase": 49.0,
+      "min_increase": 48.0
+    },
+    {
+      "run_id": "release-56dfbd4e7497",
+      "before": 1.0,
+      "after": 49.0,
+      "increase": 48.0,
+      "min_increase": 48.0
+    },
+    {
+      "run_id": "release-f23063b99ae8",
+      "before": 1.0,
+      "after": 49.0,
+      "increase": 48.0,
+      "min_increase": 48.0
+    }
+  ],
+  "idempotency": {
+    "status": "pass",
+    "deploys": 2,
+    "resource_identities": 28,
+    "pvc_bindings": 2,
+    "application_secret_contents": 5
+  },
+  "external_gateway": {
+    "status": "pass",
+    "checks": 154,
+    "requests_per_family": 100,
+    "sha256": "ffa39001f6108e79e34e01349dc08fe7a67c580368fa78130d03694357db1009"
+  },
+  "reboot": {
+    "status": "pass",
+    "scope": "reboot_fresh_acceptance_vm_only",
+    "checks": [
+      {
+        "name": "controlled_reboot",
+        "status": "pass",
+        "boot_id_changed": true,
+        "api_ready_seconds": 35.73
+      },
+      {
+        "name": "post-reboot-health",
+        "status": "pass",
+        "command": [
+          "make",
+          "health",
+          "ENV=ubuntu"
+        ]
+      },
+      {
+        "name": "post-reboot-verify",
+        "status": "pass",
+        "command": [
+          "make",
+          "verify-release",
+          "ENV=ubuntu"
+        ]
+      },
+      {
+        "name": "post-reboot-evidence",
+        "status": "pass",
+        "command": [
+          "make",
+          "evidence",
+          "ENV=ubuntu"
+        ]
+      }
+    ],
+    "revision": "27d775b76a5ae0021911293de137a4c3d5efc53c",
+    "started_at": "2026-10-03T18:28:19.103616+00:00",
+    "finished_at": "2026-10-03T18:30:48.258910+00:00"
+  },
+  "after_reboot_commands": [
+    {
+      "name": "post-reboot-health",
+      "command": [
+        "make",
+        "health",
+        "ENV=ubuntu"
+      ],
+      "exit_code": 0,
+      "seconds": 73.84
+    },
+    {
+      "name": "post-reboot-verify",
+      "command": [
+        "make",
+        "verify-release",
+        "ENV=ubuntu"
+      ],
+      "exit_code": 0,
+      "seconds": 38.11
+    },
+    {
+      "name": "post-reboot-evidence",
+      "command": [
+        "make",
+        "evidence",
+        "ENV=ubuntu"
+      ],
+      "exit_code": 0,
+      "seconds": 0.36
+    }
+  ],
+  "report_hashes": [
+    {
+      "path": "artifacts/idempotency/20261003T182208Z-be3d175c/report.json",
+      "status": "pass",
+      "checks": 2,
+      "sha256": "c079aaac33660717930307b402e6b65e5027d0fbec9009425984cc95ce2ec79f"
+    },
+    {
+      "path": "artifacts/release/release-56dfbd4e7497/report.json",
+      "status": "pass",
+      "checks": 2,
+      "sha256": "504e3066f92c1e8c1d79a984c75867e4159054761ec08f3a2f29b11285dafdbc"
+    },
+    {
+      "path": "artifacts/release/release-f23063b99ae8/report.json",
+      "status": "pass",
+      "checks": 2,
+      "sha256": "fa8318b06d0c9b654e60afcd1700e16bc65005470ceb7cd2c36e56c0857d491d"
+    },
+    {
+      "path": "artifacts/verify/20261003T182208Z-be3d175c-1/report.json",
+      "status": "pass",
+      "checks": 11,
+      "sha256": "91b38db1c4a92d4889d69ed9f05c558f82655f39e44bc1c2df767e9102e36b4b"
+    },
+    {
+      "path": "artifacts/verify/20261003T182208Z-be3d175c-2/report.json",
+      "status": "pass",
+      "checks": 11,
+      "sha256": "19b8118b5ba9b10dc1cc6530ac4e819ee5ec1419125291f80e1e540930ddf3c1"
+    },
+    {
+      "path": "artifacts/verify/release-56dfbd4e7497/report.json",
+      "status": "pass",
+      "checks": 11,
+      "sha256": "a624df4570b19c2fccd94d1bfe7e9997ed92dd200b1ec89ab51731f791183be0"
+    },
+    {
+      "path": "artifacts/verify/release-f23063b99ae8/report.json",
+      "status": "pass",
+      "checks": 11,
+      "sha256": "cf13648776e7de5bc6b55f22a6f9a31e4117dcd1580047572445389c30af25b5"
+    },
+    {
+      "path": "artifacts/release/release-56dfbd4e7497/gateway.json",
+      "status": "pass",
+      "checks": 154,
+      "sha256": "bb9b3c6964cc21b799fbf187bf7a496fd85523796a176e2b8053978ba5314151"
+    },
+    {
+      "path": "artifacts/release/release-f23063b99ae8/gateway.json",
+      "status": "pass",
+      "checks": 154,
+      "sha256": "84beaf23e7dc5432ee7a313d74444b7b220d50238f439eee46688f3bec09aaaa"
+    }
+  ],
+  "evidence_archives": [
+    {
+      "path": "artifacts/evidence/20261003T182735Z.tar.gz",
+      "sha256": "0ebd869ab6a7dcd7bc3f53ec9f32d77bcddd4e4b2e47bb89d7454c07f786315a",
+      "reports": 6
+    },
+    {
+      "path": "artifacts/evidence/20261003T183048Z.tar.gz",
+      "sha256": "ab2f01a8a5e4b5ca1ae07507de389e3dd2b8d77dfd2513ca92865792d3220a59",
+      "reports": 9
+    }
+  ],
+  "not_run": [
+    {
+      "name": "full_demo_canary_interruption_pvc_buffer_recovery",
+      "status": "not run",
+      "reason": "Outside this installation recheck; earlier acceptance retained separately"
+    },
+    {
+      "name": "unassigned_FINAL_cards",
+      "status": "not run",
+      "reason": "Not assigned"
+    }
+  ],
+  "final_state": {
+    "new_vm": "running",
+    "traffic_weights": {
+      "stable": 100,
+      "canary": 0
+    },
+    "existing_vms_modified": false
+  }
+}
